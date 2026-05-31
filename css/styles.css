@@ -423,6 +423,53 @@ h3 {
   font-size: clamp(1.05rem, 2vw, 1.24rem);
 }
 
+.skills-count-banner {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.25fr) minmax(260px, 0.55fr) minmax(0, 1fr);
+  gap: clamp(18px, 4vw, 42px);
+  align-items: center;
+  margin: 32px clamp(18px, 5vw, 74px) 0;
+  padding: clamp(24px, 4vw, 38px);
+  color: var(--white);
+  background:
+    linear-gradient(135deg, rgba(0, 41, 107, 0.16), rgba(255, 255, 255, 0.08)),
+    var(--sky);
+  border-radius: 8px;
+  box-shadow: 0 22px 58px rgba(0, 137, 202, 0.22);
+}
+
+.skills-count-banner div {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+}
+
+.skills-count-banner span {
+  display: block;
+  font-size: clamp(3.5rem, 8vw, 6.8rem);
+  font-weight: 950;
+  line-height: 0.9;
+}
+
+.skills-count-banner h2,
+.skills-count-banner p {
+  color: var(--white);
+}
+
+.skills-count-banner h2 {
+  font-size: clamp(1.8rem, 3.4vw, 3rem);
+}
+
+.skills-count-banner p {
+  margin: 0;
+  font-weight: 750;
+}
+
+.skills-count-banner > p {
+  font-weight: 500;
+}
+
 .feature-grid,
 .media-grid,
 .band-grid {
@@ -613,8 +660,23 @@ details,
 .program-card.featured {
   color: var(--white);
   background:
-    linear-gradient(135deg, rgba(0, 137, 202, 0.18), rgba(230, 105, 10, 0.12)),
+    linear-gradient(135deg, rgba(0, 137, 202, 0.34), rgba(230, 105, 10, 0.1)),
     var(--blue);
+}
+
+.senior-program-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.senior-program-card::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  content: "";
+  background: var(--sky);
 }
 
 .program-card.featured h3,
@@ -655,6 +717,53 @@ details p {
   background:
     linear-gradient(90deg, rgba(0, 41, 107, 0.04), rgba(0, 137, 202, 0.07)),
     var(--paper);
+}
+
+.senior-level-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(360px, 1fr);
+  gap: clamp(28px, 5vw, 70px);
+  align-items: start;
+  background: var(--paper);
+}
+
+.senior-level-detail > div > p:last-child {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.senior-outcome-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.senior-outcome-grid article {
+  padding: 22px;
+  background: var(--white);
+  border: 1px solid rgba(0, 137, 202, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 137, 202, 0.08);
+}
+
+.senior-outcome-grid span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 5px 9px;
+  color: var(--blue);
+  background: rgba(0, 137, 202, 0.12);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.senior-outcome-grid p {
+  margin: 10px 0 0;
+  color: var(--muted);
 }
 
 .method-copy p {
@@ -897,6 +1006,8 @@ details p {
   .method,
   .video-feature,
   .soft-skills-highlight,
+  .skills-count-banner,
+  .senior-level-detail,
   .families-panel,
   .enroll,
   .section-heading.split,
@@ -975,6 +1086,7 @@ details p {
   .feature-grid,
   .media-grid,
   .band-grid,
+  .senior-outcome-grid,
   .site-footer {
     grid-template-columns: 1fr;
   }
