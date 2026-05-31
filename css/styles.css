@@ -659,27 +659,20 @@ details,
 
 .program-card.featured {
   color: var(--white);
-  background:
-    linear-gradient(135deg, rgba(0, 137, 202, 0.22), rgba(0, 59, 143, 0)),
-    #003b8f;
+  background: #003b8f;
 }
 
 .senior-program-card {
   position: relative;
   overflow: hidden;
   background: #003b8f;
+  border-top: 4px solid #0089ca;
   border-color: rgba(255, 255, 255, 0.22);
   box-shadow: 0 22px 48px rgba(0, 59, 143, 0.22);
 }
 
 .senior-program-card::before {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 8px;
-  content: "";
-  background: var(--sky);
+  content: none;
 }
 
 .program-card.featured h2,
