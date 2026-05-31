@@ -432,7 +432,7 @@ h3 {
   padding: clamp(24px, 4vw, 38px);
   color: var(--white);
   background:
-    linear-gradient(135deg, rgba(0, 41, 107, 0.16), rgba(255, 255, 255, 0.08)),
+    linear-gradient(135deg, rgba(0, 41, 107, 0.48), rgba(0, 41, 107, 0.18)),
     var(--sky);
   border-radius: 8px;
   box-shadow: 0 22px 58px rgba(0, 137, 202, 0.22);
@@ -440,7 +440,7 @@ h3 {
 
 .skills-count-banner div {
   padding: 20px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(0, 41, 107, 0.22);
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 8px;
 }
@@ -660,13 +660,16 @@ details,
 .program-card.featured {
   color: var(--white);
   background:
-    linear-gradient(135deg, rgba(0, 137, 202, 0.34), rgba(230, 105, 10, 0.1)),
-    var(--blue);
+    linear-gradient(135deg, rgba(0, 137, 202, 0.22), rgba(0, 59, 143, 0)),
+    #003b8f;
 }
 
 .senior-program-card {
   position: relative;
   overflow: hidden;
+  background: #003b8f;
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 22px 48px rgba(0, 59, 143, 0.22);
 }
 
 .senior-program-card::before {
@@ -679,11 +682,23 @@ details,
   background: var(--sky);
 }
 
+.program-card.featured h2,
 .program-card.featured h3,
-.program-card.featured .program-tag,
+.program-card.featured .program-tag {
+  color: var(--white);
+}
+
+.program-card.featured h2 {
+  font-weight: 950;
+}
+
 .program-card.featured p,
 .program-card.featured li {
-  color: var(--white);
+  color: #f5f7fa;
+}
+
+.program-card.featured li::marker {
+  color: var(--sky);
 }
 
 .program-tag {
