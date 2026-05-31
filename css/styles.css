@@ -65,6 +65,26 @@ textarea {
   border: 0;
 }
 
+.contact-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 22px;
+  padding: 9px clamp(18px, 4vw, 58px);
+  color: var(--white);
+  background: var(--blue-deep);
+  font-size: 0.92rem;
+  font-weight: 850;
+}
+
+.contact-strip a {
+  color: var(--white);
+}
+
+.contact-strip a:hover {
+  text-decoration: underline;
+}
+
 .site-header {
   position: sticky;
   top: 0;
@@ -587,6 +607,40 @@ h3 {
   margin-top: 22px;
 }
 
+.contact-methods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: 0 clamp(18px, 5vw, 74px);
+  margin-top: -32px;
+  position: relative;
+  z-index: 2;
+}
+
+.contact-methods a {
+  display: grid;
+  gap: 6px;
+  min-height: 108px;
+  padding: 22px;
+  color: var(--blue);
+  background: var(--white);
+  border: 1px solid rgba(0, 137, 202, 0.22);
+  border-top: 4px solid var(--sky);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 41, 107, 0.1);
+}
+
+.contact-methods span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.contact-methods strong {
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+}
+
 .intro,
 .method,
 .families-panel,
@@ -977,6 +1031,12 @@ details p {
   color: var(--muted);
 }
 
+.site-footer strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--blue);
+}
+
 .footer-links {
   display: flex;
   flex-wrap: wrap;
@@ -1046,6 +1106,7 @@ details p {
   .feature-grid,
   .media-grid,
   .band-grid,
+  .contact-methods,
   .site-footer {
     grid-template-columns: 1fr 1fr;
   }
@@ -1095,8 +1156,13 @@ details p {
   .media-grid,
   .band-grid,
   .senior-outcome-grid,
+  .contact-methods,
   .site-footer {
     grid-template-columns: 1fr;
+  }
+
+  .contact-strip {
+    justify-content: flex-start;
   }
 
   .hero-media::before {
