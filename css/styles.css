@@ -333,6 +333,38 @@ h3 {
   text-align: center;
 }
 
+.video-feature {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(360px, 1fr);
+  gap: clamp(28px, 5vw, 70px);
+  align-items: center;
+}
+
+.video-copy p:last-child {
+  max-width: 620px;
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.video-frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: var(--blue-deep);
+  border: 1px solid rgba(0, 41, 107, 0.14);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
 .section {
   padding: clamp(70px, 9vw, 116px) clamp(18px, 5vw, 74px);
 }
@@ -829,6 +861,7 @@ details p {
   .hero,
   .intro,
   .method,
+  .video-feature,
   .families-panel,
   .enroll,
   .section-heading.split,
