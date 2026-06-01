@@ -38,9 +38,7 @@
       </section>
 
       <section class="section enroll-page-layout">
-        <!-- TODO: Replace action="" with a static form endpoint, such as Formspree, Getform, Basin, or a Cloudflare Pages Function.
-             Final submissions must notify both info@ileapclub.com and info@ileap.club. -->
-        <form class="enroll-form lead-form" method="post" action="" data-static-placeholder="true">
+        <form class="enroll-form lead-form" method="post" action="/api/enroll" data-ajax-form="true">
           <input type="hidden" name="notification_recipients" value="info@ileapclub.com, info@ileap.club">
 
           <fieldset class="form-section-card">

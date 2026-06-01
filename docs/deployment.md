@@ -27,11 +27,42 @@ Do not add portal functionality here. The future member portal belongs at `membe
 - Also configure: `www.ileapclub.com`
 - Redirect later: `ileap.club` to `https://ileapclub.com`
 
-## Static Form Note
+## Enrollment Form Email Endpoint
 
-The site is static. Forms currently show a client-side message only.
+The Enroll Now form posts to a Cloudflare Pages Function:
 
-Before launch, connect forms to one of:
+```text
+/api/enroll
+```
+
+That function sends the submitted form data by email through Resend.
+
+### Required External Service
+
+Configure Resend:
+
+1. Create or use a Resend account.
+2. Verify the sending domain or sender email for `ileapclub.com`.
+3. Create a Resend API key.
+4. In Cloudflare Pages, add these production environment variables:
+
+```text
+RESEND_API_KEY=your_resend_api_key
+ENROLL_FROM_EMAIL=iLEAP Club <registrations@ileapclub.com>
+```
+
+`ENROLL_FROM_EMAIL` must be a sender that Resend allows for the verified domain.
+
+Enrollment submissions are emailed to both:
+
+```text
+info@ileapclub.com
+info@ileap.club
+```
+
+No database is used.
+
+Other non-enrollment forms still need one of:
 
 - Cloudflare Pages Functions
 - Formspree

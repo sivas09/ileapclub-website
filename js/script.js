@@ -65,7 +65,50 @@ leadForms.forEach((leadForm) => {
     return;
   }
 
-  leadForm.addEventListener("submit", (event) => {
+  leadForm.addEventListener("submit", async (event) => {
+    const status = leadForm.querySelector(".form-status");
+
+    if (leadForm.dataset.ajaxForm === "true") {
+      event.preventDefault();
+
+      if (status) {
+        status.textContent = "Submitting...";
+        status.classList.remove("is-error", "is-success");
+      }
+
+      try {
+        const response = await fetch(leadForm.action, {
+          method: leadForm.method || "POST",
+          body: new FormData(leadForm),
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok || result.ok === false) {
+          throw new Error(result.message || "Submission failed.");
+        }
+
+        if (status) {
+          status.textContent = result.message || "Thank you. Your form has been submitted successfully.";
+          status.classList.add("is-success");
+        }
+
+        leadForm.reset();
+      } catch (error) {
+        if (status) {
+          status.textContent =
+            error instanceof Error
+              ? error.message
+              : "We could not submit the form right now. Please try again.";
+          status.classList.add("is-error");
+        }
+      }
+
+      return;
+    }
+
     const action = leadForm.getAttribute("action");
     const isPlaceholderForm =
       leadForm.dataset.staticPlaceholder === "true" || !action || action === "#";
@@ -76,9 +119,9 @@ leadForms.forEach((leadForm) => {
 
     event.preventDefault();
 
-    const status = leadForm.querySelector(".form-status");
     if (status) {
       status.textContent = "Thank you. Your information is ready to submit once the iLEAP Club form endpoint is connected.";
+      status.classList.add("is-success");
     }
 
     leadForm.reset();
