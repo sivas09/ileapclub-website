@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Enroll Now | iLEAP Club</title>
+    <meta name="description" content="Enroll your child in iLEAP Club public speaking, leadership, debate, confidence, and soft skills programs.">
+    <link rel="canonical" href="https://ileapclub.com/enroll.html">
+    <link rel="stylesheet" href="css/styles.css">
+  </head>
+  <body>
+    <div class="contact-strip" aria-label="iLEAP Club contact information">
+      <a href="tel:+14169005327">(416) 900-LEAP</a>
+      <a href="tel:+16138168567">613-816-8567</a>
+      <a href="mailto:info@ileapclub.com">info@ileapclub.com</a>
+    </div>
+    <header class="site-header" data-header>
+      <a class="brand" href="index.html" aria-label="iLEAP Club home"><img src="assets/images/ileap-club-logo.jpg" alt="iLEAP Club"></a>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav"><span></span><span></span><span></span><span class="sr-only">Open menu</span></button>
+      <nav id="site-nav" class="site-nav" aria-label="Main navigation">
+        <a href="index.html">Home</a>
+        <a href="programs.html">Programs</a>
+        <a href="band-level-system.html">Band Levels</a>
+        <a href="competitions.html">Competitions</a>
+        <a href="success-stories.html">Success Stories</a>
+        <a href="locations.html">Locations</a>
+        <a href="franchise-opportunities.html">Franchise</a>
+        <a href="about.html">About Us</a>
+        <a class="nav-cta" href="enroll.html">Enroll Now</a>
+        <a href="contact.html">Contact Us</a>
+      </nav></header>
+
+    <main>
+      <section class="page-hero enroll-hero">
+        <p class="eyebrow">Enroll Now</p>
+        <h1>Enroll Now!!</h1>
+        <p>Complete the registration details below. Required fields are marked with an asterisk.</p>
+      </section>
+
+      <section class="section enroll-page-layout">
+        <!-- TODO: Replace action="" with a static form endpoint, such as Formspree, Getform, Basin, or a Cloudflare Pages Function.
+             Final submissions must notify both info@ileapclub.com and info@ileap.club. -->
+        <form class="enroll-form lead-form" method="post" action="" data-static-placeholder="true">
+          <input type="hidden" name="notification_recipients" value="info@ileapclub.com, info@ileap.club">
+
+          <fieldset class="form-section-card">
+            <legend>Franchise Area</legend>
+            <div class="form-grid">
+              <label>
+                Province <span aria-hidden="true">*</span>
+                <select name="franchise_province" required>
+                  <option value="">Select province</option>
+                  <option>Ontario</option>
+                  <option>Alberta</option>
+                  <option>British Columbia</option>
+                  <option>Manitoba</option>
+                  <option>New Brunswick</option>
+                  <option>Newfoundland and Labrador</option>
+                  <option>Nova Scotia</option>
+                  <option>Prince Edward Island</option>
+                  <option>Quebec</option>
+                  <option>Saskatchewan</option>
+                </select>
+              </label>
+              <label>
+                City <span aria-hidden="true">*</span>
+                <select name="franchise_city" required>
+                  <option value="">Select city</option>
+                  <option>Ottawa</option>
+                  <option>Toronto</option>
+                  <option>Online</option>
+                  <option>Other / Future Location</option>
+                </select>
+              </label>
+              <label>
+                Centre <span aria-hidden="true">*</span>
+                <select name="centre" required>
+                  <option value="">Select centre</option>
+                  <option>Ottawa Centre</option>
+                  <option>Toronto Centre</option>
+                  <option>Online Program</option>
+                  <option>To be confirmed</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section-card">
+            <legend>Student Details</legend>
+            <div class="form-grid">
+              <label>First name <span aria-hidden="true">*</span><input type="text" name="student_first_name" autocomplete="given-name" placeholder="Student first name" required></label>
+              <label>Last name <span aria-hidden="true">*</span><input type="text" name="student_last_name" autocomplete="family-name" placeholder="Student last name" required></label>
+              <label>Date of birth <span aria-hidden="true">*</span><input type="date" name="date_of_birth" required></label>
+              <label>
+                Gender
+                <select name="gender">
+                  <option value="">Select gender</option>
+                  <option>Female</option>
+                  <option>Male</option>
+                  <option>Prefer not to say</option>
+                </select>
+              </label>
+              <label class="wide-field">Street <span aria-hidden="true">*</span><input type="text" name="street" autocomplete="street-address" placeholder="Street address" required></label>
+              <label>Unit/Apt No<input type="text" name="unit" placeholder="Apt, suite, unit"></label>
+              <label>City <span aria-hidden="true">*</span><input type="text" name="student_city" autocomplete="address-level2" placeholder="City" required></label>
+              <label>Province <span aria-hidden="true">*</span><input type="text" name="student_province" autocomplete="address-level1" placeholder="Province" required></label>
+              <label>Postal code <span aria-hidden="true">*</span><input type="text" name="postal_code" autocomplete="postal-code" placeholder="A1A 1A1" required></label>
+              <label>Primary Mobile Number <span aria-hidden="true">*</span><input type="tel" name="primary_mobile" autocomplete="tel" placeholder="Primary mobile number" required></label>
+              <label>
+                Student Grade
+                <select name="student_grade">
+                  <option value="">Select grade</option>
+                  <option>Grade 2</option>
+                  <option>Grade 3</option>
+                  <option>Grade 4</option>
+                  <option>Grade 5</option>
+                  <option>Grade 6</option>
+                  <option>Grade 7</option>
+                  <option>Grade 8</option>
+                  <option>Grade 9</option>
+                  <option>Grade 10</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label class="wide-field">Name of the School <span aria-hidden="true">*</span><input type="text" name="school_name" placeholder="School name" required></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section-card">
+            <legend>Details of the Parents</legend>
+            <div class="form-grid">
+              <label>Mother's Name <span aria-hidden="true">*</span><input type="text" name="mother_name" autocomplete="name" placeholder="Mother's full name" required></label>
+              <label>Father's Name <span aria-hidden="true">*</span><input type="text" name="father_name" autocomplete="name" placeholder="Father's full name" required></label>
+              <label>Mother's Cell <span aria-hidden="true">*</span><input type="tel" name="mother_cell" autocomplete="tel" placeholder="Mother's phone number" required></label>
+              <label>Father's Cell <span aria-hidden="true">*</span><input type="tel" name="father_cell" autocomplete="tel" placeholder="Father's phone number" required></label>
+              <label>Email address 1 <span aria-hidden="true">*</span><input type="email" name="email_1" autocomplete="email" placeholder="primary@example.com" required></label>
+              <label>Email address 2<input type="email" name="email_2" placeholder="secondary@example.com"></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section-card">
+            <legend>Reference</legend>
+            <div class="form-grid">
+              <label>
+                How did you hear about the iLEAP Club?
+                <select name="referral_source">
+                  <option value="">Select one</option>
+                  <option>Friend or family</option>
+                  <option>School</option>
+                  <option>Social media</option>
+                  <option>Google search</option>
+                  <option>Community event</option>
+                  <option>Franchise / centre referral</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label class="wide-field">Optional details<input type="text" name="referral_details" placeholder="Tell us more if you selected Other or were referred by someone"></label>
+            </div>
+          </fieldset>
+
+          <p class="privacy-note">Your information will only be used for iLEAP Club registration and communication.</p>
+          <button class="button primary enroll-submit" type="submit">Enroll Now</button>
+          <p class="form-status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <img src="assets/images/ileap-club-logo.jpg" alt="iLEAP Club">
+      <p>Public speaking, leadership, soft skills, and confidence for children and youth.</p>
+      <div class="footer-links"><a href="programs.html">Programs</a><a href="locations.html">Locations</a><a href="contact.html">Contact</a></div>
+    </footer>
+    <script src="js/script.js"></script>
+  </body>
+</html>

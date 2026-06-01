@@ -66,11 +66,19 @@ leadForms.forEach((leadForm) => {
   }
 
   leadForm.addEventListener("submit", (event) => {
+    const action = leadForm.getAttribute("action");
+    const isPlaceholderForm =
+      leadForm.dataset.staticPlaceholder === "true" || !action || action === "#";
+
+    if (!isPlaceholderForm) {
+      return;
+    }
+
     event.preventDefault();
 
     const status = leadForm.querySelector(".form-status");
     if (status) {
-      status.textContent = "Thank you. Please email info@ileapclub.com or connect this form to a static form service before launch.";
+      status.textContent = "Thank you. Your information is ready to submit once the iLEAP Club form endpoint is connected.";
     }
 
     leadForm.reset();
