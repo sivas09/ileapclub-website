@@ -641,6 +641,241 @@ h3 {
   font-size: clamp(1.15rem, 2vw, 1.45rem);
 }
 
+.locations-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(360px, 1fr);
+  gap: clamp(28px, 5vw, 70px);
+  align-items: center;
+  padding: clamp(54px, 8vw, 96px) clamp(18px, 5vw, 74px);
+  background:
+    linear-gradient(135deg, rgba(0, 137, 202, 0.1), rgba(177, 67, 151, 0.08)),
+    var(--white);
+  border-bottom: 1px solid rgba(0, 41, 107, 0.08);
+}
+
+.locations-hero-copy {
+  max-width: 760px;
+}
+
+.locations-hero-copy h1 {
+  font-size: clamp(2.6rem, 5.8vw, 5rem);
+}
+
+.locations-hero-copy > p:last-of-type {
+  max-width: 650px;
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: clamp(1.06rem, 2vw, 1.28rem);
+}
+
+.locations-hero-card {
+  position: relative;
+  margin: 0;
+}
+
+.locations-hero-card img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.locations-hero-card figcaption {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 22px;
+  padding: 18px;
+  color: var(--white);
+  background: rgba(0, 41, 107, 0.9);
+  border-left: 4px solid var(--sky);
+  border-radius: 8px;
+}
+
+.locations-hero-card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.location-finder-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(360px, 1fr);
+  gap: clamp(28px, 5vw, 70px);
+  align-items: center;
+  background: var(--paper);
+}
+
+.location-finder-copy p:last-child {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.location-finder {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  padding: clamp(24px, 4vw, 34px);
+  background: var(--white);
+  border: 1px solid rgba(0, 41, 107, 0.12);
+  border-top: 4px solid var(--sky);
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(0, 41, 107, 0.1);
+}
+
+.location-finder label {
+  display: grid;
+  gap: 8px;
+  color: var(--blue);
+  font-weight: 850;
+}
+
+.location-finder select {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 13px;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid rgba(0, 41, 107, 0.2);
+  border-radius: 8px;
+}
+
+.location-finder .button {
+  grid-column: 1 / -1;
+}
+
+.location-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  background: var(--white);
+}
+
+.location-option-card {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 26px;
+  background: var(--white);
+  border: 1px solid rgba(0, 41, 107, 0.12);
+  border-top: 4px solid var(--sky);
+  border-radius: 8px;
+  box-shadow: 0 12px 34px rgba(0, 41, 107, 0.07);
+}
+
+.location-option-card > span {
+  width: fit-content;
+  padding: 6px 10px;
+  color: var(--blue);
+  background: rgba(0, 137, 202, 0.1);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.location-option-card dl,
+.location-option-card dd {
+  margin: 0;
+}
+
+.location-option-card dl {
+  display: grid;
+  gap: 12px;
+}
+
+.location-option-card dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.location-option-card dd {
+  color: var(--ink);
+}
+
+.location-option-card .button {
+  align-self: end;
+  margin-top: 6px;
+}
+
+.location-option-card.accent-card {
+  color: var(--white);
+  background: #003b8f;
+  border-color: var(--orange);
+}
+
+.location-option-card.accent-card h2,
+.location-option-card.accent-card dd {
+  color: var(--white);
+}
+
+.location-option-card.accent-card dt {
+  color: #f5f7fa;
+}
+
+.location-option-card.accent-card > span {
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.family-options {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(320px, 0.8fr);
+  gap: clamp(28px, 5vw, 70px);
+  align-items: center;
+  background: var(--paper);
+}
+
+.family-options p:last-child {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.family-option-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.family-option-list li {
+  padding: 18px 20px;
+  color: var(--blue);
+  background: var(--white);
+  border: 1px solid rgba(0, 137, 202, 0.18);
+  border-left: 4px solid var(--sky);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 41, 107, 0.06);
+  font-weight: 850;
+}
+
+.franchise-location-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: var(--white);
+  background:
+    linear-gradient(135deg, rgba(0, 137, 202, 0.2), rgba(230, 105, 10, 0.14)),
+    var(--blue-deep);
+}
+
+.franchise-location-cta .eyebrow,
+.franchise-location-cta h2,
+.franchise-location-cta p {
+  color: var(--white);
+}
+
+.franchise-location-cta p:last-child {
+  max-width: 700px;
+  margin: 14px 0 0;
+}
+
 .intro,
 .method,
 .families-panel,
@@ -1150,6 +1385,9 @@ details p {
 
 @media (max-width: 980px) {
   .hero,
+  .locations-hero,
+  .location-finder-section,
+  .family-options,
   .intro,
   .method,
   .video-feature,
@@ -1163,6 +1401,11 @@ details p {
   .contact-layout,
   .media-grid article:first-child {
     grid-template-columns: 1fr;
+  }
+
+  .franchise-location-cta {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .form-grid {
@@ -1184,6 +1427,7 @@ details p {
   }
 
   .trust-strip,
+  .location-card-grid,
   .program-grid,
   .outcome-grid,
   .testimonial-grid,
@@ -1193,6 +1437,10 @@ details p {
   .contact-methods,
   .site-footer {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .location-finder {
+    grid-template-columns: 1fr;
   }
 
   .media-grid article:first-child {
@@ -1233,6 +1481,7 @@ details p {
 
   .hero-stats,
   .trust-strip,
+  .location-card-grid,
   .program-grid,
   .outcome-grid,
   .testimonial-grid,

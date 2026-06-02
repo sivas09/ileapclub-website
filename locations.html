@@ -25,20 +25,134 @@
         <a href="contact.html">Contact Us</a>
       </nav></header>
     <main>
-      <section class="page-hero">
-        <p class="eyebrow">Locations</p>
-        <h1>Find the right iLEAP Club cohort for your family.</h1>
-        <p>iLEAP Club is preparing location-based and online options so families can access communication and leadership programs more easily.</p>
+      <section class="locations-hero">
+        <div class="locations-hero-copy">
+          <p class="eyebrow">Locations</p>
+          <h1>Find an iLEAP Club Near You</h1>
+          <p>Join our public speaking, leadership, and soft skills programs in-person or online.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="#find-my-club">Find a Centre</a>
+            <a class="button secondary" href="contact.html">Contact Us</a>
+          </div>
+        </div>
+        <figure class="locations-hero-card">
+          <img src="assets/images/ileap-hero-speaking.png" alt="Students learning communication and leadership skills together">
+          <figcaption>
+            <strong>Local and online options</strong>
+            Flexible programs for families across growing iLEAP Club communities.
+          </figcaption>
+        </figure>
       </section>
-      <section class="section feature-grid">
-        <article><span>Ottawa</span><h2>Ottawa Programs</h2><p>Local cohorts for students who want in-person speaking, leadership, and confidence practice.</p></article>
-        <article><span>Toronto</span><h2>Toronto Programs</h2><p>Toronto-area programs are planned as iLEAP Club expands to serve more families.</p></article>
-        <article><span>Online</span><h2>Online Programs</h2><p>Virtual options can support students who are outside a physical iLEAP Club location.</p></article>
-        <article><span>Future</span><h2>Future Locations</h2><p>New locations will be guided by family demand, educator partnerships, and franchise interest.</p></article>
+
+      <section class="section location-finder-section" id="find-my-club">
+        <div class="location-finder-copy">
+          <p class="eyebrow">Find My Club</p>
+          <h2>Choose a location that fits your family.</h2>
+          <p>Choose your province and city to view available iLEAP Club centres.</p>
+        </div>
+        <form class="location-finder" aria-label="Find an iLEAP Club centre">
+          <label>
+            Select Province
+            <select name="province">
+              <option value="">Select Province</option>
+              <option>Ontario</option>
+              <option>Online</option>
+              <option>Future Province</option>
+            </select>
+          </label>
+          <label>
+            Select City
+            <select name="city">
+              <option value="">Select City</option>
+              <option>Ottawa</option>
+              <option>Toronto</option>
+              <option>Online</option>
+              <option>Future City</option>
+            </select>
+          </label>
+          <label>
+            Select Centre
+            <select name="centre">
+              <option value="">Select Centre</option>
+              <option>Ottawa Centre</option>
+              <option>Toronto Centre</option>
+              <option>Online Program</option>
+              <option>Future Location Interest</option>
+            </select>
+          </label>
+          <button class="button primary" type="button">Search Centre</button>
+        </form>
       </section>
-      <section class="section two-column-band">
-        <div><p class="eyebrow">Need help choosing?</p><h2>Start with a demo request.</h2></div>
-        <p>The enrollment team can recommend the right cohort based on your child's grade, goals, and confidence level.</p>
+
+      <section class="section location-card-grid" aria-label="iLEAP Club location options">
+        <article class="location-option-card">
+          <span>Ottawa</span>
+          <h2>Ottawa</h2>
+          <dl>
+            <div><dt>Program type</dt><dd>Public Speaking, Leadership, Soft Skills</dd></div>
+            <div><dt>Suitable grades</dt><dd>Grades 2-10</dd></div>
+            <div><dt>Delivery format</dt><dd>In-person classes</dd></div>
+          </dl>
+          <a class="button secondary" href="contact.html">Contact Ottawa</a>
+        </article>
+        <article class="location-option-card">
+          <span>Toronto</span>
+          <h2>Toronto</h2>
+          <dl>
+            <div><dt>Program type</dt><dd>Public Speaking, Debate, Leadership</dd></div>
+            <div><dt>Suitable grades</dt><dd>Grades 2-10</dd></div>
+            <div><dt>Delivery format</dt><dd>Planned in-person cohorts</dd></div>
+          </dl>
+          <a class="button secondary" href="contact.html">Contact Toronto</a>
+        </article>
+        <article class="location-option-card">
+          <span>Online</span>
+          <h2>Online Program</h2>
+          <dl>
+            <div><dt>Program type</dt><dd>Speaking practice, confidence, coaching</dd></div>
+            <div><dt>Suitable grades</dt><dd>Grades 2-10</dd></div>
+            <div><dt>Delivery format</dt><dd>Live online classes</dd></div>
+          </dl>
+          <a class="button secondary" href="contact.html">Ask About Online</a>
+        </article>
+        <article class="location-option-card accent-card">
+          <span>Growth</span>
+          <h2>Future Locations</h2>
+          <dl>
+            <div><dt>Program type</dt><dd>New centre interest and community demand</dd></div>
+            <div><dt>Suitable grades</dt><dd>Grades 2-10</dd></div>
+            <div><dt>Delivery format</dt><dd>Future in-person and hybrid options</dd></div>
+          </dl>
+          <a class="button secondary" href="franchise-opportunities.html">Suggest a City</a>
+        </article>
+      </section>
+
+      <section class="section family-options">
+        <div>
+          <p class="eyebrow">For parents</p>
+          <h2>Flexible Learning Options for Busy Families</h2>
+          <p>
+            iLEAP Club is built for families who want consistent confidence-building practice without
+            making schedules harder. Students can grow through local classes, online sessions, weekend
+            options, and practical speaking opportunities.
+          </p>
+        </div>
+        <ul class="family-option-list">
+          <li>In-person classes</li>
+          <li>Online classes</li>
+          <li>Weekend options</li>
+          <li>Leadership and public speaking practice</li>
+          <li>Competition preparation</li>
+        </ul>
+      </section>
+
+      <section class="section franchise-location-cta">
+        <div>
+          <p class="eyebrow">Community growth</p>
+          <h2>Want to Bring iLEAP Club to Your City?</h2>
+          <p>Help more students build communication, leadership, confidence, and future-ready soft skills in your community.</p>
+        </div>
+        <a class="button primary" href="franchise-opportunities.html">Become a Franchise Partner</a>
       </section>
     </main>
     <footer class="site-footer"><img src="assets/images/ileap-club-logo.jpg" alt="iLEAP Club"><p>Public speaking, leadership, soft skills, and confidence for children and youth.</p><div class="footer-links"><a href="contact.html">Contact</a><a href="programs.html">Programs</a></div></footer>
