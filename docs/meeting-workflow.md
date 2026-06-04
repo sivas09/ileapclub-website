@@ -18,24 +18,32 @@
 Supported template types:
 
 ```text
-Junior
-Senior
-Debate
-Competition
-Town Hall
+Junior Regular Meeting
+Senior Regular Meeting
+Debate Meeting
+Town Hall Leadership Challenge
+Competition Meeting
+Special Event
 ```
 
-Each template includes placeholders such as:
+Each template is made of ordered sections and role slots. This replaces the old fixed-placeholder approach, where an agenda used fields like `role1_uid`, `role2_uid`, and `role3_uid`.
 
 ```text
-{{MEETING_TITLE}}
-{{MEETING_DATE}}
-{{CENTRE_NAME}}
-{{CLUB_NAME}}
-{{ROLE:Meeting Chair}}
-{{ROLE:Timer}}
-{{ROLE:Speaker 1}}
+agenda_template
+  agenda_sections
+    agenda_role_slots
 ```
+
+Each section can include:
+
+- section order
+- start time
+- duration
+- notes
+- facilitator-only notes
+- student-visible instructions
+- role slots
+- speaker/evaluator pairings
 
 ## Student Role Claiming
 
@@ -43,13 +51,15 @@ Each template includes placeholders such as:
 2. Student opens dashboard.
 3. Student selects upcoming meeting.
 4. Student sees open roles.
-5. Student clicks "Claim Role".
-6. Backend verifies:
+5. Student is encouraged to choose at least two roles when enough open slots are available.
+6. Student clicks "Claim Role".
+7. Backend verifies:
    - student belongs to the meeting's club
    - meeting is published
    - role is open
    - role was not claimed by another student
-7. Role is assigned with:
+   - role is not locked
+8. Role is assigned with:
 
 ```text
 assignment_source = self_claimed
@@ -57,6 +67,15 @@ status = claimed
 ```
 
 Claiming must use a database transaction or unique constraint to prevent duplicate assignment.
+
+Rules:
+
+- The same role slot cannot be claimed by more than one member.
+- A member may claim multiple roles.
+- The UI should encourage at least two role claims per member when there are enough roles available.
+- Facilitator/Admin can override assignments.
+- Facilitator/Admin can lock roles before a meeting.
+- Facilitator/Admin can reopen roles if needed.
 
 ## Facilitator Override
 
@@ -67,6 +86,7 @@ Facilitator can:
 - lock a role
 - reopen a role
 - clear a role assignment
+- adjust speaker/evaluator pairings
 
 Override records:
 
@@ -85,15 +105,25 @@ updated_at
    - centre
    - club
    - agenda template
+   - agenda sections
+   - agenda role slots
    - meeting role assignments
-4. Backend replaces placeholders with assigned student names.
-5. Backend returns RTF file.
+4. Backend renders a clean RTF agenda.
+5. Open roles are shown as "Open".
+6. Backend returns RTF file.
 
 Endpoint:
 
 ```text
 GET /api/meetings/:id/agenda.rtf
 ```
+
+Agenda download permissions:
+
+- Student/Member can download agendas for their own club meetings.
+- Parent can download agendas for linked students' club meetings.
+- Facilitator can download agendas for assigned clubs.
+- Admin can download all agendas.
 
 ## Attendance Workflow
 
@@ -128,4 +158,3 @@ Band progress considers:
 - project completion
 
 Admin can manually override if needed.
-

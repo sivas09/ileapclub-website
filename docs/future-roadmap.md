@@ -12,7 +12,7 @@ Build first:
 6. Clubs
 7. Club memberships
 8. Meetings
-9. Agenda templates
+9. Agenda templates, sections, and role slots
 10. Role self-claiming
 11. Facilitator override
 12. RTF agenda download
@@ -30,6 +30,7 @@ Build first:
 - Parent notifications
 - Meeting reminders
 - Better reporting
+- Advanced agenda editor for template sections, timings, role slots, and speaker/evaluator pairings
 
 ## Phase 2.2
 
@@ -75,4 +76,3 @@ Do not build initially:
 - advanced competition engine
 - public resource marketplace
 - mobile app
-

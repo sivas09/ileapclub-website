@@ -121,7 +121,9 @@ meetings
 
 ## Roles and Meeting Role Assignments
 
-Roles are reusable definitions. Meeting roles are specific slots for one meeting.
+Roles are reusable definitions. Agenda role slots define where roles appear inside a template. Meeting roles are the actual claimable slots for one meeting.
+
+The old Drupal reference used fixed role placeholders such as `role1_uid`, `role2_uid`, and `role3_uid`. The new model replaces that fixed pattern with flexible role definitions, ordered agenda sections, and reusable role slots.
 
 ```text
 roles
@@ -144,6 +146,7 @@ roles
 meeting_roles
 - id
 - meeting_id
+- agenda_role_slot_id
 - role_id
 - assigned_student_id
 - assigned_by_user_id
@@ -155,6 +158,9 @@ meeting_roles
   - open
   - claimed
   - locked
+- locked_by_user_id
+- locked_at
+- override_reason
 - created_at
 - updated_at
 ```
@@ -164,11 +170,12 @@ meeting_roles
 Support multiple templates:
 
 ```text
-Junior
-Senior
-Debate
-Competition
-Town Hall
+Junior Regular Meeting
+Senior Regular Meeting
+Debate Meeting
+Town Hall Leadership Challenge
+Competition Meeting
+Special Event
 ```
 
 ```text
@@ -176,16 +183,67 @@ agenda_templates
 - id
 - name
 - template_type
-  - junior
-  - senior
+  - junior_regular
+  - senior_regular
   - debate
-  - competition
   - town_hall
-- template_body
+  - competition
+  - special_event
+- description
 - is_default
+- is_active
 - created_at
 - updated_at
 ```
+
+```text
+agenda_sections
+- id
+- agenda_template_id
+- title
+- description
+- section_order
+- default_start_time
+- default_duration_minutes
+- notes
+- facilitator_notes
+- student_instructions
+- created_at
+- updated_at
+```
+
+```text
+agenda_role_slots
+- id
+- agenda_section_id
+- role_id
+- slot_label
+- slot_order
+- default_duration_minutes
+- is_required
+- allows_self_claim
+- min_claims_per_member_hint
+- paired_slot_id
+- pairing_type
+  - speaker_evaluator
+  - debate_partner
+  - team_role
+  - none
+- notes
+- facilitator_notes
+- student_instructions
+- created_at
+- updated_at
+```
+
+Notes:
+
+- `agenda_sections` define the meeting flow.
+- `agenda_role_slots` define claimable role slots inside each section.
+- `meeting_roles` are generated from `agenda_role_slots` when a meeting is created.
+- Speaker/evaluator pairing is represented by `paired_slot_id` and `pairing_type`.
+- Open roles are displayed as `Open` in generated agendas.
+- Members should be encouraged to claim at least two roles when enough slots are available.
 
 ## Attendance
 
@@ -353,4 +411,3 @@ resources
 - created_at
 - updated_at
 ```
-

@@ -46,7 +46,9 @@ Parents can manage multiple students. Students can belong to one or more clubs t
 - Parents can view their students' schedules, attendance, scores, band progress, and agenda downloads.
 - Attendance is tracked per meeting per student.
 - PTB/Band progress is tracked through requirements, not only total score.
-- Agenda templates support Junior, Senior, Debate, Competition, and Town Hall formats.
+- Agenda templates support Junior Regular, Senior Regular, Debate, Town Hall Leadership Challenge, Competition, and Special Event formats.
+- Agenda templates are section-based and role-slot-based, replacing old fixed fields such as `role1_uid`, `role2_uid`, and `role3_uid`.
+- Agenda templates support speaker/evaluator pairings, timings, notes, facilitator-only notes, and student-visible instructions.
 - Future competitions are supported by dedicated competition-ready tables.
 - Future resource library files are stored in Cloudflare R2.
 
@@ -60,12 +62,13 @@ Parents can manage multiple students. Students can belong to one or more clubs t
 6. Meeting creation
 7. Meeting role setup and self-claim
 8. Facilitator role override
-9. Agenda template selection and RTF download
-10. Attendance tracking
-11. Score entry and feedback
-12. PTB/Band requirements and progress tracking
-13. Parent dashboard
-14. Student dashboard
+9. Agenda template, section, and role-slot selection
+10. RTF agenda download
+11. Attendance tracking
+12. Score entry and feedback
+13. PTB/Band requirements and progress tracking
+14. Parent dashboard
+15. Student dashboard
 
 ## Future Modules
 
@@ -132,6 +135,8 @@ Use:
 - Meetings
 - Meeting roles
 - Agenda templates
+- Agenda sections
+- Agenda role slots
 - Attendance
 - Scores
 - PTB/Band requirements
@@ -195,6 +200,11 @@ GET   /api/meetings/:id/agenda.rtf
 GET   /api/agenda-templates
 POST  /api/agenda-templates
 PATCH /api/agenda-templates/:id
+GET   /api/agenda-templates/:id/sections
+POST  /api/agenda-templates/:id/sections
+PATCH /api/agenda-sections/:id
+POST  /api/agenda-sections/:id/role-slots
+PATCH /api/agenda-role-slots/:id
 ```
 
 Attendance, scores, and progress:
@@ -272,12 +282,14 @@ Student dashboard should show:
 6. Add centres and clubs
 7. Add club memberships
 8. Add meetings
-9. Add meeting roles and self-claim workflow
-10. Add facilitator override workflow
-11. Add agenda templates and RTF download
-12. Add attendance
-13. Add scoring
-14. Add PTB/Band requirement tracking
-15. Add parent dashboard
-16. Add student dashboard
-17. Deploy to Render
+9. Add agenda templates, sections, and role slots
+10. Add meeting roles generated from agenda role slots
+11. Add self-claim workflow
+12. Add facilitator override, locking, and reopening workflow
+13. Add RTF agenda download
+14. Add attendance
+15. Add scoring
+16. Add PTB/Band requirement tracking
+17. Add parent dashboard
+18. Add student dashboard
+19. Deploy to Render

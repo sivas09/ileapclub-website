@@ -24,6 +24,7 @@ Admin can:
 - Override any role assignment
 - Manage role definitions
 - Manage agenda templates
+- Manage agenda sections and agenda role slots
 - Mark or edit attendance
 - Enter and edit scores
 - Manage band levels and requirements
@@ -39,9 +40,11 @@ Facilitator can:
 - View students in assigned clubs
 - Create and edit meetings for assigned clubs
 - Choose agenda templates for meetings
+- Review agenda sections and role slots
 - Publish meetings for assigned clubs
 - Override role assignments in assigned clubs
 - Lock or reopen meeting roles
+- Adjust speaker/evaluator pairings
 - Download meeting agendas
 - Mark attendance
 - Enter and edit scores for assigned club students
@@ -113,4 +116,3 @@ Key rules:
 - Student scope is limited to self.
 - Role claiming must be transactional to prevent two students claiming the same role.
 - Facilitator override must record who made the change and why.
-
