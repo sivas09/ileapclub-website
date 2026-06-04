@@ -4,9 +4,16 @@ const header = document.querySelector("[data-header]");
 const leadForms = document.querySelectorAll(".lead-form");
 
 if (nav) {
-  const currentPage = window.location.pathname.split("/").pop() || "index.html";
+  const normalizePage = (value) => {
+    const cleanValue = value.replace(/\/+$/, "");
+    const page = cleanValue.split("/").pop() || "index.html";
+
+    return page.endsWith(".html") ? page : `${page}.html`;
+  };
+  const currentPage = normalizePage(window.location.pathname);
+
   nav.querySelectorAll("a[href]").forEach((link) => {
-    const href = link.getAttribute("href");
+    const href = normalizePage(link.getAttribute("href") || "");
     if (href === currentPage) {
       link.setAttribute("aria-current", "page");
     } else {
@@ -121,6 +128,7 @@ leadForms.forEach((leadForm) => {
 
     if (status) {
       status.textContent = "Thank you. Your information is ready to submit once the iLEAP Club form endpoint is connected.";
+      status.classList.remove("is-error");
       status.classList.add("is-success");
     }
 

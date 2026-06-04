@@ -597,6 +597,17 @@ h3 {
   height: 260px;
   object-fit: cover;
   border-radius: 8px;
+  border: 1px solid rgba(0, 41, 107, 0.1);
+  box-shadow: 0 14px 34px rgba(0, 41, 107, 0.1);
+}
+
+.media-grid article:not(:first-child) {
+  display: grid;
+  gap: 18px;
+}
+
+.media-grid article:not(:first-child) img {
+  height: 190px;
 }
 
 .contact-card h2 {
@@ -1133,6 +1144,35 @@ details p {
   background: var(--paper);
 }
 
+.image-band {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(320px, 1fr);
+  gap: clamp(28px, 5vw, 64px);
+  align-items: center;
+  background: linear-gradient(135deg, rgba(0, 137, 202, 0.08), rgba(177, 67, 151, 0.08));
+}
+
+.image-band img {
+  width: 100%;
+  min-height: 320px;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 24px 54px rgba(0, 41, 107, 0.16);
+}
+
+.image-band p {
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.image-band .button {
+  margin-top: 16px;
+}
+
+.compact-image-band img {
+  object-position: center 28%;
+}
+
 .families-panel {
   padding: clamp(26px, 5vw, 46px);
 }
@@ -1388,6 +1428,7 @@ details p {
   .locations-hero,
   .location-finder-section,
   .family-options,
+  .image-band,
   .intro,
   .method,
   .video-feature,
