@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  FACILITATOR
+  PARENT
+  STUDENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  parentStudents StudentParent[] @relation("ParentUser")
+  studentProfile  Student?
+  facilitator     ClubFacilitator[]
+}
+
+model Centre {
+  id        String   @id @default(cuid())
+  name      String
+  province  String
+  city      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clubs Club[]
+}
+
+model Club {
+  id        String   @id @default(cuid())
+  centreId  String
+  name      String
+  program   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  centre       Centre            @relation(fields: [centreId], references: [id])
+  students     Student[]
+  facilitators ClubFacilitator[]
+}
+
+model Student {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  clubId    String?
+  grade     String
+  bandLevel String   @default("White")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id])
+  club    Club?           @relation(fields: [clubId], references: [id])
+  parents StudentParent[]
+}
+
+model StudentParent {
+  id        String   @id @default(cuid())
+  parentId  String
+  studentId String
+  createdAt DateTime @default(now())
+
+  parent  User    @relation("ParentUser", fields: [parentId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@unique([parentId, studentId])
+}
+
+model ClubFacilitator {
+  id            String   @id @default(cuid())
+  clubId        String
+  facilitatorId String
+  createdAt     DateTime @default(now())
+
+  club        Club @relation(fields: [clubId], references: [id])
+  facilitator User @relation(fields: [facilitatorId], references: [id])
+
+  @@unique([clubId, facilitatorId])
+}
