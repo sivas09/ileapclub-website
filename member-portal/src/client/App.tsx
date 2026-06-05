@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AdminOverview,
-  agendaDownloadUrl,
   assignMeetingSlot,
   claimMeetingSlot,
   clearToken,
@@ -10,6 +9,7 @@ import {
   createClub,
   createMeeting,
   createUser,
+  downloadAgenda,
   fetchStudentProgressForManager,
   getAdminOverview,
   getCurrentUser,
@@ -114,7 +114,7 @@ function LoginScreen({
   setError: (message: string) => void;
 }) {
   const [email, setEmail] = useState("admin@ileapclub.com");
-  const [password, setPassword] = useState("ChangeMe123!");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -198,7 +198,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
       </section>
 
       {user.role === "ADMIN" ? <AdminWorkspace /> : null}
-      <MeetingWorkspace user={user} />
+      {user.role !== "PARENT" ? <MeetingWorkspace user={user} /> : <DeferredParentWorkspace />}
       {user.role === "STUDENT" ? <StudentProgressDashboard /> : null}
     </main>
   );
@@ -212,6 +212,19 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </article>
+  );
+}
+
+function DeferredParentWorkspace() {
+  return (
+    <section className="deferred-workspace" aria-label="Parent workspace status">
+      <p className="eyebrow">Coming later</p>
+      <h2>Parent dashboard is planned for a later phase.</h2>
+      <p>
+        Parent accounts are supported for student relationships, but parent-facing screens are intentionally
+        deferred while the student, facilitator, and admin workflows are built first.
+      </p>
+    </section>
   );
 }
 
@@ -421,7 +434,7 @@ function AdminWorkspace() {
           {isLoading ? <p>Loading...</p> : overview?.centres.length ? (
             <ul className="record-list">
               {overview.centres.map((centre) => (
-                <li key={centre.id}><strong>{centre.name}</strong><span>{centre.city}, {centre.province} · {centre.clubs?.length ?? 0} clubs</span></li>
+                <li key={centre.id}><strong>{centre.name}</strong><span>{centre.city}, {centre.province} - {centre.clubs?.length ?? 0} clubs</span></li>
               ))}
             </ul>
           ) : <p>No centres yet.</p>}
@@ -431,7 +444,7 @@ function AdminWorkspace() {
           {overview?.clubs.length ? (
             <ul className="record-list">
               {overview.clubs.map((club) => (
-                <li key={club.id}><strong>{club.name}</strong><span>{club.program} · {club.students?.length ?? 0} students · {club.facilitators?.length ?? 0} facilitators</span></li>
+                <li key={club.id}><strong>{club.name}</strong><span>{club.program} - {club.students?.length ?? 0} students - {club.facilitators?.length ?? 0} facilitators</span></li>
               ))}
             </ul>
           ) : <p>No clubs yet.</p>}
@@ -441,7 +454,7 @@ function AdminWorkspace() {
           {overview?.users.length ? (
             <ul className="record-list">
               {overview.users.map((portalUser) => (
-                <li key={portalUser.id}><strong>{portalUser.firstName} {portalUser.lastName}</strong><span>{formatRole(portalUser.role)} · {portalUser.email}</span></li>
+                <li key={portalUser.id}><strong>{portalUser.firstName} {portalUser.lastName}</strong><span>{formatRole(portalUser.role)} - {portalUser.email}</span></li>
               ))}
             </ul>
           ) : <p>No users yet.</p>}
@@ -453,7 +466,7 @@ function AdminWorkspace() {
               {overview.students.map((student) => (
                 <li key={student.id}>
                   <strong>{student.user.firstName} {student.user.lastName}</strong>
-                  <span>{student.grade} · {student.club?.name ?? "No club"} · parents: {student.parents?.map((parent) => `${parent.parent.firstName} ${parent.parent.lastName}`).join(", ") || "None"}</span>
+                  <span>{student.grade} - {student.club?.name ?? "No club"} - parents: {student.parents?.map((parent) => `${parent.parent.firstName} ${parent.parent.lastName}`).join(", ") || "None"}</span>
                 </li>
               ))}
             </ul>
@@ -531,6 +544,20 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
     }
   }
 
+  async function runDownload(action: () => Promise<void>) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await action();
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Unable to download agenda.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <section className="meeting-workspace" aria-label="Meeting and role workspace">
       <div className="admin-heading">
@@ -599,6 +626,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(meeting.id, slotId, studentId), "Role assignment updated.")}
             onAttendance={(studentId, status) => updateMeeting(() => markMeetingAttendance(meeting.id, { studentId, status }), "Attendance updated.")}
             onScore={(slotId, score) => updateMeeting(() => scoreMeetingSlot(meeting.id, slotId, { score }), "Score saved.")}
+            onAgendaDownload={() => runDownload(() => downloadAgenda(meeting.id))}
             onToggleLock={() => updateMeeting(() => toggleMeetingLock(meeting.id), meeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
           />
         ))}
@@ -684,6 +712,7 @@ function RequirementManagementPanel({
               </div>
               <div className="requirement-controls">
                 <input
+                  key={`${entry.requirement.id}-${entry.currentCount}-${entry.isCompleted}`}
                   type="number"
                   min="0"
                   max={entry.requirement.targetCount}
@@ -709,6 +738,7 @@ function MeetingCard({
   onAssign,
   onAttendance,
   onScore,
+  onAgendaDownload,
   onToggleLock
 }: {
   meeting: Meeting;
@@ -719,6 +749,7 @@ function MeetingCard({
   onAssign: (slotId: string, studentId: string | null) => void;
   onAttendance: (studentId: string, status: MeetingAttendance["status"]) => void;
   onScore: (slotId: string, score: number) => void;
+  onAgendaDownload: () => void;
   onToggleLock: () => void;
 }) {
   const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
@@ -730,11 +761,11 @@ function MeetingCard({
         <div>
           <span>{meeting.templateType}</span>
           <h3>{meeting.title}</h3>
-          <p>{meeting.club.name} · {formatDate(meeting.meetingDate)} · {meeting.startTime}{meeting.location ? ` · ${meeting.location}` : ""}</p>
+          <p>{meeting.club.name} - {formatDate(meeting.meetingDate)} - {meeting.startTime}{meeting.location ? ` - ${meeting.location}` : ""}</p>
         </div>
         <div className="meeting-actions">
           <strong className={meeting.isRoleLocked ? "lock-pill locked" : "lock-pill"}>{meeting.isRoleLocked ? "Locked" : "Open"}</strong>
-          <a className="agenda-download" href={agendaDownloadUrl(meeting.id)}>Download Agenda</a>
+          <button className="agenda-download" type="button" onClick={onAgendaDownload} disabled={isSubmitting}>Download Agenda</button>
           {canManage ? <button type="button" onClick={onToggleLock} disabled={isSubmitting}>{meeting.isRoleLocked ? "Reopen Roles" : "Lock Roles"}</button> : null}
         </div>
       </div>
@@ -762,6 +793,7 @@ function MeetingCard({
                   <label>
                     Score
                     <input
+                      key={`${slot.id}-${slot.assignedStudentId ?? "open"}-${slot.score?.score ?? "none"}`}
                       type="number"
                       min="0"
                       max="100"
@@ -873,7 +905,7 @@ function StudentProgressDashboard() {
                   {progress.student.roleSlots.slice(0, 8).map((slot) => (
                     <li key={slot.id}>
                       <strong>{slot.roleDefinition.name}</strong>
-                      <span>{slot.meeting.title} · {formatDate(slot.meeting.meetingDate)} · score: {slot.score?.score ?? "Not scored"}</span>
+                      <span>{slot.meeting.title} - {formatDate(slot.meeting.meetingDate)} - score: {slot.score?.score ?? "Not scored"}</span>
                     </li>
                   ))}
                 </ul>
@@ -886,7 +918,7 @@ function StudentProgressDashboard() {
                   {progress.student.roleScores.slice(0, 8).map((score) => (
                     <li key={score.id}>
                       <strong>{score.roleSlot.roleDefinition.name}: {score.score}/100</strong>
-                      <span>{score.meeting.title} · {score.feedback || "No feedback entered yet."}</span>
+                      <span>{score.meeting.title} - {score.feedback || "No feedback entered yet."}</span>
                     </li>
                   ))}
                 </ul>
@@ -899,7 +931,7 @@ function StudentProgressDashboard() {
                   {progress.student.attendance.slice(0, 8).map((attendance) => (
                     <li key={attendance.id}>
                       <strong>{attendance.status}</strong>
-                      <span>{attendance.meeting.title} · {formatDate(attendance.meeting.meetingDate)}</span>
+                      <span>{attendance.meeting.title} - {formatDate(attendance.meeting.meetingDate)}</span>
                     </li>
                   ))}
                 </ul>

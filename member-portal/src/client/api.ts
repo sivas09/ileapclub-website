@@ -180,10 +180,6 @@ export function clearToken() {
   window.localStorage.removeItem(tokenKey);
 }
 
-export function agendaDownloadUrl(meetingId: string) {
-  return `/api/meetings/${meetingId}/agenda.rtf`;
-}
-
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const response = await fetch(path, {
@@ -201,6 +197,32 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   return data as T;
+}
+
+export async function downloadAgenda(meetingId: string) {
+  const token = getStoredToken();
+  const response = await fetch(`/api/meetings/${meetingId}/agenda.rtf`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.message || "Unable to download agenda.");
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const fileName = disposition.match(/filename="([^"]+)"/)?.[1] || "ileap-meeting-agenda.rtf";
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export async function login(email: string, password: string) {

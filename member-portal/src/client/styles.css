@@ -263,6 +263,29 @@ button {
   margin-top: 8px;
 }
 
+.deferred-workspace {
+  width: min(1180px, 100%);
+  margin: 28px auto 0;
+  padding: clamp(22px, 4vw, 34px);
+  border: 1px solid #dbe4f0;
+  border-left: 4px solid #b14397;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(0, 41, 107, 0.08);
+}
+
+.deferred-workspace h2 {
+  margin: 8px 0 0;
+  color: #00296b;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+}
+
+.deferred-workspace p:last-child {
+  max-width: 760px;
+  color: #64748b;
+  line-height: 1.7;
+}
+
 .admin-workspace,
 .meeting-workspace,
 .student-progress {
