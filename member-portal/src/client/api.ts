@@ -13,6 +13,62 @@ type LoginResponse = {
   user: PortalUser;
 };
 
+export type Centre = {
+  id: string;
+  name: string;
+  province: string;
+  city: string;
+  address?: string | null;
+  isActive: boolean;
+  clubs?: Club[];
+};
+
+export type Club = {
+  id: string;
+  centreId: string;
+  name: string;
+  program: string;
+  isActive: boolean;
+  centre?: Centre;
+  students?: Student[];
+  facilitators?: ClubFacilitator[];
+};
+
+export type Student = {
+  id: string;
+  grade: string;
+  bandLevel: string;
+  clubId?: string | null;
+  user: PortalUser;
+  club?: Club | null;
+  parents?: StudentParent[];
+};
+
+export type StudentParent = {
+  id: string;
+  parent: PortalUser;
+};
+
+export type ClubFacilitator = {
+  id: string;
+  facilitator: PortalUser;
+};
+
+export type AdminOverview = {
+  centres: Centre[];
+  clubs: Club[];
+  users: Array<PortalUser & {
+    isActive: boolean;
+    studentProfile?: {
+      id: string;
+      grade: string;
+      bandLevel: string;
+      clubId?: string | null;
+    } | null;
+  }>;
+  students: Student[];
+};
+
 const tokenKey = "ileap_member_portal_token";
 
 export function getStoredToken() {
@@ -55,4 +111,48 @@ export async function login(email: string, password: string) {
 
 export async function getCurrentUser() {
   return request<{ user: PortalUser }>("/api/auth/me");
+}
+
+export async function getAdminOverview() {
+  return request<AdminOverview>("/api/admin/overview");
+}
+
+export async function createCentre(payload: {
+  name: string;
+  province: string;
+  city: string;
+  address?: string;
+}) {
+  return request<{ centre: Centre }>("/api/admin/centres", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createClub(payload: {
+  centreId: string;
+  name: string;
+  program: string;
+}) {
+  return request<{ club: Club }>("/api/admin/clubs", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createUser(payload: {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  grade?: string;
+  clubId?: string;
+  parentIds?: string[];
+  facilitatorClubIds?: string[];
+}) {
+  return request<{ user: PortalUser }>("/api/admin/users", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }

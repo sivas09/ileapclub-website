@@ -1,8 +1,10 @@
 import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
+import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 
 const app = express();
@@ -25,6 +27,7 @@ app.get("/api/health", (_request, response) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/admin", adminRouter);
 
 app.use(express.static(clientDistPath));
 
@@ -35,6 +38,11 @@ app.get("*", (request, response) => {
   }
 
   response.sendFile(path.join(clientDistPath, "index.html"));
+});
+
+app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+  console.error(error);
+  response.status(500).json({ message: "Unexpected server error." });
 });
 
 app.use((_request, response) => {

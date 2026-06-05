@@ -1,5 +1,19 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { clearToken, getCurrentUser, getStoredToken, login, PortalUser, Role, storeToken } from "./api";
+import type { ReactNode } from "react";
+import {
+  AdminOverview,
+  clearToken,
+  createCentre,
+  createClub,
+  createUser,
+  getAdminOverview,
+  getCurrentUser,
+  getStoredToken,
+  login,
+  PortalUser,
+  Role,
+  storeToken
+} from "./api";
 
 const roleCopy: Record<Role, { title: string; summary: string; actions: string[]; reports: string[] }> = {
   ADMIN: {
@@ -167,6 +181,8 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
         <PortalCard title="Important Reports" items={copy.reports} />
         <PortalCard title="Next Modules To Build" items={upcomingWork} />
       </section>
+
+      {user.role === "ADMIN" ? <AdminWorkspace /> : null}
     </main>
   );
 }
@@ -180,4 +196,275 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
       </ul>
     </article>
   );
+}
+
+function AdminWorkspace() {
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newUserRole, setNewUserRole] = useState<Role>("STUDENT");
+
+  async function refreshOverview() {
+    const data = await getAdminOverview();
+    setOverview(data);
+  }
+
+  useEffect(() => {
+    refreshOverview()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load admin data."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  async function submitAdminForm(
+    event: FormEvent<HTMLFormElement>,
+    action: (form: HTMLFormElement) => Promise<void>,
+    successMessage: string
+  ) {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await action(event.currentTarget);
+      event.currentTarget.reset();
+      setNewUserRole("STUDENT");
+      await refreshOverview();
+      setStatus(successMessage);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to save changes.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const parents = overview?.users.filter((portalUser) => portalUser.role === "PARENT") ?? [];
+  const clubs = overview?.clubs ?? [];
+
+  return (
+    <section className="admin-workspace" aria-label="Admin setup workspace">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Admin setup</p>
+          <h2>Centres, clubs, users, and assignments</h2>
+        </div>
+        <button type="button" onClick={() => refreshOverview()} disabled={isLoading}>Refresh</button>
+      </div>
+
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      <div className="admin-summary-grid">
+        <SummaryTile label="Centres" value={overview?.centres.length ?? 0} />
+        <SummaryTile label="Clubs" value={overview?.clubs.length ?? 0} />
+        <SummaryTile label="Users" value={overview?.users.length ?? 0} />
+        <SummaryTile label="Students" value={overview?.students.length ?? 0} />
+      </div>
+
+      <div className="admin-form-grid">
+        <form
+          className="admin-form"
+          onSubmit={(event) =>
+            submitAdminForm(
+              event,
+              async (form) => {
+                const formData = new FormData(form);
+                await createCentre({
+                  name: String(formData.get("name") || ""),
+                  province: String(formData.get("province") || ""),
+                  city: String(formData.get("city") || ""),
+                  address: String(formData.get("address") || "")
+                });
+              },
+              "Centre created."
+            )
+          }
+        >
+          <h3>Add Centre</h3>
+          <label>Name<input name="name" placeholder="Ottawa Centre" required /></label>
+          <label>Province<input name="province" placeholder="Ontario" required /></label>
+          <label>City<input name="city" placeholder="Ottawa" required /></label>
+          <label>Address<input name="address" placeholder="Optional address" /></label>
+          <button type="submit" disabled={isSubmitting}>Save Centre</button>
+        </form>
+
+        <form
+          className="admin-form"
+          onSubmit={(event) =>
+            submitAdminForm(
+              event,
+              async (form) => {
+                const formData = new FormData(form);
+                await createClub({
+                  centreId: String(formData.get("centreId") || ""),
+                  name: String(formData.get("name") || ""),
+                  program: String(formData.get("program") || "")
+                });
+              },
+              "Club created."
+            )
+          }
+        >
+          <h3>Add Club</h3>
+          <label>
+            Centre
+            <select name="centreId" required>
+              <option value="">Select centre</option>
+              {overview?.centres.map((centre) => (
+                <option key={centre.id} value={centre.id}>{centre.name} - {centre.city}</option>
+              ))}
+            </select>
+          </label>
+          <label>Name<input name="name" placeholder="Saturday Senior Club" required /></label>
+          <label>Program<input name="program" placeholder="Senior Regular Meeting" required /></label>
+          <button type="submit" disabled={isSubmitting || !overview?.centres.length}>Save Club</button>
+        </form>
+
+        <form
+          className="admin-form wide"
+          onSubmit={(event) =>
+            submitAdminForm(
+              event,
+              async (form) => {
+                const formData = new FormData(form);
+                const parentSelect = form.elements.namedItem("parentIds") as HTMLSelectElement | null;
+                const facilitatorClubSelect = form.elements.namedItem("facilitatorClubIds") as HTMLSelectElement | null;
+                await createUser({
+                  firstName: String(formData.get("firstName") || ""),
+                  lastName: String(formData.get("lastName") || ""),
+                  email: String(formData.get("email") || ""),
+                  password: String(formData.get("password") || ""),
+                  role: String(formData.get("role") || "STUDENT") as Role,
+                  grade: String(formData.get("grade") || ""),
+                  clubId: String(formData.get("clubId") || ""),
+                  parentIds: parentSelect ? Array.from(parentSelect.selectedOptions).map((option) => option.value) : [],
+                  facilitatorClubIds: facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : []
+                });
+              },
+              "User created and assigned."
+            )
+          }
+        >
+          <h3>Add User</h3>
+          <div className="form-two-column">
+            <label>First Name<input name="firstName" placeholder="First name" required /></label>
+            <label>Last Name<input name="lastName" placeholder="Last name" required /></label>
+            <label>Email<input name="email" type="email" placeholder="name@example.com" required /></label>
+            <label>Password<input name="password" type="password" placeholder="Minimum 8 characters" required minLength={8} /></label>
+            <label>
+              Role
+              <select name="role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value as Role)} required>
+                <option value="STUDENT">Student</option>
+                <option value="PARENT">Parent</option>
+                <option value="FACILITATOR">Facilitator</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </label>
+            {newUserRole === "STUDENT" ? (
+              <>
+                <label>Grade<input name="grade" placeholder="Grade 6" /></label>
+                <label>
+                  Club
+                  <select name="clubId">
+                    <option value="">No club yet</option>
+                    {clubs.map((club) => (
+                      <option key={club.id} value={club.id}>{club.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Parents
+                  <select name="parentIds" multiple>
+                    {parents.map((parent) => (
+                      <option key={parent.id} value={parent.id}>{parent.firstName} {parent.lastName}</option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : null}
+            {newUserRole === "FACILITATOR" ? (
+              <label>
+                Facilitator Clubs
+                <select name="facilitatorClubIds" multiple>
+                  {clubs.map((club) => (
+                    <option key={club.id} value={club.id}>{club.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+          <button type="submit" disabled={isSubmitting}>Save User</button>
+        </form>
+      </div>
+
+      <div className="admin-table-grid">
+        <DataPanel title="Centres">
+          {isLoading ? <p>Loading...</p> : overview?.centres.length ? (
+            <ul className="record-list">
+              {overview.centres.map((centre) => (
+                <li key={centre.id}><strong>{centre.name}</strong><span>{centre.city}, {centre.province} · {centre.clubs?.length ?? 0} clubs</span></li>
+              ))}
+            </ul>
+          ) : <p>No centres yet.</p>}
+        </DataPanel>
+
+        <DataPanel title="Clubs">
+          {overview?.clubs.length ? (
+            <ul className="record-list">
+              {overview.clubs.map((club) => (
+                <li key={club.id}><strong>{club.name}</strong><span>{club.program} · {club.students?.length ?? 0} students · {club.facilitators?.length ?? 0} facilitators</span></li>
+              ))}
+            </ul>
+          ) : <p>No clubs yet.</p>}
+        </DataPanel>
+
+        <DataPanel title="Users">
+          {overview?.users.length ? (
+            <ul className="record-list">
+              {overview.users.map((portalUser) => (
+                <li key={portalUser.id}><strong>{portalUser.firstName} {portalUser.lastName}</strong><span>{formatRole(portalUser.role)} · {portalUser.email}</span></li>
+              ))}
+            </ul>
+          ) : <p>No users yet.</p>}
+        </DataPanel>
+
+        <DataPanel title="Student Assignments">
+          {overview?.students.length ? (
+            <ul className="record-list">
+              {overview.students.map((student) => (
+                <li key={student.id}>
+                  <strong>{student.user.firstName} {student.user.lastName}</strong>
+                  <span>{student.grade} · {student.club?.name ?? "No club"} · parents: {student.parents?.map((parent) => `${parent.parent.firstName} ${parent.parent.lastName}`).join(", ") || "None"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p>No student assignments yet.</p>}
+        </DataPanel>
+      </div>
+    </section>
+  );
+}
+
+function SummaryTile({ label, value }: { label: string; value: number }) {
+  return (
+    <article className="summary-tile">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function DataPanel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <article className="data-panel">
+      <h3>{title}</h3>
+      {children}
+    </article>
+  );
+}
+
+function formatRole(role: Role) {
+  return role.charAt(0) + role.slice(1).toLowerCase();
 }

@@ -9,6 +9,7 @@ Phase 2A foundation for `memberportal.ileapclub.com`.
 - PostgreSQL data model through Prisma
 - JWT login
 - Role-aware dashboards for Admin, Facilitator, Parent, and Student
+- Admin setup workspace for centres, clubs, users, students, parents, and facilitators
 
 ## Local Setup
 
@@ -48,6 +49,8 @@ Seed login:
 - Password: `ChangeMe123!`
 
 Change the seed password immediately outside local testing.
+
+The seed also creates one sample centre, one club, one facilitator, one parent, and one student so the Admin dashboard has realistic data for testing.
 
 ## Render Deployment
 
