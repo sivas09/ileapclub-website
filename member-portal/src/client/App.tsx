@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AdminOverview,
+  agendaDownloadUrl,
   assignMeetingSlot,
   claimMeetingSlot,
   clearToken,
@@ -626,6 +627,7 @@ function MeetingCard({
         </div>
         <div className="meeting-actions">
           <strong className={meeting.isRoleLocked ? "lock-pill locked" : "lock-pill"}>{meeting.isRoleLocked ? "Locked" : "Open"}</strong>
+          <a className="agenda-download" href={agendaDownloadUrl(meeting.id)}>Download Agenda</a>
           {canManage ? <button type="button" onClick={onToggleLock} disabled={isSubmitting}>{meeting.isRoleLocked ? "Reopen Roles" : "Lock Roles"}</button> : null}
         </div>
       </div>

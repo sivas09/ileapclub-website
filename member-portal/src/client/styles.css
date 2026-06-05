@@ -417,7 +417,11 @@ button {
 
 .meeting-form button,
 .meeting-actions button,
-.role-slot button {
+.role-slot button,
+.agenda-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 42px;
   border: 0;
   border-radius: 8px;
@@ -432,6 +436,12 @@ button {
 .role-slot button:disabled {
   cursor: wait;
   opacity: 0.62;
+}
+
+.agenda-download {
+  background: #00296b;
+  font-size: 0.9rem;
+  text-decoration: none;
 }
 
 .wide-field {

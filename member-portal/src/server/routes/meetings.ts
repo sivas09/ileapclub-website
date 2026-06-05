@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
 
 const createMeetingSchema = z.object({
   clubId: z.string().min(1),
@@ -109,6 +110,33 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
   });
 
   response.status(201).json({ meeting });
+}));
+
+meetingsRouter.get("/:meetingId/agenda.rtf", asyncRoute(async (request, response) => {
+  const user = request.user!;
+  const meetingId = String(request.params.meetingId);
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    include: meetingInclude
+  });
+
+  if (!meeting) {
+    response.status(404).json({ message: "Meeting not found." });
+    return;
+  }
+
+  const canView = await canViewMeeting(user.id, user.role, meeting.clubId);
+
+  if (!canView) {
+    response.status(403).json({ message: "You cannot download this meeting agenda." });
+    return;
+  }
+
+  const rtf = buildAgendaRtf(meeting);
+
+  response.setHeader("Content-Type", "application/rtf; charset=utf-8");
+  response.setHeader("Content-Disposition", `attachment; filename="${agendaFileName(meeting)}"`);
+  response.send(rtf);
 }));
 
 meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request, response) => {
@@ -321,4 +349,36 @@ async function canManageClubId(userId: string, role: Role, clubId: string) {
   });
 
   return Boolean(assignment);
+}
+
+async function canViewMeeting(userId: string, role: Role, clubId: string) {
+  if (role === Role.ADMIN) {
+    return true;
+  }
+
+  if (role === Role.FACILITATOR) {
+    return canManageClubId(userId, role, clubId);
+  }
+
+  if (role === Role.STUDENT) {
+    const student = await prisma.student.findUnique({
+      where: { userId },
+      select: { clubId: true }
+    });
+
+    return student?.clubId === clubId;
+  }
+
+  if (role === Role.PARENT) {
+    const childInClub = await prisma.studentParent.findFirst({
+      where: {
+        parentId: userId,
+        student: { clubId }
+      }
+    });
+
+    return Boolean(childInClub);
+  }
+
+  return false;
 }

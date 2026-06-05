@@ -119,6 +119,10 @@ export function clearToken() {
   window.localStorage.removeItem(tokenKey);
 }
 
+export function agendaDownloadUrl(meetingId: string) {
+  return `/api/meetings/${meetingId}/agenda.rtf`;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const response = await fetch(path, {
