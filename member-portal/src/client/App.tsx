@@ -15,10 +15,13 @@ import {
   getMeetingsOverview,
   getStoredToken,
   login,
+  markMeetingAttendance,
   Meeting,
+  MeetingAttendance,
   MeetingsOverview,
   PortalUser,
   Role,
+  scoreMeetingSlot,
   storeToken,
   toggleMeetingLock
 } from "./api";
@@ -589,6 +592,8 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             isSubmitting={isSubmitting}
             onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(meeting.id, slotId), "Role claimed.")}
             onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(meeting.id, slotId, studentId), "Role assignment updated.")}
+            onAttendance={(studentId, status) => updateMeeting(() => markMeetingAttendance(meeting.id, { studentId, status }), "Attendance updated.")}
+            onScore={(slotId, score) => updateMeeting(() => scoreMeetingSlot(meeting.id, slotId, { score }), "Score saved.")}
             onToggleLock={() => updateMeeting(() => toggleMeetingLock(meeting.id), meeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
           />
         ))}
@@ -604,6 +609,8 @@ function MeetingCard({
   isSubmitting,
   onClaim,
   onAssign,
+  onAttendance,
+  onScore,
   onToggleLock
 }: {
   meeting: Meeting;
@@ -612,6 +619,8 @@ function MeetingCard({
   isSubmitting: boolean;
   onClaim: (slotId: string) => void;
   onAssign: (slotId: string, studentId: string | null) => void;
+  onAttendance: (studentId: string, status: MeetingAttendance["status"]) => void;
+  onScore: (slotId: string, score: number) => void;
   onToggleLock: () => void;
 }) {
   const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
@@ -645,17 +654,62 @@ function MeetingCard({
                 <button type="button" onClick={() => onClaim(slot.id)} disabled={isSubmitting}>Claim</button>
               ) : null}
               {canManage ? (
-                <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(slot.id, event.target.value || null)} disabled={isSubmitting}>
-                  <option value="">Open</option>
-                  {students.map((student) => (
-                    <option key={student.id} value={student.id}>{student.user.firstName} {student.user.lastName}</option>
-                  ))}
-                </select>
+                <div className="role-management-controls">
+                  <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(slot.id, event.target.value || null)} disabled={isSubmitting}>
+                    <option value="">Open</option>
+                    {students.map((student) => (
+                      <option key={student.id} value={student.id}>{student.user.firstName} {student.user.lastName}</option>
+                    ))}
+                  </select>
+                  <label>
+                    Score
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      defaultValue={slot.score?.score ?? ""}
+                      placeholder="0-100"
+                      disabled={isSubmitting || !slot.assignedStudentId}
+                      onBlur={(event) => {
+                        if (event.currentTarget.value) {
+                          onScore(slot.id, Number(event.currentTarget.value));
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               ) : null}
             </div>
           );
         })}
       </div>
+      {canManage ? (
+        <div className="attendance-panel">
+          <h4>Attendance</h4>
+          <div className="attendance-grid">
+            {students.map((student) => {
+              const attendance = meeting.attendance.find((entry) => entry.studentId === student.id);
+
+              return (
+                <label key={student.id}>
+                  <span>{student.user.firstName} {student.user.lastName}</span>
+                  <select
+                    value={attendance?.status ?? ""}
+                    onChange={(event) => onAttendance(student.id, event.target.value as MeetingAttendance["status"])}
+                    disabled={isSubmitting}
+                  >
+                    <option value="">Not marked</option>
+                    <option value="PRESENT">Present</option>
+                    <option value="ABSENT">Absent</option>
+                    <option value="LATE">Late</option>
+                    <option value="EXCUSED">Excused</option>
+                  </select>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

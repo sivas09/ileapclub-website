@@ -68,6 +68,7 @@ export type MeetingRoleSlot = {
   assignedStudentId?: string | null;
   roleDefinition: RoleDefinition;
   assignedStudent?: Student | null;
+  score?: MeetingRoleScore | null;
 };
 
 export type Meeting = {
@@ -81,6 +82,26 @@ export type Meeting = {
   isRoleLocked: boolean;
   club: Club;
   roleSlots: MeetingRoleSlot[];
+  attendance: MeetingAttendance[];
+  roleScores: MeetingRoleScore[];
+};
+
+export type MeetingAttendance = {
+  id: string;
+  meetingId: string;
+  studentId: string;
+  status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+  notes?: string | null;
+  student: Student;
+};
+
+export type MeetingRoleScore = {
+  id: string;
+  meetingId: string;
+  roleSlotId: string;
+  studentId: string;
+  score: number;
+  feedback?: string | null;
 };
 
 export type MeetingsOverview = {
@@ -232,5 +253,26 @@ export async function assignMeetingSlot(meetingId: string, slotId: string, stude
 export async function toggleMeetingLock(meetingId: string) {
   return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/lock`, {
     method: "PATCH"
+  });
+}
+
+export async function markMeetingAttendance(meetingId: string, payload: {
+  studentId: string;
+  status: MeetingAttendance["status"];
+  notes?: string;
+}) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/attendance`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function scoreMeetingSlot(meetingId: string, slotId: string, payload: {
+  score: number;
+  feedback?: string;
+}) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}/score`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
   });
 }

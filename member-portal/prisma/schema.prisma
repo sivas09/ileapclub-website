@@ -71,6 +71,8 @@ model Student {
   club    Club?           @relation(fields: [clubId], references: [id])
   parents StudentParent[]
   roleSlots MeetingRoleSlot[]
+  attendance MeetingAttendance[]
+  roleScores MeetingRoleScore[]
 }
 
 model StudentParent {
@@ -122,6 +124,8 @@ model Meeting {
 
   club      Club              @relation(fields: [clubId], references: [id])
   roleSlots MeetingRoleSlot[]
+  attendance MeetingAttendance[]
+  roleScores MeetingRoleScore[]
 }
 
 model MeetingRoleSlot {
@@ -139,7 +143,45 @@ model MeetingRoleSlot {
   meeting        Meeting        @relation(fields: [meetingId], references: [id])
   roleDefinition RoleDefinition @relation(fields: [roleDefinitionId], references: [id])
   assignedStudent Student?      @relation(fields: [assignedStudentId], references: [id])
+  score MeetingRoleScore?
 
   @@index([meetingId])
   @@unique([meetingId, sortOrder])
+}
+
+model MeetingAttendance {
+  id             String   @id @default(cuid())
+  meetingId      String
+  studentId      String
+  status         String   @default("PRESENT")
+  notes          String?
+  markedByUserId String?
+  markedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  meeting Meeting @relation(fields: [meetingId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@unique([meetingId, studentId])
+}
+
+model MeetingRoleScore {
+  id             String   @id @default(cuid())
+  meetingId      String
+  roleSlotId     String   @unique
+  studentId      String
+  score          Int
+  feedback       String?
+  scoredByUserId String?
+  scoredAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  meeting  Meeting         @relation(fields: [meetingId], references: [id])
+  roleSlot MeetingRoleSlot @relation(fields: [roleSlotId], references: [id])
+  student  Student         @relation(fields: [studentId], references: [id])
+
+  @@index([meetingId])
+  @@index([studentId])
 }

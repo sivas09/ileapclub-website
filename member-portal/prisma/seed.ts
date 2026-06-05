@@ -176,6 +176,53 @@ async function main() {
     });
   }
 
+  await prisma.meetingAttendance.upsert({
+    where: {
+      meetingId_studentId: {
+        meetingId: sampleMeeting.id,
+        studentId: student.id
+      }
+    },
+    update: {},
+    create: {
+      meetingId: sampleMeeting.id,
+      studentId: student.id,
+      status: "PRESENT",
+      markedByUserId: facilitator.id
+    }
+  });
+
+  const speakerSlot = await prisma.meetingRoleSlot.findFirst({
+    where: {
+      meetingId: sampleMeeting.id,
+      roleDefinition: { name: "Speaker 1" }
+    }
+  });
+
+  if (speakerSlot) {
+    await prisma.meetingRoleSlot.update({
+      where: { id: speakerSlot.id },
+      data: {
+        assignedStudentId: student.id,
+        assignedByUserId: facilitator.id,
+        assignedAt: new Date()
+      }
+    });
+
+    await prisma.meetingRoleScore.upsert({
+      where: { roleSlotId: speakerSlot.id },
+      update: {},
+      create: {
+        meetingId: sampleMeeting.id,
+        roleSlotId: speakerSlot.id,
+        studentId: student.id,
+        score: 85,
+        feedback: "Clear structure and confident delivery.",
+        scoredByUserId: facilitator.id
+      }
+    });
+  }
+
   console.log(`Seeded demo portal users. Admin: ${admin.email} / ChangeMe123!`);
 }
 

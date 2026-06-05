@@ -395,7 +395,9 @@ button {
 
 .meeting-form input,
 .meeting-form select,
-.role-slot select {
+.role-slot select,
+.role-slot input,
+.attendance-grid select {
   min-height: 44px;
   border: 1px solid #d4dcea;
   border-radius: 8px;
@@ -410,7 +412,9 @@ button {
 
 .meeting-form input:focus,
 .meeting-form select:focus,
-.role-slot select:focus {
+.role-slot select:focus,
+.role-slot input:focus,
+.attendance-grid select:focus {
   outline: 3px solid rgba(0, 137, 202, 0.2);
   border-color: #0089ca;
 }
@@ -535,6 +539,59 @@ button {
   width: min(220px, 100%);
 }
 
+.role-management-controls {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) 96px;
+  gap: 10px;
+}
+
+.role-management-controls label {
+  display: grid;
+  gap: 4px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.role-management-controls input {
+  width: 100%;
+}
+
+.attendance-panel {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #dbe4f0;
+}
+
+.attendance-panel h4 {
+  margin: 0;
+  color: #00296b;
+  font-size: 1rem;
+}
+
+.attendance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.attendance-grid label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.attendance-grid span {
+  color: #10223f;
+  font-weight: 800;
+}
+
 .admin-form.wide {
   grid-column: 1 / -1;
 }
@@ -624,7 +681,8 @@ button {
   .admin-form-grid,
   .admin-table-grid,
   .form-two-column,
-  .role-slot-grid {
+  .role-slot-grid,
+  .attendance-grid {
     grid-template-columns: 1fr;
   }
 
@@ -653,6 +711,11 @@ button {
 
   .role-slot select {
     width: 100%;
+  }
+
+  .role-management-controls,
+  .attendance-grid label {
+    grid-template-columns: 1fr;
   }
 }
 

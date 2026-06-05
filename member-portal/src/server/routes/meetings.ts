@@ -20,6 +20,17 @@ const assignRoleSchema = z.object({
   studentId: z.string().nullable().optional()
 });
 
+const attendanceSchema = z.object({
+  studentId: z.string().min(1),
+  status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
+  notes: z.string().trim().optional()
+});
+
+const scoreSchema = z.object({
+  score: z.coerce.number().int().min(0).max(100),
+  feedback: z.string().trim().optional()
+});
+
 export const meetingsRouter = Router();
 
 meetingsRouter.use(requireAuth);
@@ -284,6 +295,130 @@ meetingsRouter.patch("/:meetingId/lock", asyncRoute(async (request, response) =>
   response.json({ meeting: updatedMeeting });
 }));
 
+meetingsRouter.put("/:meetingId/attendance", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can mark attendance." });
+    return;
+  }
+
+  const parsed = attendanceSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Choose a student and attendance status." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+
+  if (!meeting) {
+    response.status(404).json({ message: "Meeting not found." });
+    return;
+  }
+
+  const canManage = await canManageClubId(user.id, user.role, meeting.clubId);
+
+  if (!canManage) {
+    response.status(403).json({ message: "You cannot mark attendance for this meeting." });
+    return;
+  }
+
+  const student = await prisma.student.findUnique({ where: { id: parsed.data.studentId } });
+
+  if (!student || student.clubId !== meeting.clubId) {
+    response.status(400).json({ message: "Choose a student assigned to this club." });
+    return;
+  }
+
+  await prisma.meetingAttendance.upsert({
+    where: {
+      meetingId_studentId: {
+        meetingId,
+        studentId: student.id
+      }
+    },
+    update: {
+      status: parsed.data.status,
+      notes: parsed.data.notes || null,
+      markedByUserId: user.id,
+      markedAt: new Date()
+    },
+    create: {
+      meetingId,
+      studentId: student.id,
+      status: parsed.data.status,
+      notes: parsed.data.notes || null,
+      markedByUserId: user.id
+    }
+  });
+
+  const updatedMeeting = await getMeeting(meetingId);
+  response.json({ meeting: updatedMeeting });
+}));
+
+meetingsRouter.put("/:meetingId/slots/:slotId/score", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can score role performance." });
+    return;
+  }
+
+  const parsed = scoreSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a score between 0 and 100." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const slotId = String(request.params.slotId);
+  const slot = await prisma.meetingRoleSlot.findUnique({
+    where: { id: slotId },
+    include: { meeting: true }
+  });
+
+  if (!slot || slot.meetingId !== meetingId) {
+    response.status(404).json({ message: "Role slot not found." });
+    return;
+  }
+
+  const canManage = await canManageClubId(user.id, user.role, slot.meeting.clubId);
+
+  if (!canManage) {
+    response.status(403).json({ message: "You cannot score this meeting." });
+    return;
+  }
+
+  if (!slot.assignedStudentId) {
+    response.status(400).json({ message: "Assign a student before scoring this role." });
+    return;
+  }
+
+  await prisma.meetingRoleScore.upsert({
+    where: { roleSlotId: slot.id },
+    update: {
+      score: parsed.data.score,
+      feedback: parsed.data.feedback || null,
+      scoredByUserId: user.id,
+      scoredAt: new Date()
+    },
+    create: {
+      meetingId,
+      roleSlotId: slot.id,
+      studentId: slot.assignedStudentId,
+      score: parsed.data.score,
+      feedback: parsed.data.feedback || null,
+      scoredByUserId: user.id
+    }
+  });
+
+  const updatedMeeting = await getMeeting(meetingId);
+  response.json({ meeting: updatedMeeting });
+}));
+
 const meetingInclude = {
   club: {
     include: { centre: true }
@@ -294,9 +429,18 @@ const meetingInclude = {
       roleDefinition: true,
       assignedStudent: {
         include: { user: true }
+      },
+      score: true
+    }
+  },
+  attendance: {
+    include: {
+      student: {
+        include: { user: true }
       }
     }
-  }
+  },
+  roleScores: true
 } satisfies Prisma.MeetingInclude;
 
 async function getMeeting(meetingId: string) {
