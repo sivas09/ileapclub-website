@@ -2,15 +2,21 @@ import bcrypt from "bcryptjs";
 import { PrismaClient, Role } from "@prisma/client";
 
 const prisma = new PrismaClient();
+const seedAdminEmail = process.env.SEED_ADMIN_EMAIL || "admin@ileapclub.com";
+const seedPassword = process.env.SEED_DEMO_PASSWORD || "ChangeMe123!";
 
 async function main() {
-  const passwordHash = await bcrypt.hash("ChangeMe123!", 12);
+  if (seedPassword.length < 8) {
+    throw new Error("SEED_DEMO_PASSWORD must be at least 8 characters.");
+  }
+
+  const passwordHash = await bcrypt.hash(seedPassword, 12);
 
   const admin = await prisma.user.upsert({
-    where: { email: "admin@ileapclub.com" },
+    where: { email: seedAdminEmail },
     update: {},
     create: {
-      email: "admin@ileapclub.com",
+      email: seedAdminEmail,
       passwordHash,
       firstName: "iLEAP",
       lastName: "Admin",
@@ -287,7 +293,11 @@ async function main() {
     }
   }
 
-  console.log(`Seeded demo portal users. Admin: ${admin.email} / ChangeMe123!`);
+  console.log("Seeded demo portal data.");
+  console.log(`Admin: ${admin.email} / ${seedPassword}`);
+  console.log(`Facilitator: ${facilitator.email} / ${seedPassword}`);
+  console.log(`Parent: ${parent.email} / ${seedPassword}`);
+  console.log(`Student: ${studentUser.email} / ${seedPassword}`);
 }
 
 main()
