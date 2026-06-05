@@ -14,6 +14,7 @@ import {
   getCurrentUser,
   getMeetingsOverview,
   getStoredToken,
+  getStudentProgress,
   login,
   markMeetingAttendance,
   Meeting,
@@ -23,6 +24,7 @@ import {
   Role,
   scoreMeetingSlot,
   storeToken,
+  StudentProgress,
   toggleMeetingLock
 } from "./api";
 
@@ -195,6 +197,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 
       {user.role === "ADMIN" ? <AdminWorkspace /> : null}
       <MeetingWorkspace user={user} />
+      {user.role === "STUDENT" ? <StudentProgressDashboard /> : null}
     </main>
   );
 }
@@ -714,11 +717,95 @@ function MeetingCard({
   );
 }
 
-function SummaryTile({ label, value }: { label: string; value: number }) {
+function StudentProgressDashboard() {
+  const [progress, setProgress] = useState<StudentProgress | null>(null);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    getStudentProgress()
+      .then(setProgress)
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load progress."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  return (
+    <section className="student-progress" aria-label="Student progress dashboard">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">My progress</p>
+          <h2>Student Progress Dashboard</h2>
+        </div>
+      </div>
+
+      {isLoading ? <p className="loading-state">Loading progress...</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      {progress ? (
+        <>
+          <div className="progress-summary-grid">
+            <SummaryTile label="Band Level" valueText={progress.summary.bandLevel} />
+            <SummaryTile label="Attendance" valueText={progress.summary.attendanceRate === null ? "N/A" : `${progress.summary.attendanceRate}%`} />
+            <SummaryTile label="Roles Completed" value={progress.summary.rolesCompleted} />
+            <SummaryTile label="Average Score" valueText={progress.summary.averageScore === null ? "N/A" : `${progress.summary.averageScore}`} />
+          </div>
+
+          <div className="student-context-card">
+            <strong>{progress.summary.clubName}</strong>
+            <span>{progress.summary.centreName}</span>
+          </div>
+
+          <div className="student-progress-grid">
+            <DataPanel title="Recent Role History">
+              {progress.student.roleSlots.length ? (
+                <ul className="record-list">
+                  {progress.student.roleSlots.slice(0, 8).map((slot) => (
+                    <li key={slot.id}>
+                      <strong>{slot.roleDefinition.name}</strong>
+                      <span>{slot.meeting.title} · {formatDate(slot.meeting.meetingDate)} · score: {slot.score?.score ?? "Not scored"}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p>No roles claimed yet.</p>}
+            </DataPanel>
+
+            <DataPanel title="Score Feedback">
+              {progress.student.roleScores.length ? (
+                <ul className="record-list">
+                  {progress.student.roleScores.slice(0, 8).map((score) => (
+                    <li key={score.id}>
+                      <strong>{score.roleSlot.roleDefinition.name}: {score.score}/100</strong>
+                      <span>{score.meeting.title} · {score.feedback || "No feedback entered yet."}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p>No scores yet.</p>}
+            </DataPanel>
+
+            <DataPanel title="Attendance History">
+              {progress.student.attendance.length ? (
+                <ul className="record-list">
+                  {progress.student.attendance.slice(0, 8).map((attendance) => (
+                    <li key={attendance.id}>
+                      <strong>{attendance.status}</strong>
+                      <span>{attendance.meeting.title} · {formatDate(attendance.meeting.meetingDate)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p>No attendance marked yet.</p>}
+            </DataPanel>
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function SummaryTile({ label, value, valueText }: { label: string; value?: number; valueText?: string }) {
   return (
     <article className="summary-tile">
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong>{valueText ?? value ?? 0}</strong>
     </article>
   );
 }

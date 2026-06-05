@@ -264,7 +264,8 @@ button {
 }
 
 .admin-workspace,
-.meeting-workspace {
+.meeting-workspace,
+.student-progress {
   width: min(1180px, 100%);
   margin: 28px auto 0;
   padding: clamp(22px, 4vw, 34px);
@@ -322,14 +323,17 @@ button {
 }
 
 .admin-summary-grid,
+.progress-summary-grid,
 .admin-form-grid,
-.admin-table-grid {
+.admin-table-grid,
+.student-progress-grid {
   display: grid;
   gap: 16px;
   margin-top: 22px;
 }
 
-.admin-summary-grid {
+.admin-summary-grid,
+.progress-summary-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -353,6 +357,28 @@ button {
   margin-top: 8px;
   color: #00296b;
   font-size: 2rem;
+}
+
+.student-context-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #00296b, #0089ca);
+}
+
+.student-context-card strong {
+  font-size: 1.2rem;
+}
+
+.student-context-card span {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.student-progress-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .admin-form-grid {
@@ -678,8 +704,10 @@ button {
   .dashboard-hero,
   .dashboard-grid,
   .admin-summary-grid,
+  .progress-summary-grid,
   .admin-form-grid,
   .admin-table-grid,
+  .student-progress-grid,
   .form-two-column,
   .role-slot-grid,
   .attendance-grid {

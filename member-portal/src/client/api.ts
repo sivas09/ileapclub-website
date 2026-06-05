@@ -111,6 +111,27 @@ export type MeetingsOverview = {
   students: Student[];
 };
 
+export type StudentProgress = {
+  student: Student & {
+    attendance: Array<MeetingAttendance & { meeting: Meeting }>;
+    roleSlots: Array<MeetingRoleSlot & { meeting: Meeting }>;
+    roleScores: Array<MeetingRoleScore & {
+      meeting: Meeting;
+      roleSlot: MeetingRoleSlot;
+    }>;
+  };
+  summary: {
+    bandLevel: string;
+    clubName: string;
+    centreName: string;
+    attendanceRate: number | null;
+    totalMeetingsMarked: number;
+    rolesCompleted: number;
+    scoredRoles: number;
+    averageScore: number | null;
+  };
+};
+
 export type AdminOverview = {
   centres: Centre[];
   clubs: Club[];
@@ -275,4 +296,8 @@ export async function scoreMeetingSlot(meetingId: string, slotId: string, payloa
     method: "PUT",
     body: JSON.stringify(payload)
   });
+}
+
+export async function getStudentProgress() {
+  return request<StudentProgress>("/api/student/me/progress");
 }
