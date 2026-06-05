@@ -79,7 +79,7 @@ $env:SEED_DEMO_PASSWORD="your-local-demo-password"; npm run db:seed
 
 ## Render Deployment
 
-Use `render.yaml` as the starting blueprint. See `docs/render-deployment-checklist.md` before deploying.
+Use the repository-root `render.yaml` as the starting blueprint. See `docs/render-deployment-checklist.md` before deploying.
 
 Configure:
 

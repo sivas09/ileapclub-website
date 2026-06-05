@@ -10,7 +10,7 @@ Use this checklist before testing `memberportal.ileapclub.com` online.
 
 ## 2. Render Services
 
-Create from `member-portal/render.yaml` or configure manually:
+Create from the repository-root `render.yaml` or configure manually:
 
 - Web service: `ileap-member-portal-api`
 - Database: `ileap-member-portal-db`
