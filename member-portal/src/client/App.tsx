@@ -2,17 +2,24 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AdminOverview,
+  assignMeetingSlot,
+  claimMeetingSlot,
   clearToken,
   createCentre,
   createClub,
+  createMeeting,
   createUser,
   getAdminOverview,
   getCurrentUser,
+  getMeetingsOverview,
   getStoredToken,
   login,
+  Meeting,
+  MeetingsOverview,
   PortalUser,
   Role,
-  storeToken
+  storeToken,
+  toggleMeetingLock
 } from "./api";
 
 const roleCopy: Record<Role, { title: string; summary: string; actions: string[]; reports: string[] }> = {
@@ -183,6 +190,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
       </section>
 
       {user.role === "ADMIN" ? <AdminWorkspace /> : null}
+      <MeetingWorkspace user={user} />
     </main>
   );
 }
@@ -447,6 +455,209 @@ function AdminWorkspace() {
   );
 }
 
+function MeetingWorkspace({ user }: { user: PortalUser }) {
+  const [overview, setOverview] = useState<MeetingsOverview | null>(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const canManageMeetings = user.role === "ADMIN" || user.role === "FACILITATOR";
+
+  async function refreshMeetings() {
+    const data = await getMeetingsOverview();
+    setOverview(data);
+  }
+
+  useEffect(() => {
+    refreshMeetings()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load meetings."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  async function handleCreateMeeting(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const form = event.currentTarget;
+      const formData = new FormData(form);
+      const roleSelect = form.elements.namedItem("roleDefinitionIds") as HTMLSelectElement;
+      await createMeeting({
+        clubId: String(formData.get("clubId") || ""),
+        title: String(formData.get("title") || ""),
+        templateType: String(formData.get("templateType") || ""),
+        meetingDate: String(formData.get("meetingDate") || ""),
+        startTime: String(formData.get("startTime") || ""),
+        location: String(formData.get("location") || ""),
+        roleDefinitionIds: Array.from(roleSelect.selectedOptions).map((option) => option.value)
+      });
+      form.reset();
+      await refreshMeetings();
+      setStatus("Meeting created.");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to create meeting.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function updateMeeting(action: () => Promise<{ meeting: Meeting }>, successMessage: string) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await action();
+      setOverview((current) => current ? {
+        ...current,
+        meetings: current.meetings.map((meeting) => meeting.id === result.meeting.id ? result.meeting : meeting)
+      } : current);
+      setStatus(successMessage);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update meeting.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="meeting-workspace" aria-label="Meeting and role workspace">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Meetings</p>
+          <h2>Meeting Builder and Role Claims</h2>
+        </div>
+        <button type="button" onClick={() => refreshMeetings()} disabled={isLoading}>Refresh</button>
+      </div>
+
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      {canManageMeetings ? (
+        <form className="meeting-form" onSubmit={handleCreateMeeting}>
+          <h3>Create Meeting</h3>
+          <div className="form-two-column">
+            <label>
+              Club
+              <select name="clubId" required>
+                <option value="">Select club</option>
+                {overview?.clubs.map((club) => (
+                  <option key={club.id} value={club.id}>{club.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>Title<input name="title" placeholder="Senior Regular Meeting" required /></label>
+            <label>
+              Template
+              <select name="templateType" required>
+                <option>Junior Regular Meeting</option>
+                <option>Senior Regular Meeting</option>
+                <option>Debate Meeting</option>
+                <option>Town Hall Leadership Challenge</option>
+                <option>Competition Meeting</option>
+                <option>Special Event</option>
+              </select>
+            </label>
+            <label>Date<input name="meetingDate" type="date" required /></label>
+            <label>Start Time<input name="startTime" placeholder="10:00 AM" required /></label>
+            <label>Location or Link<input name="location" placeholder="Ottawa Centre or online link" /></label>
+            <label className="wide-field">
+              Role Slots
+              <select name="roleDefinitionIds" multiple required>
+                {overview?.roleDefinitions.map((roleDefinition) => (
+                  <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <button type="submit" disabled={isSubmitting || !overview?.clubs.length}>Create Meeting</button>
+        </form>
+      ) : null}
+
+      <div className="meeting-list">
+        {isLoading ? <p>Loading meetings...</p> : null}
+        {!isLoading && !overview?.meetings.length ? <p>No meetings yet.</p> : null}
+        {overview?.meetings.map((meeting) => (
+          <MeetingCard
+            key={meeting.id}
+            meeting={meeting}
+            students={overview.students.filter((student) => student.clubId === meeting.clubId)}
+            user={user}
+            isSubmitting={isSubmitting}
+            onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(meeting.id, slotId), "Role claimed.")}
+            onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(meeting.id, slotId, studentId), "Role assignment updated.")}
+            onToggleLock={() => updateMeeting(() => toggleMeetingLock(meeting.id), meeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MeetingCard({
+  meeting,
+  students,
+  user,
+  isSubmitting,
+  onClaim,
+  onAssign,
+  onToggleLock
+}: {
+  meeting: Meeting;
+  students: MeetingsOverview["students"];
+  user: PortalUser;
+  isSubmitting: boolean;
+  onClaim: (slotId: string) => void;
+  onAssign: (slotId: string, studentId: string | null) => void;
+  onToggleLock: () => void;
+}) {
+  const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
+  const canClaim = user.role === "STUDENT" && !meeting.isRoleLocked;
+
+  return (
+    <article className="meeting-card">
+      <div className="meeting-card-header">
+        <div>
+          <span>{meeting.templateType}</span>
+          <h3>{meeting.title}</h3>
+          <p>{meeting.club.name} · {formatDate(meeting.meetingDate)} · {meeting.startTime}{meeting.location ? ` · ${meeting.location}` : ""}</p>
+        </div>
+        <div className="meeting-actions">
+          <strong className={meeting.isRoleLocked ? "lock-pill locked" : "lock-pill"}>{meeting.isRoleLocked ? "Locked" : "Open"}</strong>
+          {canManage ? <button type="button" onClick={onToggleLock} disabled={isSubmitting}>{meeting.isRoleLocked ? "Reopen Roles" : "Lock Roles"}</button> : null}
+        </div>
+      </div>
+      <div className="role-slot-grid">
+        {meeting.roleSlots.map((slot) => {
+          const assignedName = slot.assignedStudent ? `${slot.assignedStudent.user.firstName} ${slot.assignedStudent.user.lastName}` : "Open";
+
+          return (
+            <div className="role-slot" key={slot.id}>
+              <div>
+                <strong>{slot.roleDefinition.name}</strong>
+                <span>{assignedName}</span>
+              </div>
+              {canClaim && !slot.assignedStudentId ? (
+                <button type="button" onClick={() => onClaim(slot.id)} disabled={isSubmitting}>Claim</button>
+              ) : null}
+              {canManage ? (
+                <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(slot.id, event.target.value || null)} disabled={isSubmitting}>
+                  <option value="">Open</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>{student.user.firstName} {student.user.lastName}</option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
 function SummaryTile({ label, value }: { label: string; value: number }) {
   return (
     <article className="summary-tile">
@@ -467,4 +678,12 @@ function DataPanel({ title, children }: { title: string; children: ReactNode }) 
 
 function formatRole(role: Role) {
   return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }).format(new Date(value));
 }

@@ -114,6 +114,68 @@ async function main() {
     }
   });
 
+  const roleNames = [
+    "Chair",
+    "Toast",
+    "Timer",
+    "Grammarian",
+    "Speaker 1",
+    "Speaker 2",
+    "Evaluator 1",
+    "Evaluator 2",
+    "Table Topics Master",
+    "General Evaluator",
+    "Debate Moderator",
+    "Town Hall Lead",
+    "Vote Counter",
+    "Ah Counter",
+    "Quiz Master"
+  ];
+
+  for (const name of roleNames) {
+    await prisma.roleDefinition.upsert({
+      where: { name },
+      update: {},
+      create: { name }
+    });
+  }
+
+  const sampleMeeting = await prisma.meeting.upsert({
+    where: { id: "seed-senior-meeting" },
+    update: {},
+    create: {
+      id: "seed-senior-meeting",
+      clubId: club.id,
+      title: "Senior Regular Meeting",
+      templateType: "Senior Regular Meeting",
+      meetingDate: new Date("2026-07-04T14:00:00.000Z"),
+      startTime: "10:00 AM",
+      location: "Ottawa Centre"
+    }
+  });
+
+  const seededRoles = await prisma.roleDefinition.findMany({
+    where: { name: { in: ["Chair", "Timer", "Speaker 1", "Evaluator 1", "Table Topics Master"] } }
+  });
+
+  for (const [index, role] of seededRoles.entries()) {
+    await prisma.meetingRoleSlot.upsert({
+      where: {
+        meetingId_sortOrder: {
+          meetingId: sampleMeeting.id,
+          sortOrder: index + 1
+        }
+      },
+      update: {},
+      create: {
+        meetingId: sampleMeeting.id,
+        roleDefinitionId: role.id,
+        slotLabel: role.name,
+        sortOrder: index + 1
+      }
+    });
+  }
+
   console.log(`Seeded demo portal users. Admin: ${admin.email} / ChangeMe123!`);
 }
 

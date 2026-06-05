@@ -54,6 +54,42 @@ export type ClubFacilitator = {
   facilitator: PortalUser;
 };
 
+export type RoleDefinition = {
+  id: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+};
+
+export type MeetingRoleSlot = {
+  id: string;
+  slotLabel: string;
+  sortOrder: number;
+  assignedStudentId?: string | null;
+  roleDefinition: RoleDefinition;
+  assignedStudent?: Student | null;
+};
+
+export type Meeting = {
+  id: string;
+  clubId: string;
+  title: string;
+  templateType: string;
+  meetingDate: string;
+  startTime: string;
+  location?: string | null;
+  isRoleLocked: boolean;
+  club: Club;
+  roleSlots: MeetingRoleSlot[];
+};
+
+export type MeetingsOverview = {
+  meetings: Meeting[];
+  roleDefinitions: RoleDefinition[];
+  clubs: Club[];
+  students: Student[];
+};
+
 export type AdminOverview = {
   centres: Centre[];
   clubs: Club[];
@@ -154,5 +190,43 @@ export async function createUser(payload: {
   return request<{ user: PortalUser }>("/api/admin/users", {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function getMeetingsOverview() {
+  return request<MeetingsOverview>("/api/meetings");
+}
+
+export async function createMeeting(payload: {
+  clubId: string;
+  title: string;
+  templateType: string;
+  meetingDate: string;
+  startTime: string;
+  location?: string;
+  roleDefinitionIds: string[];
+}) {
+  return request<{ meeting: Meeting }>("/api/meetings", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function claimMeetingSlot(meetingId: string, slotId: string) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}/claim`, {
+    method: "POST"
+  });
+}
+
+export async function assignMeetingSlot(meetingId: string, slotId: string, studentId: string | null) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}`, {
+    method: "PUT",
+    body: JSON.stringify({ studentId })
+  });
+}
+
+export async function toggleMeetingLock(meetingId: string) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/lock`, {
+    method: "PATCH"
   });
 }

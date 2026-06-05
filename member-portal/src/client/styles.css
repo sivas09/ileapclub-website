@@ -263,7 +263,8 @@ button {
   margin-top: 8px;
 }
 
-.admin-workspace {
+.admin-workspace,
+.meeting-workspace {
   width: min(1180px, 100%);
   margin: 28px auto 0;
   padding: clamp(22px, 4vw, 34px);
@@ -368,6 +369,162 @@ button {
   background: #fbfdff;
 }
 
+.meeting-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid #dbe4f0;
+  border-top: 4px solid #e6690a;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.meeting-form h3,
+.meeting-card h3 {
+  margin: 0;
+  color: #00296b;
+}
+
+.meeting-form label {
+  display: grid;
+  gap: 7px;
+  color: #243657;
+  font-weight: 800;
+}
+
+.meeting-form input,
+.meeting-form select,
+.role-slot select {
+  min-height: 44px;
+  border: 1px solid #d4dcea;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+}
+
+.meeting-form select[multiple] {
+  min-height: 132px;
+  padding: 8px 12px;
+}
+
+.meeting-form input:focus,
+.meeting-form select:focus,
+.role-slot select:focus {
+  outline: 3px solid rgba(0, 137, 202, 0.2);
+  border-color: #0089ca;
+}
+
+.meeting-form button,
+.meeting-actions button,
+.role-slot button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: #ffffff;
+  background: #e6690a;
+  font-weight: 900;
+}
+
+.meeting-form button:disabled,
+.meeting-actions button:disabled,
+.role-slot button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
+}
+
+.meeting-list {
+  display: grid;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.meeting-card {
+  padding: 20px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.meeting-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.meeting-card-header span {
+  color: #0089ca;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.meeting-card-header p {
+  margin: 8px 0 0;
+  color: #64748b;
+}
+
+.meeting-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.lock-pill {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 12px;
+  color: #14532d;
+  background: #dcfce7;
+  font-size: 0.82rem;
+}
+
+.lock-pill.locked {
+  color: #7f1d1d;
+  background: #fee2e2;
+}
+
+.role-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.role-slot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.role-slot div {
+  display: grid;
+  gap: 4px;
+}
+
+.role-slot strong {
+  color: #10223f;
+}
+
+.role-slot span {
+  color: #64748b;
+}
+
+.role-slot select {
+  width: min(220px, 100%);
+}
+
 .admin-form.wide {
   grid-column: 1 / -1;
 }
@@ -456,7 +613,8 @@ button {
   .admin-summary-grid,
   .admin-form-grid,
   .admin-table-grid,
-  .form-two-column {
+  .form-two-column,
+  .role-slot-grid {
     grid-template-columns: 1fr;
   }
 
@@ -473,6 +631,18 @@ button {
   .admin-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .meeting-card-header,
+  .meeting-actions,
+  .role-slot {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .role-slot select {
+    width: 100%;
   }
 }
 

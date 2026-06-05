@@ -55,6 +55,7 @@ model Club {
   centre       Centre            @relation(fields: [centreId], references: [id])
   students     Student[]
   facilitators ClubFacilitator[]
+  meetings     Meeting[]
 }
 
 model Student {
@@ -69,6 +70,7 @@ model Student {
   user    User            @relation(fields: [userId], references: [id])
   club    Club?           @relation(fields: [clubId], references: [id])
   parents StudentParent[]
+  roleSlots MeetingRoleSlot[]
 }
 
 model StudentParent {
@@ -93,4 +95,51 @@ model ClubFacilitator {
   facilitator User @relation(fields: [facilitatorId], references: [id])
 
   @@unique([clubId, facilitatorId])
+}
+
+model RoleDefinition {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  meetingSlots MeetingRoleSlot[]
+}
+
+model Meeting {
+  id           String   @id @default(cuid())
+  clubId       String
+  title        String
+  templateType String
+  meetingDate  DateTime
+  startTime    String
+  location     String?
+  isRoleLocked Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  club      Club              @relation(fields: [clubId], references: [id])
+  roleSlots MeetingRoleSlot[]
+}
+
+model MeetingRoleSlot {
+  id               String   @id @default(cuid())
+  meetingId        String
+  roleDefinitionId String
+  slotLabel        String
+  sortOrder        Int      @default(0)
+  assignedStudentId String?
+  assignedByUserId String?
+  assignedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  meeting        Meeting        @relation(fields: [meetingId], references: [id])
+  roleDefinition RoleDefinition @relation(fields: [roleDefinitionId], references: [id])
+  assignedStudent Student?      @relation(fields: [assignedStudentId], references: [id])
+
+  @@index([meetingId])
+  @@unique([meetingId, sortOrder])
 }
