@@ -360,6 +360,7 @@ function AdminWorkspace() {
               async (form) => {
                 const formData = new FormData(form);
                 const parentSelect = form.elements.namedItem("parentIds") as HTMLSelectElement | null;
+                const clubSelect = form.elements.namedItem("clubIds") as HTMLSelectElement | null;
                 const facilitatorClubSelect = form.elements.namedItem("facilitatorClubIds") as HTMLSelectElement | null;
                 await createUser({
                   firstName: String(formData.get("firstName") || ""),
@@ -368,7 +369,7 @@ function AdminWorkspace() {
                   password: String(formData.get("password") || ""),
                   role: String(formData.get("role") || "STUDENT") as Role,
                   grade: String(formData.get("grade") || ""),
-                  clubId: String(formData.get("clubId") || ""),
+                  clubIds: clubSelect ? Array.from(clubSelect.selectedOptions).map((option) => option.value) : [],
                   parentIds: parentSelect ? Array.from(parentSelect.selectedOptions).map((option) => option.value) : [],
                   facilitatorClubIds: facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : []
                 });
@@ -396,9 +397,8 @@ function AdminWorkspace() {
               <>
                 <label>Grade<input name="grade" placeholder="Grade 6" /></label>
                 <label>
-                  Club
-                  <select name="clubId">
-                    <option value="">No club yet</option>
+                  Clubs
+                  <select name="clubIds" multiple>
                     {clubs.map((club) => (
                       <option key={club.id} value={club.id}>{club.name}</option>
                     ))}
@@ -444,7 +444,7 @@ function AdminWorkspace() {
           {overview?.clubs.length ? (
             <ul className="record-list">
               {overview.clubs.map((club) => (
-                <li key={club.id}><strong>{club.name}</strong><span>{club.program} - {club.students?.length ?? 0} students - {club.facilitators?.length ?? 0} facilitators</span></li>
+                <li key={club.id}><strong>{club.name}</strong><span>{club.program} - {club.studentMemberships?.length ?? 0} students - {club.facilitators?.length ?? 0} facilitators</span></li>
               ))}
             </ul>
           ) : <p>No clubs yet.</p>}
@@ -466,7 +466,7 @@ function AdminWorkspace() {
               {overview.students.map((student) => (
                 <li key={student.id}>
                   <strong>{student.user.firstName} {student.user.lastName}</strong>
-                  <span>{student.grade} - {student.club?.name ?? "No club"} - parents: {student.parents?.map((parent) => `${parent.parent.firstName} ${parent.parent.lastName}`).join(", ") || "None"}</span>
+                  <span>{student.grade} - {formatStudentClubs(student)} - parents: {student.parents?.map((parent) => `${parent.parent.firstName} ${parent.parent.lastName}`).join(", ") || "None"}</span>
                 </li>
               ))}
             </ul>
@@ -619,7 +619,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
           <MeetingCard
             key={meeting.id}
             meeting={meeting}
-            students={overview.students.filter((student) => student.clubId === meeting.clubId)}
+            students={overview.students.filter((student) => isStudentInClub(student, meeting.clubId))}
             user={user}
             isSubmitting={isSubmitting}
             onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(meeting.id, slotId), "Role claimed.")}
@@ -964,6 +964,16 @@ function DataPanel({ title, children }: { title: string; children: ReactNode }) 
 
 function formatRole(role: Role) {
   return role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+function isStudentInClub(student: MeetingsOverview["students"][number], clubId: string) {
+  return Boolean(student.clubMemberships?.some((membership) => membership.clubId === clubId && membership.status === "ACTIVE"));
+}
+
+function formatStudentClubs(student: MeetingsOverview["students"][number]) {
+  const clubs = student.clubMemberships?.map((membership) => membership.club.name) ?? [];
+
+  return clubs.length ? clubs.join(", ") : "No club";
 }
 
 function formatDate(value: string) {

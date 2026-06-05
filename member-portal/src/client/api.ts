@@ -30,7 +30,7 @@ export type Club = {
   program: string;
   isActive: boolean;
   centre?: Centre;
-  students?: Student[];
+  studentMemberships?: StudentClubMembership[];
   facilitators?: ClubFacilitator[];
 };
 
@@ -38,10 +38,17 @@ export type Student = {
   id: string;
   grade: string;
   bandLevel: string;
-  clubId?: string | null;
   user: PortalUser;
-  club?: Club | null;
+  clubMemberships?: StudentClubMembership[];
   parents?: StudentParent[];
+};
+
+export type StudentClubMembership = {
+  id: string;
+  studentId: string;
+  clubId: string;
+  status: string;
+  club: Club;
 };
 
 export type StudentParent = {
@@ -160,7 +167,7 @@ export type AdminOverview = {
       id: string;
       grade: string;
       bandLevel: string;
-      clubId?: string | null;
+      clubMemberships?: StudentClubMembership[];
     } | null;
   }>;
   students: Student[];
@@ -270,7 +277,7 @@ export async function createUser(payload: {
   lastName: string;
   role: Role;
   grade?: string;
-  clubId?: string;
+  clubIds?: string[];
   parentIds?: string[];
   facilitatorClubIds?: string[];
 }) {

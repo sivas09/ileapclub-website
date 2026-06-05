@@ -84,11 +84,24 @@ async function main() {
 
   const student = await prisma.student.upsert({
     where: { userId: studentUser.id },
-    update: { clubId: club.id },
+    update: {},
     create: {
       userId: studentUser.id,
-      clubId: club.id,
       grade: "Grade 7"
+    }
+  });
+
+  await prisma.studentClubMembership.upsert({
+    where: {
+      studentId_clubId: {
+        studentId: student.id,
+        clubId: club.id
+      }
+    },
+    update: { status: "ACTIVE" },
+    create: {
+      studentId: student.id,
+      clubId: club.id
     }
   });
 
@@ -116,6 +129,20 @@ async function main() {
     update: {},
     create: {
       clubId: club.id,
+      facilitatorId: facilitator.id
+    }
+  });
+
+  await prisma.centreFacilitator.upsert({
+    where: {
+      centreId_facilitatorId: {
+        centreId: centre.id,
+        facilitatorId: facilitator.id
+      }
+    },
+    update: {},
+    create: {
+      centreId: centre.id,
       facilitatorId: facilitator.id
     }
   });

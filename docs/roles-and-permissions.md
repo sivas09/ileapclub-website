@@ -111,8 +111,9 @@ All permissions must be enforced server-side.
 Key rules:
 
 - Admin scope is global.
-- Facilitator scope is limited to assigned clubs.
+- Facilitator scope is limited to assigned clubs and assigned centres.
 - Parent scope is limited to linked students.
 - Student scope is limited to self.
+- Reports must support centre and club filters.
 - Role claiming must be transactional to prevent two students claiming the same role.
 - Facilitator override must record who made the change and why.

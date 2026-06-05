@@ -40,6 +40,11 @@ Parents can manage multiple students. Students can belong to one or more clubs t
 - A Centre is a physical or online operating location.
 - A Club is a cohort or group that belongs to a Centre.
 - A Meeting belongs to a Club.
+- Students belong to clubs through memberships, not a single student-to-club column.
+- Students may belong to multiple clubs, such as a regular group plus a debate or competition group.
+- Facilitators may be assigned to one or more clubs and may also be assigned at centre scope.
+- Admin reporting must support centre and club filters.
+- Future centre managers and franchise owners should be added as scoped centre-level roles without changing the Centre -> Club -> Meeting hierarchy.
 - Meeting Roles are open role slots for a specific meeting.
 - Students can self-claim open roles.
 - Facilitators can override role assignments.

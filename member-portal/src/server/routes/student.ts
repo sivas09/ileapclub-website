@@ -26,9 +26,11 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
     where: { userId: request.user!.id },
     include: {
       user: true,
-      club: {
+      clubMemberships: {
         include: {
-          centre: true
+          club: {
+            include: { centre: true }
+          }
         }
       },
       attendance: {
@@ -93,8 +95,8 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
     requirements: await buildRequirementProgress(student.id, student.bandLevel),
     summary: {
       bandLevel: student.bandLevel,
-      clubName: student.club?.name ?? "No club assigned",
-      centreName: student.club?.centre.name ?? "No centre assigned",
+      clubName: formatClubNames(student.clubMemberships),
+      centreName: formatCentreNames(student.clubMemberships),
       attendanceRate: totalAttendance ? Math.round((presentCount / totalAttendance) * 100) : null,
       totalMeetingsMarked: totalAttendance,
       rolesCompleted: student.roleSlots.filter((slot) => slot.assignedStudentId === student.id).length,
@@ -131,20 +133,9 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
     return;
   }
 
-  if (user.role === Role.FACILITATOR && student.clubId) {
-    const assignment = await prisma.clubFacilitator.findUnique({
-      where: {
-        clubId_facilitatorId: {
-          clubId: student.clubId,
-          facilitatorId: user.id
-        }
-      }
-    });
-
-    if (!assignment) {
-      response.status(403).json({ message: "You cannot update this student's requirements." });
-      return;
-    }
+  if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
+    response.status(403).json({ message: "You cannot update this student's requirements." });
+    return;
   }
 
   const isCompleted = parsed.data.isCompleted ?? parsed.data.currentCount >= requirement.targetCount;
@@ -193,7 +184,13 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
     where: { id: studentId },
     include: {
       user: true,
-      club: { include: { centre: true } }
+      clubMemberships: {
+        include: {
+          club: {
+            include: { centre: true }
+          }
+        }
+      }
     }
   });
 
@@ -202,20 +199,9 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
     return;
   }
 
-  if (user.role === Role.FACILITATOR && student.clubId) {
-    const assignment = await prisma.clubFacilitator.findUnique({
-      where: {
-        clubId_facilitatorId: {
-          clubId: student.clubId,
-          facilitatorId: user.id
-        }
-      }
-    });
-
-    if (!assignment) {
-      response.status(403).json({ message: "You cannot view this student's requirements." });
-      return;
-    }
+  if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
+    response.status(403).json({ message: "You cannot view this student's requirements." });
+    return;
   }
 
   response.json({
@@ -223,8 +209,8 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
     requirements: await buildRequirementProgress(student.id, student.bandLevel),
     summary: {
       bandLevel: student.bandLevel,
-      clubName: student.club?.name ?? "No club assigned",
-      centreName: student.club?.centre.name ?? "No centre assigned",
+      clubName: formatClubNames(student.clubMemberships),
+      centreName: formatCentreNames(student.clubMemberships),
       attendanceRate: null,
       totalMeetingsMarked: 0,
       rolesCompleted: 0,
@@ -265,4 +251,52 @@ async function buildRequirementProgress(studentId: string, bandLevel: string) {
       notes: entry?.notes ?? null
     };
   });
+}
+
+async function canFacilitatorAccessStudent(facilitatorId: string, studentId: string) {
+  const memberships = await prisma.studentClubMembership.findMany({
+    where: {
+      studentId,
+      status: "ACTIVE"
+    },
+    select: {
+      clubId: true,
+      club: {
+        select: { centreId: true }
+      }
+    }
+  });
+  const clubIds = memberships.map((membership) => membership.clubId);
+  const centreIds = memberships.map((membership) => membership.club.centreId);
+
+  if (clubIds.length === 0) {
+    return false;
+  }
+
+  const [clubAssignment, centreAssignment] = await Promise.all([
+    prisma.clubFacilitator.findFirst({
+      where: {
+        facilitatorId,
+        clubId: { in: clubIds }
+      }
+    }),
+    prisma.centreFacilitator.findFirst({
+      where: {
+        facilitatorId,
+        centreId: { in: centreIds }
+      }
+    })
+  ]);
+
+  return Boolean(clubAssignment || centreAssignment);
+}
+
+function formatClubNames(memberships: Array<{ club: { name: string } }>) {
+  return memberships.length ? memberships.map((membership) => membership.club.name).join(", ") : "No club assigned";
+}
+
+function formatCentreNames(memberships: Array<{ club: { centre: { name: string } } }>) {
+  const centreNames = [...new Set(memberships.map((membership) => membership.club.centre.name))];
+
+  return centreNames.length ? centreNames.join(", ") : "No centre assigned";
 }

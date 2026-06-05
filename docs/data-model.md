@@ -83,15 +83,51 @@ clubs
 club_memberships
 - id
 - club_id
-- user_id
-- membership_type
-  - student
-  - facilitator
+- student_id
+- status
+  - active
+  - inactive
 - start_date
 - end_date
+- created_at
+```
+
+Students must not be modeled with a single `club_id`. A student may participate in multiple clubs or program groups.
+
+```text
+club_facilitators
+- id
+- club_id
+- facilitator_user_id
+- created_at
+```
+
+```text
+centre_facilitators
+- id
+- centre_id
+- facilitator_user_id
+- created_at
+```
+
+Centre-level assignment allows a facilitator or future centre manager/franchise owner to operate across all clubs in a centre.
+
+Future franchise support:
+
+```text
+centre_managers
+- id
+- centre_id
+- user_id
+- manager_type
+  - franchise_owner
+  - centre_manager
+  - regional_manager
 - status
 - created_at
 ```
+
+Reports should accept optional `centre_id` and `club_id` filters.
 
 ## Meetings
 

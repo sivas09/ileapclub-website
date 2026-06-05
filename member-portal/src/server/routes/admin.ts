@@ -26,7 +26,7 @@ const userSchema = z.object({
   lastName: z.string().trim().min(1),
   role: z.nativeEnum(Role),
   grade: z.string().trim().optional(),
-  clubId: z.string().optional(),
+  clubIds: z.array(z.string()).default([]),
   parentIds: z.array(z.string()).default([]),
   facilitatorClubIds: z.array(z.string()).default([])
 });
@@ -51,8 +51,12 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
       orderBy: [{ name: "asc" }],
       include: {
         centre: true,
-        students: {
-          include: { user: true }
+        studentMemberships: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
         },
         facilitators: {
           include: { facilitator: true }
@@ -73,7 +77,13 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
             id: true,
             grade: true,
             bandLevel: true,
-            clubId: true
+            clubMemberships: {
+              include: {
+                club: {
+                  include: { centre: true }
+                }
+              }
+            }
           }
         }
       }
@@ -82,7 +92,13 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
       orderBy: [{ user: { lastName: "asc" } }],
       include: {
         user: true,
-        club: true,
+        clubMemberships: {
+          include: {
+            club: {
+              include: { centre: true }
+            }
+          }
+        },
         parents: {
           include: { parent: true }
         }
@@ -160,10 +176,19 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
         const student = await tx.student.create({
           data: {
             userId: createdUser.id,
-            grade: data.grade || "Not set",
-            clubId: data.clubId || null
+            grade: data.grade || "Not set"
           }
         });
+
+        if (data.clubIds.length > 0) {
+          await tx.studentClubMembership.createMany({
+            data: data.clubIds.map((clubId) => ({
+              clubId,
+              studentId: student.id
+            })),
+            skipDuplicates: true
+          });
+        }
 
         if (data.parentIds.length > 0) {
           await tx.studentParent.createMany({
