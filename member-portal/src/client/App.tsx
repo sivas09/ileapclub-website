@@ -10,6 +10,7 @@ import {
   createClub,
   createMeeting,
   createUser,
+  fetchStudentProgressForManager,
   getAdminOverview,
   getCurrentUser,
   getMeetingsOverview,
@@ -25,7 +26,8 @@ import {
   scoreMeetingSlot,
   storeToken,
   StudentProgress,
-  toggleMeetingLock
+  toggleMeetingLock,
+  updateStudentRequirement
 } from "./api";
 
 const roleCopy: Record<Role, { title: string; summary: string; actions: string[]; reports: string[] }> = {
@@ -601,6 +603,99 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
           />
         ))}
       </div>
+      {canManageMeetings && overview?.students.length ? (
+        <RequirementManagementPanel
+          students={overview.students}
+          onUpdated={() => refreshMeetings()}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function RequirementManagementPanel({
+  students,
+  onUpdated
+}: {
+  students: MeetingsOverview["students"];
+  onUpdated: () => void;
+}) {
+  const [selectedStudentId, setSelectedStudentId] = useState(students[0]?.id ?? "");
+  const [progress, setProgress] = useState<StudentProgress | null>(null);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedStudentId) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError("");
+    fetchStudentProgressForManager(selectedStudentId)
+      .then(setProgress)
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load requirements."))
+      .finally(() => setIsLoading(false));
+  }, [selectedStudentId]);
+
+  async function handleRequirementUpdate(requirementId: string, currentCount: number, isCompleted: boolean) {
+    if (!selectedStudentId) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+
+    try {
+      await updateStudentRequirement(selectedStudentId, requirementId, { currentCount, isCompleted });
+      const updatedProgress = await fetchStudentProgressForManager(selectedStudentId);
+      setProgress(updatedProgress);
+      setStatus("Requirement progress updated.");
+      onUpdated();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update requirement.");
+    }
+  }
+
+  return (
+    <section className="requirement-manager">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">PTB requirements</p>
+          <h3>Update Student Band Progress</h3>
+        </div>
+        <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
+          {students.map((student) => (
+            <option key={student.id} value={student.id}>{student.user.firstName} {student.user.lastName}</option>
+          ))}
+        </select>
+      </div>
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {isLoading ? <p className="loading-state">Loading requirements...</p> : null}
+      {progress ? (
+        <ul className="requirement-list manager">
+          {progress.requirements.map((entry) => (
+            <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
+              <div>
+                <strong>{entry.requirement.bandLevel}: {entry.requirement.name}</strong>
+                <span>{entry.requirement.description}</span>
+              </div>
+              <div className="requirement-controls">
+                <input
+                  type="number"
+                  min="0"
+                  max={entry.requirement.targetCount}
+                  defaultValue={entry.currentCount}
+                  onBlur={(event) => handleRequirementUpdate(entry.requirement.id, Number(event.currentTarget.value), Number(event.currentTarget.value) >= entry.requirement.targetCount)}
+                />
+                <button type="button" onClick={() => handleRequirementUpdate(entry.requirement.id, entry.requirement.targetCount, true)}>Complete</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }
@@ -754,6 +849,22 @@ function StudentProgressDashboard() {
             <strong>{progress.summary.clubName}</strong>
             <span>{progress.summary.centreName}</span>
           </div>
+
+          <DataPanel title="Band/PTB Requirements">
+            {progress.requirements.length ? (
+              <ul className="requirement-list">
+                {progress.requirements.map((entry) => (
+                  <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
+                    <div>
+                      <strong>{entry.requirement.bandLevel}: {entry.requirement.name}</strong>
+                      <span>{entry.requirement.description}</span>
+                    </div>
+                    <em>{entry.currentCount}/{entry.requirement.targetCount}</em>
+                  </li>
+                ))}
+              </ul>
+            ) : <p>No requirements configured yet.</p>}
+          </DataPanel>
 
           <div className="student-progress-grid">
             <DataPanel title="Recent Role History">

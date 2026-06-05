@@ -381,6 +381,92 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.requirement-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.requirement-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #dbe4f0;
+  border-left: 4px solid #e6690a;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.requirement-list li.is-complete {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.requirement-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.requirement-list strong {
+  color: #10223f;
+}
+
+.requirement-list span,
+.requirement-list em {
+  color: #64748b;
+}
+
+.requirement-list em {
+  font-style: normal;
+  font-weight: 900;
+}
+
+.requirement-manager {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid #dbe4f0;
+}
+
+.requirement-manager h3 {
+  margin: 8px 0 0;
+  color: #00296b;
+}
+
+.requirement-manager > .admin-heading > select {
+  min-height: 42px;
+  border: 1px solid #d4dcea;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+}
+
+.requirement-controls {
+  display: grid;
+  grid-template-columns: 86px auto;
+  gap: 10px;
+}
+
+.requirement-controls input {
+  min-height: 40px;
+  border: 1px solid #d4dcea;
+  border-radius: 8px;
+  padding: 0 10px;
+}
+
+.requirement-controls button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #ffffff;
+  background: #00296b;
+  font-weight: 900;
+}
+
 .admin-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -742,7 +828,9 @@ button {
   }
 
   .role-management-controls,
-  .attendance-grid label {
+  .attendance-grid label,
+  .requirement-list li,
+  .requirement-controls {
     grid-template-columns: 1fr;
   }
 }

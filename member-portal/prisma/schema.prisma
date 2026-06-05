@@ -73,6 +73,7 @@ model Student {
   roleSlots MeetingRoleSlot[]
   attendance MeetingAttendance[]
   roleScores MeetingRoleScore[]
+  requirementProgress StudentRequirementProgress[]
 }
 
 model StudentParent {
@@ -183,5 +184,42 @@ model MeetingRoleScore {
   student  Student         @relation(fields: [studentId], references: [id])
 
   @@index([meetingId])
+  @@index([studentId])
+}
+
+model BandRequirement {
+  id          String   @id @default(cuid())
+  bandLevel   String
+  name        String
+  description String
+  requirementType String
+  targetCount Int      @default(1)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  progress StudentRequirementProgress[]
+
+  @@unique([bandLevel, name])
+  @@index([bandLevel])
+}
+
+model StudentRequirementProgress {
+  id            String   @id @default(cuid())
+  studentId     String
+  requirementId String
+  currentCount  Int      @default(0)
+  isCompleted   Boolean  @default(false)
+  completedAt   DateTime?
+  notes         String?
+  updatedByUserId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student     Student         @relation(fields: [studentId], references: [id])
+  requirement BandRequirement @relation(fields: [requirementId], references: [id])
+
+  @@unique([studentId, requirementId])
   @@index([studentId])
 }

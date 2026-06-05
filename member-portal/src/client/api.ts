@@ -120,6 +120,7 @@ export type StudentProgress = {
       roleSlot: MeetingRoleSlot;
     }>;
   };
+  requirements: StudentRequirementStatus[];
   summary: {
     bandLevel: string;
     clubName: string;
@@ -130,6 +131,24 @@ export type StudentProgress = {
     scoredRoles: number;
     averageScore: number | null;
   };
+};
+
+export type BandRequirement = {
+  id: string;
+  bandLevel: string;
+  name: string;
+  description: string;
+  requirementType: string;
+  targetCount: number;
+  sortOrder: number;
+};
+
+export type StudentRequirementStatus = {
+  requirement: BandRequirement;
+  currentCount: number;
+  isCompleted: boolean;
+  completedAt?: string | null;
+  notes?: string | null;
 };
 
 export type AdminOverview = {
@@ -300,4 +319,19 @@ export async function scoreMeetingSlot(meetingId: string, slotId: string, payloa
 
 export async function getStudentProgress() {
   return request<StudentProgress>("/api/student/me/progress");
+}
+
+export async function fetchStudentProgressForManager(studentId: string) {
+  return request<StudentProgress>(`/api/student/${studentId}/progress`);
+}
+
+export async function updateStudentRequirement(studentId: string, requirementId: string, payload: {
+  currentCount: number;
+  isCompleted?: boolean;
+  notes?: string;
+}) {
+  return request<{ progress: StudentRequirementStatus }>(`/api/student/${studentId}/requirements/${requirementId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
 }

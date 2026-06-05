@@ -223,6 +223,70 @@ async function main() {
     });
   }
 
+  const bandRequirements = [
+    ["White", "Attend orientation", "Complete the first club orientation and understand meeting roles.", "ATTENDANCE", 1],
+    ["White", "First speaking role", "Complete one short speaking role.", "ROLE", 1],
+    ["Yellow", "Prepared speech", "Deliver one prepared speech with opening, body, and conclusion.", "SPEECH", 1],
+    ["Yellow", "Listening role", "Complete one listening or observation role.", "ROLE", 1],
+    ["Orange", "Impromptu speaking", "Complete two impromptu speaking activities.", "SPEECH", 2],
+    ["Orange", "Peer feedback", "Give constructive feedback to another student.", "FEEDBACK", 1],
+    ["Green", "Leadership role", "Lead a meeting segment or team activity.", "LEADERSHIP", 1],
+    ["Green", "Attendance consistency", "Attend four marked meetings.", "ATTENDANCE", 4],
+    ["Pink", "Debate participation", "Participate in a debate or persuasive speaking activity.", "DEBATE", 1],
+    ["Red", "Evaluator role", "Complete two evaluator or feedback roles.", "FEEDBACK", 2],
+    ["Brown", "Town hall challenge", "Participate in a town hall leadership challenge.", "LEADERSHIP", 1],
+    ["Black", "Competition readiness", "Complete a competition-style speech or debate round.", "COMPETITION", 1],
+    ["Purple", "Mentor contribution", "Support or mentor another student's preparation.", "LEADERSHIP", 1],
+    ["Blue", "Capstone presentation", "Deliver a polished capstone presentation or leadership project.", "CAPSTONE", 1]
+  ] as const;
+
+  for (const [index, requirement] of bandRequirements.entries()) {
+    const [bandLevel, name, description, requirementType, targetCount] = requirement;
+    const savedRequirement = await prisma.bandRequirement.upsert({
+      where: {
+        bandLevel_name: {
+          bandLevel,
+          name
+        }
+      },
+      update: {
+        description,
+        requirementType,
+        targetCount,
+        sortOrder: index + 1
+      },
+      create: {
+        bandLevel,
+        name,
+        description,
+        requirementType,
+        targetCount,
+        sortOrder: index + 1
+      }
+    });
+
+    if (bandLevel === "White") {
+      await prisma.studentRequirementProgress.upsert({
+        where: {
+          studentId_requirementId: {
+            studentId: student.id,
+            requirementId: savedRequirement.id
+          }
+        },
+        update: {},
+        create: {
+          studentId: student.id,
+          requirementId: savedRequirement.id,
+          currentCount: targetCount,
+          isCompleted: true,
+          completedAt: new Date(),
+          notes: "Seeded sample progress.",
+          updatedByUserId: facilitator.id
+        }
+      });
+    }
+  }
+
   console.log(`Seeded demo portal users. Admin: ${admin.email} / ChangeMe123!`);
 }
 
