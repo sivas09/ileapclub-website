@@ -2,7 +2,7 @@ services:
   - type: web
     name: ileap-member-portal-api
     env: node
-    plan: starter
+    plan: free
     rootDir: member-portal
     buildCommand: npm install && npm run build && npm run prisma:migrate:deploy
     startCommand: npm run start
@@ -18,4 +18,4 @@ services:
 
 databases:
   - name: ileap-member-portal-db
-    plan: basic-256mb
+    plan: free
