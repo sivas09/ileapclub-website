@@ -14,7 +14,7 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { email: seedAdminEmail },
-    update: {},
+    update: { passwordHash },
     create: {
       email: seedAdminEmail,
       passwordHash,
@@ -26,7 +26,7 @@ async function main() {
 
   const facilitator = await prisma.user.upsert({
     where: { email: "facilitator@ileapclub.com" },
-    update: {},
+    update: { passwordHash },
     create: {
       email: "facilitator@ileapclub.com",
       passwordHash,
@@ -38,7 +38,7 @@ async function main() {
 
   const parent = await prisma.user.upsert({
     where: { email: "parent@example.com" },
-    update: {},
+    update: { passwordHash },
     create: {
       email: "parent@example.com",
       passwordHash,
@@ -50,7 +50,7 @@ async function main() {
 
   const studentUser = await prisma.user.upsert({
     where: { email: "student@example.com" },
-    update: {},
+    update: { passwordHash },
     create: {
       email: "student@example.com",
       passwordHash,
