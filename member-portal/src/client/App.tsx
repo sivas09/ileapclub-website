@@ -149,7 +149,7 @@ function LoginScreen({
           </label>
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <button type="submit" disabled={isSubmitting}>{isSubmitting ? "Signing in..." : "Sign In"}</button>
-          <p className="login-note">Seed account for local testing: admin@ileapclub.com / ChangeMe123!</p>
+          {import.meta.env.DEV ? <p className="login-note">Seed account for local testing: admin@ileapclub.com / ChangeMe123!</p> : null}
         </form>
       </section>
     </main>
@@ -980,6 +980,7 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-CA", {
     month: "short",
     day: "numeric",
-    year: "numeric"
+    year: "numeric",
+    timeZone: "UTC"
   }).format(new Date(value));
 }
