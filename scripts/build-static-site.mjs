@@ -29,65 +29,23 @@ if (existsSync(path.join(root, ".openai"))) {
 mkdirSync(serverDir, { recursive: true });
 writeFileSync(
   path.join(serverDir, "index.js"),
-  `import { createReadStream, existsSync, statSync } from "node:fs";
-import { createServer } from "node:http";
-import path from "node:path";
+  `export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
 
-const port = Number(process.env.PORT || 3000);
-const rootCandidates = [
-  path.resolve(process.cwd(), "dist"),
-  process.cwd(),
-  path.resolve(process.cwd(), "..")
-];
-const root = rootCandidates.find((candidate) => existsSync(path.join(candidate, "index.html"))) || process.cwd();
-const contentTypes = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".jpg": "image/jpeg",
-  ".js": "text/javascript; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".webp": "image/webp"
+    if (url.pathname === "/") {
+      url.pathname = "/index.html";
+    }
+
+    let response = await env.ASSETS.fetch(new Request(url, request));
+
+    if (response.status === 404 && !url.pathname.endsWith(".html") && !url.pathname.includes(".")) {
+      url.pathname = url.pathname.replace(/\\/$/, "") + ".html";
+      response = await env.ASSETS.fetch(new Request(url, request));
+    }
+
+    return response;
+  }
 };
-
-function resolveRequest(url) {
-  const parsed = new URL(url || "/", "http://localhost");
-  const pathname = decodeURIComponent(parsed.pathname);
-  const requested = pathname === "/" ? "/index.html" : pathname;
-  const candidate = path.resolve(root, "." + requested);
-
-  if (!candidate.startsWith(root)) {
-    return null;
-  }
-
-  if (existsSync(candidate) && statSync(candidate).isFile()) {
-    return candidate;
-  }
-
-  const htmlCandidate = path.resolve(root, "." + requested + ".html");
-
-  if (htmlCandidate.startsWith(root) && existsSync(htmlCandidate) && statSync(htmlCandidate).isFile()) {
-    return htmlCandidate;
-  }
-
-  return path.join(root, "404.html");
-}
-
-createServer((request, response) => {
-  const filePath = resolveRequest(request.url);
-
-  if (!filePath || !existsSync(filePath)) {
-    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-    response.end("Not found");
-    return;
-  }
-
-  response.writeHead(filePath.endsWith("404.html") ? 404 : 200, {
-    "Content-Type": contentTypes[path.extname(filePath)] || "application/octet-stream"
-  });
-  createReadStream(filePath).pipe(response);
-}).listen(port, () => {
-  console.log("iLEAP Club test site listening on port " + port);
-});
 `,
 );
