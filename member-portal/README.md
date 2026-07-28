@@ -1,6 +1,6 @@
 # iLEAP Club Member Portal
 
-Phase 2 foundation for `memberportal.ileapclub.com`.
+Phase 2 foundation for `members.ileapclub.com`.
 
 ## Current Scope
 
@@ -85,7 +85,7 @@ Configure:
 
 - `DATABASE_URL` from Render PostgreSQL
 - `JWT_SECRET` as a generated secret
-- `CLIENT_ORIGIN` as `https://memberportal.ileapclub.com`
+- `CLIENT_ORIGIN` as `https://members.ileapclub.com`
 
 The Render build command runs production migrations:
 

@@ -65,6 +65,29 @@ const upcomingWork = [
   "Attendance, scoring, and PTB requirements"
 ];
 
+const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
+  ADMIN: [
+    { href: "#overview", label: "Overview" },
+    { href: "#admin", label: "Setup" },
+    { href: "#meetings", label: "Meetings" },
+    { href: "#requirements", label: "Band Progress" }
+  ],
+  FACILITATOR: [
+    { href: "#overview", label: "Overview" },
+    { href: "#meetings", label: "Meetings" },
+    { href: "#requirements", label: "Band Progress" }
+  ],
+  PARENT: [
+    { href: "#overview", label: "Overview" },
+    { href: "#family", label: "Family View" }
+  ],
+  STUDENT: [
+    { href: "#overview", label: "Overview" },
+    { href: "#meetings", label: "Meetings" },
+    { href: "#progress", label: "My Progress" }
+  ]
+};
+
 export function App() {
   const [user, setUser] = useState<PortalUser | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(getStoredToken()));
@@ -134,11 +157,16 @@ function LoginScreen({
     <main className="login-page">
       <section className="login-panel">
         <div className="login-brand">
-          <span>iLEAP Club</span>
+          <div className="login-mark">iL</div>
+          <span>members.ileapclub.com</span>
           <h1>Member Portal</h1>
-          <p>Sign in to manage clubs, meetings, role assignments, attendance, and student progress.</p>
+          <p>One workspace for club setup, meetings, role assignments, attendance, scoring, and student progress.</p>
         </div>
         <form className="login-form" onSubmit={handleSubmit}>
+          <div className="login-form-heading">
+            <h2>Sign in</h2>
+            <p>Use your iLEAP Club member account.</p>
+          </div>
           <label>
             Email
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" required />
@@ -163,9 +191,29 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 
   return (
     <main className="portal-shell">
-      <header className="portal-header">
+      <aside className="portal-sidebar" aria-label="Portal navigation">
+        <a className="portal-brand" href="#overview" aria-label="iLEAP Club member portal overview">
+          <span>iL</span>
+          <div>
+            <strong>iLEAP Club</strong>
+            <small>Members</small>
+          </div>
+        </a>
+        <nav className="portal-nav">
+          {roleNavItems[user.role].map((item) => (
+            <a href={item.href} key={item.href}>{item.label}</a>
+          ))}
+        </nav>
+        <div className="portal-sidebar-footer">
+          <span>{formatRole(user.role)}</span>
+          <small>members.ileapclub.com</small>
+        </div>
+      </aside>
+
+      <div className="portal-content">
+      <header className="portal-header" id="overview">
         <div>
-          <p>iLEAP Club Member Portal</p>
+          <p>members.ileapclub.com</p>
           <h1>{copy.title}</h1>
         </div>
         <div className="user-menu">
@@ -185,9 +233,9 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
           <p>{copy.summary}</p>
         </div>
         <div className="status-card">
-          <span>Foundation</span>
-          <strong>Phase 2A</strong>
-          <p>Authentication and role-aware portal shell are ready for the next build slice.</p>
+          <span>Today</span>
+          <strong>Ready</strong>
+          <p>Review meetings, assignments, attendance, scores, and band progress from one place.</p>
         </div>
       </section>
 
@@ -200,6 +248,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
       {user.role === "ADMIN" ? <AdminWorkspace /> : null}
       {user.role !== "PARENT" ? <MeetingWorkspace user={user} /> : <DeferredParentWorkspace />}
       {user.role === "STUDENT" ? <StudentProgressDashboard /> : null}
+      </div>
     </main>
   );
 }
@@ -217,7 +266,7 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
 
 function DeferredParentWorkspace() {
   return (
-    <section className="deferred-workspace" aria-label="Parent workspace status">
+    <section className="deferred-workspace" id="family" aria-label="Parent workspace status">
       <p className="eyebrow">Coming later</p>
       <h2>Parent dashboard is planned for a later phase.</h2>
       <p>
@@ -274,7 +323,7 @@ function AdminWorkspace() {
   const clubs = overview?.clubs ?? [];
 
   return (
-    <section className="admin-workspace" aria-label="Admin setup workspace">
+    <section className="admin-workspace" id="admin" aria-label="Admin setup workspace">
       <div className="admin-heading">
         <div>
           <p className="eyebrow">Admin setup</p>
@@ -559,7 +608,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
   }
 
   return (
-    <section className="meeting-workspace" aria-label="Meeting and role workspace">
+    <section className="meeting-workspace" id="meetings" aria-label="Meeting and role workspace">
       <div className="admin-heading">
         <div>
           <p className="eyebrow">Meetings</p>
@@ -687,7 +736,7 @@ function RequirementManagementPanel({
   }
 
   return (
-    <section className="requirement-manager">
+    <section className="requirement-manager" id="requirements">
       <div className="admin-heading">
         <div>
           <p className="eyebrow">PTB requirements</p>
@@ -857,7 +906,7 @@ function StudentProgressDashboard() {
   }, []);
 
   return (
-    <section className="student-progress" aria-label="Student progress dashboard">
+    <section className="student-progress" id="progress" aria-label="Student progress dashboard">
       <div className="admin-heading">
         <div>
           <p className="eyebrow">My progress</p>

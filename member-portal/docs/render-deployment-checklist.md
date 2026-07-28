@@ -1,6 +1,6 @@
 # Render Deployment Checklist
 
-Use this checklist before testing `memberportal.ileapclub.com` online.
+Use this checklist before testing `members.ileapclub.com` online.
 
 ## 1. Repository
 
@@ -33,7 +33,7 @@ Required:
 
 - `DATABASE_URL`: Render PostgreSQL connection string
 - `JWT_SECRET`: generated secret, at least 32 characters
-- `CLIENT_ORIGIN`: `https://memberportal.ileapclub.com`
+- `CLIENT_ORIGIN`: `https://members.ileapclub.com`
 - `PORT`: Render usually provides this automatically
 
 Optional for private test seeding only:
@@ -93,4 +93,4 @@ After deployment:
 
 ## 7. Domain
 
-Point `memberportal.ileapclub.com` to the Render service only after the smoke tests pass on the temporary Render URL.
+Point `members.ileapclub.com` to the Render service only after the smoke tests pass on the temporary Render URL.
