@@ -32,10 +32,14 @@ writeFileSync(
   `import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const port = Number(process.env.PORT || 3000);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const rootCandidates = [
+  path.resolve(process.cwd(), "dist"),
+  process.cwd(),
+  path.resolve(process.cwd(), "..")
+];
+const root = rootCandidates.find((candidate) => existsSync(path.join(candidate, "index.html"))) || process.cwd();
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
