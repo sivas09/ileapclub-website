@@ -649,12 +649,13 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             <label>Start Time<input name="startTime" placeholder="10:00 AM" required /></label>
             <label>Location or Link<input name="location" placeholder="Ottawa Centre or online link" /></label>
             <label className="wide-field">
-              Role Slots
+              Member-selectable role slots
               <select name="roleDefinitionIds" multiple required>
                 {overview?.roleDefinitions.map((roleDefinition) => (
                   <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
                 ))}
               </select>
+              <small className="field-note">Students can claim open roles after the meeting is created. Admins and facilitators can assign or override roles.</small>
             </label>
           </div>
           <button type="submit" disabled={isSubmitting || !overview?.clubs.length}>Create Meeting</button>
@@ -823,13 +824,13 @@ function MeetingCard({
           const assignedName = slot.assignedStudent ? `${slot.assignedStudent.user.firstName} ${slot.assignedStudent.user.lastName}` : "Open";
 
           return (
-            <div className="role-slot" key={slot.id}>
+            <div className={slot.assignedStudentId ? "role-slot" : "role-slot is-open"} key={slot.id}>
               <div>
                 <strong>{slot.roleDefinition.name}</strong>
                 <span>{assignedName}</span>
               </div>
               {canClaim && !slot.assignedStudentId ? (
-                <button type="button" onClick={() => onClaim(slot.id)} disabled={isSubmitting}>Claim</button>
+                <button type="button" onClick={() => onClaim(slot.id)} disabled={isSubmitting}>Claim Role</button>
               ) : null}
               {canManage ? (
                 <div className="role-management-controls">

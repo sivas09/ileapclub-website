@@ -102,6 +102,21 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
     return;
   }
 
+  const roleDefinitions = await prisma.roleDefinition.findMany({
+    where: {
+      id: { in: data.roleDefinitionIds },
+      isActive: true
+    },
+    select: { id: true, name: true }
+  });
+
+  if (roleDefinitions.length !== new Set(data.roleDefinitionIds).size) {
+    response.status(400).json({ message: "Choose valid active roles for this meeting." });
+    return;
+  }
+
+  const roleNameById = new Map(roleDefinitions.map((roleDefinition) => [roleDefinition.id, roleDefinition.name]));
+
   const meeting = await prisma.$transaction(async (tx) => {
     const createdMeeting = await tx.meeting.create({
       data: {
@@ -118,7 +133,7 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
       data: data.roleDefinitionIds.map((roleDefinitionId, index) => ({
         meetingId: createdMeeting.id,
         roleDefinitionId,
-        slotLabel: `Role ${index + 1}`,
+        slotLabel: roleNameById.get(roleDefinitionId) ?? `Role ${index + 1}`,
         sortOrder: index + 1
       }))
     });
