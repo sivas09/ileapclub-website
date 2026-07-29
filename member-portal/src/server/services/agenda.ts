@@ -154,45 +154,78 @@ const regularMeetingSections: AgendaSection[] = [
     offset: "+0 min",
     title: "Arrival and Agenda Changes",
     items: [
-      { duration: "5 min", activity: "Arrival, seating, agenda changes", roles: ["Chair"], notes: "Confirm attendance and role coverage." }
+      { duration: "5 min", activity: "Arrival, seating, agenda changes", roles: ["iChair"], notes: "Confirm attendance and role coverage." }
     ]
   },
   {
     offset: "+5 min",
     title: "Introduction",
     items: [
-      { duration: "2 min", activity: "Welcome remarks", roles: ["Chair"], notes: "Open the meeting and introduce the theme." },
-      { duration: "2 min", activity: "Phrase or idiom of the day", roles: ["Grammarian"], notes: "Share the language focus for members to use." },
-      { duration: "2 min", activity: "Filler word briefing", roles: ["Ah Counter"], notes: "Explain what will be tracked." },
-      { duration: "2 min", activity: "Timing rules", roles: ["Timer"], notes: "Review timing signals and limits." },
-      { duration: "2 min", activity: "Fine or quiz briefing", roles: ["Quiz Master", "Fine Master"], notes: "Explain participation challenge if used." }
+      { duration: "2 min", activity: "Welcome remarks", roles: ["iChair"], notes: "Open the meeting and introduce the theme." },
+      { duration: "2 min", activity: "Phrase or idiom of the day", roles: ["iGrammarian"], notes: "Share the language focus for members to use." },
+      { duration: "2 min", activity: "Filler word briefing", roles: ["iFiller Counter"], notes: "Explain what will be tracked." },
+      { duration: "2 min", activity: "Fine or quiz challenge", roles: ["iFinesMaster"], notes: "Explain the participation challenge." },
+      { duration: "2 min", activity: "Timing rules", roles: ["iTimer"], notes: "Review timing signals and limits." }
     ]
   },
   {
     offset: "+10 min",
-    title: "Speeches",
+    title: "Prepared Speeches",
     items: [
-      { duration: "2 min", activity: "Speaker introductions", roles: ["Chair"], notes: "Introduce each speaker and evaluator pair." },
-      { duration: "4 min each", activity: "Prepared speeches", roles: ["Speaker 1", "Speaker 2", "Speaker 3", "Speaker 4"], notes: "Speakers present prepared projects." },
-      { duration: "During speeches", activity: "Evaluator notes", roles: ["Evaluator 1", "Evaluator 2", "Evaluator 3", "Evaluator 4"], notes: "Evaluators listen for strengths and growth points." }
+      { duration: "2 min", activity: "Prepared speech introductions", roles: ["iChair"], notes: "Introduce each speaker and evaluator pair." },
+      { duration: "4 min each", activity: "4 prepared speeches", roles: ["Prepared Speech 1", "Prepared Speech 2", "Prepared Speech 3", "Prepared Speech 4"], notes: "Speakers present prepared speech projects." },
+      { duration: "During speeches", activity: "4 speech evaluations", roles: ["Prepared Speech Evaluator 1", "Prepared Speech Evaluator 2", "Prepared Speech Evaluator 3", "Prepared Speech Evaluator 4"], notes: "Evaluators listen for strengths and growth points." }
     ]
   },
   {
-    offset: "+70 min",
-    title: "Evaluations",
+    offset: "+35 min",
+    title: "Prepared Presentations",
     items: [
-      { duration: "2 min", activity: "Evaluation introduction", roles: ["Chair"], notes: "Transition from speeches to feedback." },
-      { duration: "2 min each", activity: "Speaker evaluations", roles: ["Evaluator 1", "Evaluator 2", "Evaluator 3", "Evaluator 4"], notes: "Give specific, balanced feedback." },
-      { duration: "2 min", activity: "Timer report", roles: ["Timer"], notes: "Report speaker and role timings." },
-      { duration: "2 min", activity: "Grammarian report", roles: ["Grammarian"], notes: "Highlight effective language and word usage." },
-      { duration: "2 min", activity: "Filler word report", roles: ["Ah Counter"], notes: "Report filler words and repeated phrases." }
+      { duration: "4 min each", activity: "4 prepared presentations", roles: ["Prepared Presentation 1", "Prepared Presentation 2", "Prepared Presentation 3", "Prepared Presentation 4"], notes: "Presenters deliver prepared presentation projects." },
+      { duration: "During presentations", activity: "4 presentation evaluations", roles: ["Prepared Presentation Evaluator 1", "Prepared Presentation Evaluator 2", "Prepared Presentation Evaluator 3", "Prepared Presentation Evaluator 4"], notes: "Evaluators prepare presentation feedback." }
     ]
   },
   {
-    offset: "+105 min",
+    offset: "+60 min",
+    title: "iThink on My Feet",
+    items: [
+      { duration: "3 min", activity: "Impromptu speaking setup", roles: ["iThink on My Feet Master"], notes: "Introduce prompts and response expectations." },
+      { duration: "2 min each", activity: "4 impromptu participants", roles: ["iThink on My Feet Participant 1", "iThink on My Feet Participant 2", "iThink on My Feet Participant 3", "iThink on My Feet Participant 4"], notes: "Participants respond without preparation." },
+      { duration: "1 min each", activity: "4 impromptu evaluations", roles: ["iThink on My Feet Evaluator 1", "iThink on My Feet Evaluator 2", "iThink on My Feet Evaluator 3", "iThink on My Feet Evaluator 4"], notes: "Evaluators give concise feedback." }
+    ]
+  },
+  {
+    offset: "+80 min",
+    title: "iStory and Joke",
+    items: [
+      { duration: "2 min", activity: "Story and joke setup", roles: ["iStory and Joke Master"], notes: "Introduce the segment and order." },
+      { duration: "3 min each", activity: "2 story or joke roles", roles: ["iStory and Joke Speaker 1", "iStory and Joke Speaker 2"], notes: "Members deliver prepared or semi-prepared stories/jokes." },
+      { duration: "1 min each", activity: "2 story or joke evaluations", roles: ["iStory and Joke Evaluator 1", "iStory and Joke Evaluator 2"], notes: "Evaluators give concise feedback." }
+    ]
+  },
+  {
+    offset: "+92 min",
+    title: "Case Study",
+    items: [
+      { duration: "20 min", activity: "Case study discussion", roles: ["Case Study Lead (20 Mins)"], notes: "Lead discussion, decision-making, and summary." }
+    ]
+  },
+  {
+    offset: "+112 min",
+    title: "Reports",
+    items: [
+      { duration: "2 min", activity: "iChair report", roles: ["iChair Report"], notes: "Summarize meeting flow and member participation." },
+      { duration: "2 min", activity: "iGrammarian report", roles: ["iGrammarian Report"], notes: "Report phrase usage and strong language." },
+      { duration: "2 min", activity: "iFiller Counter report", roles: ["iFiller Counter Report"], notes: "Report filler words and repeated phrases." },
+      { duration: "2 min", activity: "iFinesMaster report", roles: ["iFinesMaster Report"], notes: "Report fines, quiz, or participation challenge results." },
+      { duration: "2 min", activity: "iTimer report", roles: ["iTimer Report"], notes: "Report timings for meeting segments and roles." }
+    ]
+  },
+  {
+    offset: "+125 min",
     title: "Closing",
     items: [
-      { duration: "5 min", activity: "Closing thought and announcements", roles: ["Chair"], notes: "Recognize members, confirm next meeting, and close." }
+      { duration: "5 min", activity: "Closing thought and announcements", roles: ["iChair"], notes: "Recognize members, confirm next meeting, and close." }
     ]
   }
 ];
@@ -202,26 +235,26 @@ const debateMeetingSections: AgendaSection[] = [
     offset: "+0 min",
     title: "Opening",
     items: [
-      { duration: "5 min", activity: "Arrival, agenda changes, debate motion", roles: ["Chair", "Debate Moderator"], notes: "Confirm teams, rules, and speaking order." },
-      { duration: "2 min", activity: "Timer briefing", roles: ["Timer"], notes: "Review signals for each debate segment." }
+      { duration: "5 min", activity: "Arrival, agenda changes, debate motion", roles: ["iChair"], notes: "Confirm teams, rules, and speaking order." },
+      { duration: "2 min", activity: "Timer briefing", roles: ["iTimer"], notes: "Review signals for each debate segment." }
     ]
   },
   {
     offset: "+10 min",
     title: "Debate",
     items: [
-      { duration: "4 min each", activity: "Opening arguments", roles: ["Speaker 1", "Speaker 2"], notes: "Each side presents its opening position." },
-      { duration: "3 min each", activity: "Rebuttals", roles: ["Speaker 3", "Speaker 4"], notes: "Respond directly to the opposing argument." },
-      { duration: "8 min", activity: "Audience questions", roles: ["Debate Moderator"], notes: "Moderate concise questions from members." },
-      { duration: "5 min", activity: "Vote collection", roles: ["Vote Counter"], notes: "Collect and count member votes." }
+      { duration: "4 min each", activity: "Opening arguments", roles: ["Prepared Speech 1", "Prepared Speech 2"], notes: "Each side presents its opening position." },
+      { duration: "3 min each", activity: "Rebuttals", roles: ["Prepared Speech 3", "Prepared Speech 4"], notes: "Respond directly to the opposing argument." },
+      { duration: "8 min", activity: "Audience questions", roles: ["iThink on My Feet Master"], notes: "Moderate concise questions from members." },
+      { duration: "5 min", activity: "Result and response", roles: ["iChair Report"], notes: "Announce result and key takeaways." }
     ]
   },
   {
     offset: "+45 min",
     title: "Evaluation and Closing",
     items: [
-      { duration: "2 min each", activity: "Debate feedback", roles: ["Evaluator 1", "Evaluator 2"], notes: "Evaluate reasoning, delivery, and listening." },
-      { duration: "5 min", activity: "Results and closing", roles: ["Chair", "Vote Counter"], notes: "Announce result and close the meeting." }
+      { duration: "2 min each", activity: "Debate feedback", roles: ["Prepared Speech Evaluator 1", "Prepared Speech Evaluator 2"], notes: "Evaluate reasoning, delivery, and listening." },
+      { duration: "5 min", activity: "Results and closing", roles: ["iChair", "iTimer Report"], notes: "Announce result and close the meeting." }
     ]
   }
 ];
@@ -231,26 +264,26 @@ const townHallMeetingSections: AgendaSection[] = [
     offset: "+0 min",
     title: "Town Hall Setup",
     items: [
-      { duration: "5 min", activity: "Arrival, agenda changes, scenario briefing", roles: ["Chair", "Town Hall Lead"], notes: "Introduce the leadership challenge." },
-      { duration: "2 min", activity: "Timer briefing", roles: ["Timer"], notes: "Set speaking limits for proposals and responses." }
+      { duration: "5 min", activity: "Arrival, agenda changes, scenario briefing", roles: ["iChair", "Case Study Lead (20 Mins)"], notes: "Introduce the leadership challenge." },
+      { duration: "2 min", activity: "Timer briefing", roles: ["iTimer"], notes: "Set speaking limits for proposals and responses." }
     ]
   },
   {
     offset: "+10 min",
     title: "Leadership Challenge",
     items: [
-      { duration: "5 min", activity: "Problem statement", roles: ["Town Hall Lead"], notes: "Frame the decision members must solve." },
-      { duration: "4 min each", activity: "Member proposals", roles: ["Speaker 1", "Speaker 2", "Speaker 3", "Speaker 4"], notes: "Present a clear recommendation with reasons." },
-      { duration: "10 min", activity: "Moderated discussion", roles: ["Chair"], notes: "Invite questions and compare options." }
+      { duration: "5 min", activity: "Problem statement", roles: ["Case Study Lead (20 Mins)"], notes: "Frame the decision members must solve." },
+      { duration: "4 min each", activity: "Member proposals", roles: ["Prepared Presentation 1", "Prepared Presentation 2", "Prepared Presentation 3", "Prepared Presentation 4"], notes: "Present a clear recommendation with reasons." },
+      { duration: "10 min", activity: "Moderated discussion", roles: ["iChair"], notes: "Invite questions and compare options." }
     ]
   },
   {
     offset: "+55 min",
     title: "Decision and Reflection",
     items: [
-      { duration: "5 min", activity: "Vote or consensus", roles: ["Vote Counter"], notes: "Record the selected recommendation." },
-      { duration: "2 min each", activity: "Leadership feedback", roles: ["Evaluator 1", "Evaluator 2"], notes: "Evaluate clarity, teamwork, and decision quality." },
-      { duration: "5 min", activity: "Closing thought", roles: ["Chair"], notes: "Summarize lessons and next steps." }
+      { duration: "5 min", activity: "Vote or consensus", roles: ["iChair Report"], notes: "Record the selected recommendation." },
+      { duration: "2 min each", activity: "Leadership feedback", roles: ["Prepared Presentation Evaluator 1", "Prepared Presentation Evaluator 2"], notes: "Evaluate clarity, teamwork, and decision quality." },
+      { duration: "5 min", activity: "Closing thought", roles: ["iChair"], notes: "Summarize lessons and next steps." }
     ]
   }
 ];
@@ -296,6 +329,30 @@ function rolePreparationNote(roleName: string) {
     return "Prepare speech title, objective, and timing.";
   }
 
+  if (normalizedRole.includes("presentation")) {
+    return "Prepare presentation topic, visuals if needed, objective, and timing.";
+  }
+
+  if (normalizedRole.includes("ithinkonmyfeetparticipant")) {
+    return "Be ready to answer an impromptu prompt clearly and confidently.";
+  }
+
+  if (normalizedRole.includes("ithinkonmyfeetmaster")) {
+    return "Prepare impromptu prompts and manage participant order.";
+  }
+
+  if (normalizedRole.includes("istoryandjoke")) {
+    return "Prepare the story and joke segment, speaking order, or assigned evaluation.";
+  }
+
+  if (normalizedRole.includes("casestudy")) {
+    return "Prepare the case, discussion prompts, and summary decision.";
+  }
+
+  if (normalizedRole.includes("report")) {
+    return "Prepare a concise report for the assigned meeting role.";
+  }
+
   if (normalizedRole.includes("evaluator")) {
     return "Listen for strengths, structure, delivery, and one clear growth point.";
   }
@@ -306,6 +363,10 @@ function rolePreparationNote(roleName: string) {
 
   if (normalizedRole.includes("grammarian")) {
     return "Prepare phrase or idiom of the day and language notes.";
+  }
+
+  if (normalizedRole.includes("finesmaster") || normalizedRole.includes("finemaster")) {
+    return "Prepare fines, quiz, or participation challenge instructions.";
   }
 
   if (normalizedRole.includes("ahcounter") || normalizedRole.includes("filler")) {
@@ -324,10 +385,26 @@ function normalize(value: string) {
 }
 
 const roleAliases: Record<string, string[]> = {
-  ahcounter: ["ahcounter", "fillercounter", "ifillercounter"],
-  finemaster: ["finemaster", "quizmaster"],
-  quizmaster: ["quizmaster", "finemaster"],
   chair: ["chair", "ichair"],
+  ichair: ["ichair", "chair"],
+  grammarian: ["grammarian", "igrammarian"],
+  igrammarian: ["igrammarian", "grammarian"],
+  ahcounter: ["ahcounter", "fillercounter", "ifillercounter"],
+  ifillercounter: ["ifillercounter", "ahcounter", "fillercounter"],
+  finemaster: ["finemaster", "finesmaster", "ifinesmaster", "quizmaster"],
+  finesmaster: ["finesmaster", "ifinesmaster", "finemaster", "quizmaster"],
+  ifinesmaster: ["ifinesmaster", "finesmaster", "finemaster", "quizmaster"],
+  quizmaster: ["quizmaster", "finemaster", "finesmaster", "ifinesmaster"],
+  timer: ["timer", "itimer"],
+  itimer: ["itimer", "timer"],
+  speaker1: ["speaker1", "preparedspeech1"],
+  speaker2: ["speaker2", "preparedspeech2"],
+  speaker3: ["speaker3", "preparedspeech3"],
+  speaker4: ["speaker4", "preparedspeech4"],
+  evaluator1: ["evaluator1", "preparedspeechevaluator1"],
+  evaluator2: ["evaluator2", "preparedspeechevaluator2"],
+  evaluator3: ["evaluator3", "preparedspeechevaluator3"],
+  evaluator4: ["evaluator4", "preparedspeechevaluator4"],
   debatemoderator: ["debatemoderator"],
   townhalllead: ["townhalllead"]
 };

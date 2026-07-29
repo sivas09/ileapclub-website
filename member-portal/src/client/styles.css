@@ -656,6 +656,11 @@ button {
   color: #64748b;
 }
 
+.meeting-card-header .open-role-summary {
+  color: var(--portal-orange);
+  font-weight: 900;
+}
+
 .meeting-actions {
   display: flex;
   align-items: flex-start;

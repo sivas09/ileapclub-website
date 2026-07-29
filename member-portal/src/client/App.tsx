@@ -804,6 +804,7 @@ function MeetingCard({
 }) {
   const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
   const canClaim = user.role === "STUDENT" && !meeting.isRoleLocked;
+  const openRoleCount = meeting.roleSlots.filter((slot) => !slot.assignedStudentId).length;
 
   return (
     <article className="meeting-card">
@@ -812,6 +813,7 @@ function MeetingCard({
           <span>{meeting.templateType}</span>
           <h3>{meeting.title}</h3>
           <p>{meeting.club.name} - {formatDate(meeting.meetingDate)} - {meeting.startTime}{meeting.location ? ` - ${meeting.location}` : ""}</p>
+          {user.role === "STUDENT" ? <p className="open-role-summary">{openRoleCount} open role{openRoleCount === 1 ? "" : "s"} available to claim</p> : null}
         </div>
         <div className="meeting-actions">
           <strong className={meeting.isRoleLocked ? "lock-pill locked" : "lock-pill"}>{meeting.isRoleLocked ? "Locked" : "Open"}</strong>
