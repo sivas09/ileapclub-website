@@ -174,6 +174,11 @@ export type AdminOverview = {
 };
 
 const tokenKey = "ileap_member_portal_token";
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+
+function apiUrl(path: string) {
+  return apiBaseUrl ? `${apiBaseUrl}${path}` : path;
+}
 
 export function getStoredToken() {
   return window.localStorage.getItem(tokenKey);
@@ -189,7 +194,7 @@ export function clearToken() {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -208,7 +213,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export async function downloadAgenda(meetingId: string) {
   const token = getStoredToken();
-  const response = await fetch(`/api/meetings/${meetingId}/agenda.rtf`, {
+  const response = await fetch(apiUrl(`/api/meetings/${meetingId}/agenda.rtf`), {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {})
     }

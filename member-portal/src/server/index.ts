@@ -12,10 +12,18 @@ import { studentRouter } from "./routes/student.js";
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDistPath = path.resolve(__dirname, "../client");
+const allowedOrigins = new Set(config.CLIENT_ORIGINS);
 
 app.use(
   cors({
-    origin: config.CLIENT_ORIGIN,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(null, false);
+    },
     credentials: true
   })
 );

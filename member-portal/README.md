@@ -1,6 +1,6 @@
 # iLEAP Club Member Portal
 
-Phase 2 foundation for `members.ileapclub.com`.
+Phase 2 foundation for `member.ileapclub.com`.
 
 ## Current Scope
 
@@ -26,6 +26,8 @@ Phase 2 foundation for `members.ileapclub.com`.
    - `DATABASE_URL`
    - `JWT_SECRET`
    - `CLIENT_ORIGIN`
+   - `CLIENT_ORIGINS`
+   - `VITE_API_BASE_URL`
    - optional local seed values: `SEED_ADMIN_EMAIL`, `SEED_DEMO_PASSWORD`
 
 4. Create the database tables:
@@ -85,7 +87,9 @@ Configure:
 
 - `DATABASE_URL` from Render PostgreSQL
 - `JWT_SECRET` as a generated secret
-- `CLIENT_ORIGIN` as `https://members.ileapclub.com`
+- `CLIENT_ORIGIN` as `https://member.ileapclub.com`
+- `CLIENT_ORIGINS` as `https://member.ileapclub.com,https://members.ileapclub.com`
+- `VITE_API_BASE_URL` as `https://ileap-member-portal-api.onrender.com` on Cloudflare Pages, then `https://api.member.ileapclub.com` after the API subdomain is ready
 
 The Render build command runs production migrations:
 

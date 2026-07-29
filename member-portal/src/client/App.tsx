@@ -136,7 +136,7 @@ function LoginScreen({
   error: string;
   setError: (message: string) => void;
 }) {
-  const [email, setEmail] = useState("admin@ileapclub.com");
+  const [email, setEmail] = useState(import.meta.env.DEV ? "admin@ileapclub.com" : "");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -158,7 +158,7 @@ function LoginScreen({
       <section className="login-panel">
         <div className="login-brand">
           <div className="login-mark">iL</div>
-          <span>members.ileapclub.com</span>
+          <span>member.ileapclub.com</span>
           <h1>Member Portal</h1>
           <p>One workspace for club setup, meetings, role assignments, attendance, scoring, and student progress.</p>
         </div>
@@ -206,14 +206,14 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
         </nav>
         <div className="portal-sidebar-footer">
           <span>{formatRole(user.role)}</span>
-          <small>members.ileapclub.com</small>
+          <small>member.ileapclub.com</small>
         </div>
       </aside>
 
       <div className="portal-content">
       <header className="portal-header" id="overview">
         <div>
-          <p>members.ileapclub.com</p>
+          <p>member.ileapclub.com</p>
           <h1>{copy.title}</h1>
         </div>
         <div className="user-menu">

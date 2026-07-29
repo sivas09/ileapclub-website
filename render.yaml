@@ -12,4 +12,6 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CLIENT_ORIGIN
-        value: https://members.ileapclub.com
+        value: https://member.ileapclub.com
+      - key: CLIENT_ORIGINS
+        value: https://member.ileapclub.com,https://members.ileapclub.com
