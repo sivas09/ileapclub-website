@@ -37,18 +37,6 @@ async function main() {
     }
   });
 
-  const parent = await prisma.user.upsert({
-    where: { email: "parent@example.com" },
-    update: { passwordHash },
-    create: {
-      email: "parent@example.com",
-      passwordHash,
-      firstName: "Sample",
-      lastName: "Parent",
-      role: Role.PARENT
-    }
-  });
-
   const studentUser = await prisma.user.upsert({
     where: { email: "student@example.com" },
     update: { passwordHash },
@@ -59,6 +47,11 @@ async function main() {
       lastName: "Student",
       role: Role.STUDENT
     }
+  });
+
+  await prisma.user.updateMany({
+    where: { role: Role.PARENT },
+    data: { isActive: false }
   });
 
   const centre = await prisma.centre.upsert({
@@ -103,20 +96,6 @@ async function main() {
     create: {
       studentId: student.id,
       clubId: club.id
-    }
-  });
-
-  await prisma.studentParent.upsert({
-    where: {
-      parentId_studentId: {
-        parentId: parent.id,
-        studentId: student.id
-      }
-    },
-    update: {},
-    create: {
-      parentId: parent.id,
-      studentId: student.id
     }
   });
 
@@ -387,7 +366,6 @@ async function main() {
   console.log("Seeded demo portal data.");
   console.log(`Admin: ${admin.email} / ${seedPassword}`);
   console.log(`Facilitator: ${facilitator.email} / ${seedPassword}`);
-  console.log(`Parent: ${parent.email} / ${seedPassword}`);
   console.log(`Student: ${studentUser.email} / ${seedPassword}`);
 }
 

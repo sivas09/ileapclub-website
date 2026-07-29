@@ -1,5 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import { Role } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, signToken } from "../auth.js";
@@ -25,6 +26,11 @@ authRouter.post("/login", async (request, response) => {
 
   if (!user || !user.isActive) {
     response.status(401).json({ message: "Invalid email or password." });
+    return;
+  }
+
+  if (user.role === Role.PARENT) {
+    response.status(403).json({ message: "Parent accounts are not enabled for this portal." });
     return;
   }
 
@@ -66,6 +72,11 @@ authRouter.get("/me", requireAuth, async (request, response) => {
 
   if (!user || !user.isActive) {
     response.status(401).json({ message: "Session user no longer exists." });
+    return;
+  }
+
+  if (user.role === Role.PARENT) {
+    response.status(403).json({ message: "Parent accounts are not enabled for this portal." });
     return;
   }
 

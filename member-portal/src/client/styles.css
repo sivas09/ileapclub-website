@@ -319,6 +319,7 @@ button {
 
 .admin-workspace,
 .meeting-workspace,
+.feedback-report,
 .student-progress {
   width: min(1180px, 100%);
   margin: 28px auto 0;
@@ -724,8 +725,9 @@ button {
 
 .role-management-controls {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) 96px;
+  grid-template-columns: minmax(150px, 1fr) 82px minmax(170px, 1fr) auto;
   gap: 10px;
+  align-items: end;
 }
 
 .role-management-controls label {
@@ -773,6 +775,44 @@ button {
 .attendance-grid span {
   color: #10223f;
   font-weight: 800;
+}
+
+.feedback-table-wrap {
+  margin-top: 18px;
+  overflow-x: auto;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+}
+
+.feedback-table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.feedback-table th,
+.feedback-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e0e8f1;
+  color: var(--portal-ink);
+  text-align: left;
+  vertical-align: top;
+}
+
+.feedback-table th {
+  color: var(--portal-blue);
+  background: #f7fafc;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.feedback-table td span {
+  display: block;
+  margin-top: 4px;
+  color: var(--portal-muted);
+  font-size: 0.88rem;
 }
 
 .admin-form.wide {
@@ -1106,6 +1146,7 @@ body {
 .dashboard-grid,
 .admin-workspace,
 .meeting-workspace,
+.feedback-report,
 .student-progress,
 .deferred-workspace {
   width: min(1240px, 100%);
@@ -1169,6 +1210,7 @@ body {
 .portal-card,
 .admin-workspace,
 .meeting-workspace,
+.feedback-report,
 .student-progress,
 .deferred-workspace,
 .data-panel {
@@ -1185,6 +1227,7 @@ body {
 .portal-card::before,
 .admin-workspace::before,
 .meeting-workspace::before,
+.feedback-report::before,
 .student-progress::before {
   display: block;
   width: 44px;
@@ -1197,6 +1240,7 @@ body {
 
 .admin-workspace,
 .meeting-workspace,
+.feedback-report,
 .student-progress,
 .deferred-workspace {
   margin-top: 22px;

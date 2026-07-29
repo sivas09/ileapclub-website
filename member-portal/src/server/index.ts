@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 import { meetingsRouter } from "./routes/meetings.js";
+import { reportsRouter } from "./routes/reports.js";
 import { studentRouter } from "./routes/student.js";
 
 const app = express();
@@ -39,6 +40,7 @@ app.get("/api/health", (_request, response) => {
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/meetings", meetingsRouter);
+app.use("/api/reports", reportsRouter);
 app.use("/api/student", studentRouter);
 
 app.use(express.static(clientDistPath));

@@ -5,14 +5,17 @@ import {
   assignMeetingSlot,
   claimMeetingSlot,
   clearToken,
+  createBulkMeetings,
   createCentre,
   createClub,
   createMeeting,
   createUser,
   downloadAgenda,
   fetchStudentProgressForManager,
+  FeedbackReportEntry,
   getAdminOverview,
   getCurrentUser,
+  getFeedbackReport,
   getMeetingsOverview,
   getStoredToken,
   getStudentProgress,
@@ -34,7 +37,7 @@ const roleCopy: Record<Role, { title: string; summary: string; actions: string[]
   ADMIN: {
     title: "Operations Control",
     summary: "Manage centres, clubs, members, facilitators, and portal configuration.",
-    actions: ["Create centres and clubs", "Invite facilitators and families", "Review enrollment and activity"],
+    actions: ["Create centres and clubs", "Create facilitators and students", "Review enrollment and activity"],
     reports: ["Centre growth", "Club roster health", "Attendance and band progress"]
   },
   FACILITATOR: {
@@ -43,16 +46,10 @@ const roleCopy: Record<Role, { title: string; summary: string; actions: string[]
     actions: ["Create upcoming meetings", "Lock or reopen roles", "Record attendance and scores"],
     reports: ["Meeting readiness", "Role participation", "Student progress"]
   },
-  PARENT: {
-    title: "Family Progress View",
-    summary: "View each child, upcoming meetings, role assignments, attendance, and skill progress.",
-    actions: ["Review upcoming roles", "Track child progress", "Contact the facilitator"],
-    reports: ["Attendance history", "Band progress", "Recent feedback"]
-  },
   STUDENT: {
     title: "Student Dashboard",
     summary: "Claim open roles, prepare for upcoming meetings, and follow personal progress.",
-    actions: ["Claim at least two open roles", "Download meeting agenda", "Review scores and feedback"],
+    actions: ["Claim up to two open roles per meeting", "Download meeting agenda", "Review scores and feedback"],
     reports: ["Upcoming roles", "Band level status", "Role performance"]
   }
 };
@@ -70,20 +67,19 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
     { href: "#overview", label: "Overview" },
     { href: "#admin", label: "Setup" },
     { href: "#meetings", label: "Meetings" },
+    { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
   ],
   FACILITATOR: [
     { href: "#overview", label: "Overview" },
     { href: "#meetings", label: "Meetings" },
+    { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
-  ],
-  PARENT: [
-    { href: "#overview", label: "Overview" },
-    { href: "#family", label: "Family View" }
   ],
   STUDENT: [
     { href: "#overview", label: "Overview" },
     { href: "#meetings", label: "Meetings" },
+    { href: "#feedback", label: "Feedback" },
     { href: "#progress", label: "My Progress" }
   ]
 };
@@ -246,7 +242,8 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
       </section>
 
       {user.role === "ADMIN" ? <AdminWorkspace /> : null}
-      {user.role !== "PARENT" ? <MeetingWorkspace user={user} /> : <DeferredParentWorkspace />}
+      <MeetingWorkspace user={user} />
+      <FeedbackReportPanel />
       {user.role === "STUDENT" ? <StudentProgressDashboard /> : null}
       </div>
     </main>
@@ -261,19 +258,6 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </article>
-  );
-}
-
-function DeferredParentWorkspace() {
-  return (
-    <section className="deferred-workspace" id="family" aria-label="Parent workspace status">
-      <p className="eyebrow">Coming later</p>
-      <h2>Parent dashboard is planned for a later phase.</h2>
-      <p>
-        Parent accounts are supported for student relationships, but parent-facing screens are intentionally
-        deferred while the student, facilitator, and admin workflows are built first.
-      </p>
-    </section>
   );
 }
 
@@ -319,7 +303,6 @@ function AdminWorkspace() {
     }
   }
 
-  const parents = overview?.users.filter((portalUser) => portalUser.role === "PARENT") ?? [];
   const clubs = overview?.clubs ?? [];
 
   return (
@@ -408,7 +391,6 @@ function AdminWorkspace() {
               event,
               async (form) => {
                 const formData = new FormData(form);
-                const parentSelect = form.elements.namedItem("parentIds") as HTMLSelectElement | null;
                 const clubSelect = form.elements.namedItem("clubIds") as HTMLSelectElement | null;
                 const facilitatorClubSelect = form.elements.namedItem("facilitatorClubIds") as HTMLSelectElement | null;
                 await createUser({
@@ -419,7 +401,6 @@ function AdminWorkspace() {
                   role: String(formData.get("role") || "STUDENT") as Role,
                   grade: String(formData.get("grade") || ""),
                   clubIds: clubSelect ? Array.from(clubSelect.selectedOptions).map((option) => option.value) : [],
-                  parentIds: parentSelect ? Array.from(parentSelect.selectedOptions).map((option) => option.value) : [],
                   facilitatorClubIds: facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : []
                 });
               },
@@ -437,7 +418,6 @@ function AdminWorkspace() {
               Role
               <select name="role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value as Role)} required>
                 <option value="STUDENT">Student</option>
-                <option value="PARENT">Parent</option>
                 <option value="FACILITATOR">Facilitator</option>
                 <option value="ADMIN">Admin</option>
               </select>
@@ -450,14 +430,6 @@ function AdminWorkspace() {
                   <select name="clubIds" multiple>
                     {clubs.map((club) => (
                       <option key={club.id} value={club.id}>{club.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Parents
-                  <select name="parentIds" multiple>
-                    {parents.map((parent) => (
-                      <option key={parent.id} value={parent.id}>{parent.firstName} {parent.lastName}</option>
                     ))}
                   </select>
                 </label>
@@ -515,7 +487,7 @@ function AdminWorkspace() {
               {overview.students.map((student) => (
                 <li key={student.id}>
                   <strong>{student.user.firstName} {student.user.lastName}</strong>
-                  <span>{student.grade} - {formatStudentClubs(student)} - parents: {student.parents?.map((parent) => `${parent.parent.firstName} ${parent.parent.lastName}`).join(", ") || "None"}</span>
+                  <span>{student.grade} - {formatStudentClubs(student)}</span>
                 </li>
               ))}
             </ul>
@@ -569,6 +541,37 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
       setStatus("Meeting created.");
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Unable to create meeting.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleBulkMeetingGeneration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const form = event.currentTarget;
+      const formData = new FormData(form);
+      const roleSelect = form.elements.namedItem("roleDefinitionIds") as HTMLSelectElement;
+      const result = await createBulkMeetings({
+        clubId: String(formData.get("clubId") || ""),
+        titlePrefix: String(formData.get("titlePrefix") || ""),
+        templateType: String(formData.get("templateType") || ""),
+        startDate: String(formData.get("startDate") || ""),
+        endDate: String(formData.get("endDate") || ""),
+        dayOfWeek: Number(formData.get("dayOfWeek") || 0),
+        startTime: String(formData.get("startTime") || ""),
+        location: String(formData.get("location") || ""),
+        roleDefinitionIds: Array.from(roleSelect.selectedOptions).map((option) => option.value)
+      });
+      form.reset();
+      await refreshMeetings();
+      setStatus(`${result.meetings.length} meetings generated.`);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to generate meetings.");
     } finally {
       setIsSubmitting(false);
     }
@@ -662,6 +665,61 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
         </form>
       ) : null}
 
+      {canManageMeetings ? (
+        <form className="meeting-form" onSubmit={handleBulkMeetingGeneration}>
+          <h3>Generate Term Meetings</h3>
+          <div className="form-two-column">
+            <label>
+              Club
+              <select name="clubId" required>
+                <option value="">Select club</option>
+                {overview?.clubs.map((club) => (
+                  <option key={club.id} value={club.id}>{club.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>Title Prefix<input name="titlePrefix" placeholder="Senior Regular Meeting" required /></label>
+            <label>
+              Template
+              <select name="templateType" required>
+                <option>Junior Regular Meeting</option>
+                <option>Senior Regular Meeting</option>
+                <option>Debate Meeting</option>
+                <option>Town Hall Leadership Challenge</option>
+                <option>Competition Meeting</option>
+                <option>Special Event</option>
+              </select>
+            </label>
+            <label>
+              Day of Week
+              <select name="dayOfWeek" required>
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
+            </label>
+            <label>Start Date<input name="startDate" type="date" required /></label>
+            <label>End Date<input name="endDate" type="date" required /></label>
+            <label>Start Time<input name="startTime" placeholder="10:00 AM" required /></label>
+            <label>Location or Link<input name="location" placeholder="Ottawa Centre or online link" /></label>
+            <label className="wide-field">
+              Member-selectable role slots
+              <select name="roleDefinitionIds" multiple required>
+                {overview?.roleDefinitions.map((roleDefinition) => (
+                  <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
+                ))}
+              </select>
+              <small className="field-note">Creates one meeting on each matching weekday in the selected date range.</small>
+            </label>
+          </div>
+          <button type="submit" disabled={isSubmitting || !overview?.clubs.length}>Generate Meetings</button>
+        </form>
+      ) : null}
+
       <div className="meeting-list">
         {isLoading ? <p>Loading meetings...</p> : null}
         {!isLoading && !overview?.meetings.length ? <p>No meetings yet.</p> : null}
@@ -675,7 +733,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(meeting.id, slotId), "Role claimed.")}
             onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(meeting.id, slotId, studentId), "Role assignment updated.")}
             onAttendance={(studentId, status) => updateMeeting(() => markMeetingAttendance(meeting.id, { studentId, status }), "Attendance updated.")}
-            onScore={(slotId, score) => updateMeeting(() => scoreMeetingSlot(meeting.id, slotId, { score }), "Score saved.")}
+            onScore={(slotId, score, feedback) => updateMeeting(() => scoreMeetingSlot(meeting.id, slotId, { score, feedback }), "Score saved.")}
             onAgendaDownload={() => runDownload(() => downloadAgenda(meeting.id))}
             onToggleLock={() => updateMeeting(() => toggleMeetingLock(meeting.id), meeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
           />
@@ -779,6 +837,75 @@ function RequirementManagementPanel({
   );
 }
 
+function FeedbackReportPanel() {
+  const [feedback, setFeedback] = useState<FeedbackReportEntry[]>([]);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  async function refreshFeedback() {
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const result = await getFeedbackReport();
+      setFeedback(result.feedback);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to load feedback report.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshFeedback();
+  }, []);
+
+  return (
+    <section className="feedback-report" id="feedback" aria-label="Facilitator feedback report">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Feedback</p>
+          <h2>Facilitator Feedback for Students</h2>
+        </div>
+        <button type="button" onClick={() => refreshFeedback()} disabled={isLoading}>Refresh</button>
+      </div>
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {isLoading ? <p className="loading-state">Loading feedback...</p> : null}
+      {!isLoading && !feedback.length ? <p className="loading-state">No scored role feedback yet.</p> : null}
+      {feedback.length ? (
+        <div className="feedback-table-wrap">
+          <table className="feedback-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Club</th>
+                <th>Meeting</th>
+                <th>Role</th>
+                <th>Score</th>
+                <th>Feedback</th>
+                <th>Evaluator</th>
+              </tr>
+            </thead>
+            <tbody>
+              {feedback.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.studentName}</td>
+                  <td>{entry.clubName}</td>
+                  <td>{formatDate(entry.meetingDate)}<span>{entry.meetingTitle}</span></td>
+                  <td>{entry.roleName}</td>
+                  <td>{entry.score}/100</td>
+                  <td>{entry.feedback || "No comment entered."}</td>
+                  <td>{entry.evaluatorName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function MeetingCard({
   meeting,
   students,
@@ -798,7 +925,7 @@ function MeetingCard({
   onClaim: (slotId: string) => void;
   onAssign: (slotId: string, studentId: string | null) => void;
   onAttendance: (studentId: string, status: MeetingAttendance["status"]) => void;
-  onScore: (slotId: string, score: number) => void;
+  onScore: (slotId: string, score: number, feedback?: string) => void;
   onAgendaDownload: () => void;
   onToggleLock: () => void;
 }) {
@@ -835,31 +962,13 @@ function MeetingCard({
                 <button type="button" onClick={() => onClaim(slot.id)} disabled={isSubmitting}>Claim Role</button>
               ) : null}
               {canManage ? (
-                <div className="role-management-controls">
-                  <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(slot.id, event.target.value || null)} disabled={isSubmitting}>
-                    <option value="">Open</option>
-                    {students.map((student) => (
-                      <option key={student.id} value={student.id}>{student.user.firstName} {student.user.lastName}</option>
-                    ))}
-                  </select>
-                  <label>
-                    Score
-                    <input
-                      key={`${slot.id}-${slot.assignedStudentId ?? "open"}-${slot.score?.score ?? "none"}`}
-                      type="number"
-                      min="0"
-                      max="100"
-                      defaultValue={slot.score?.score ?? ""}
-                      placeholder="0-100"
-                      disabled={isSubmitting || !slot.assignedStudentId}
-                      onBlur={(event) => {
-                        if (event.currentTarget.value) {
-                          onScore(slot.id, Number(event.currentTarget.value));
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
+                <RoleManagementControls
+                  slot={slot}
+                  students={students}
+                  isSubmitting={isSubmitting}
+                  onAssign={(studentId) => onAssign(slot.id, studentId)}
+                  onScore={(score, feedback) => onScore(slot.id, score, feedback)}
+                />
               ) : null}
             </div>
           );
@@ -893,6 +1002,69 @@ function MeetingCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+function RoleManagementControls({
+  slot,
+  students,
+  isSubmitting,
+  onAssign,
+  onScore
+}: {
+  slot: Meeting["roleSlots"][number];
+  students: MeetingsOverview["students"];
+  isSubmitting: boolean;
+  onAssign: (studentId: string | null) => void;
+  onScore: (score: number, feedback?: string) => void;
+}) {
+  const [score, setScore] = useState(String(slot.score?.score ?? ""));
+  const [feedback, setFeedback] = useState(slot.score?.feedback ?? "");
+
+  useEffect(() => {
+    setScore(String(slot.score?.score ?? ""));
+    setFeedback(slot.score?.feedback ?? "");
+  }, [slot.id, slot.assignedStudentId, slot.score?.score, slot.score?.feedback]);
+
+  function handleSaveScore() {
+    if (!score) {
+      return;
+    }
+
+    onScore(Number(score), feedback);
+  }
+
+  return (
+    <div className="role-management-controls">
+      <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(event.target.value || null)} disabled={isSubmitting}>
+        <option value="">Open</option>
+        {students.map((student) => (
+          <option key={student.id} value={student.id}>{student.user.firstName} {student.user.lastName}</option>
+        ))}
+      </select>
+      <label>
+        Score
+        <input
+          type="number"
+          min="0"
+          max="100"
+          value={score}
+          placeholder="0-100"
+          disabled={isSubmitting || !slot.assignedStudentId}
+          onChange={(event) => setScore(event.currentTarget.value)}
+        />
+      </label>
+      <label className="feedback-input">
+        Feedback
+        <input
+          value={feedback}
+          placeholder="Comment"
+          disabled={isSubmitting || !slot.assignedStudentId}
+          onChange={(event) => setFeedback(event.currentTarget.value)}
+        />
+      </label>
+      <button type="button" onClick={handleSaveScore} disabled={isSubmitting || !slot.assignedStudentId || !score}>Save</button>
+    </div>
   );
 }
 

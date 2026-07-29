@@ -24,10 +24,9 @@ const userSchema = z.object({
   password: z.string().min(8),
   firstName: z.string().trim().min(1),
   lastName: z.string().trim().min(1),
-  role: z.nativeEnum(Role),
+  role: z.enum([Role.ADMIN, Role.FACILITATOR, Role.STUDENT]),
   grade: z.string().trim().optional(),
   clubIds: z.array(z.string()).default([]),
-  parentIds: z.array(z.string()).default([]),
   facilitatorClubIds: z.array(z.string()).default([])
 });
 
@@ -64,6 +63,9 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
       }
     }),
     prisma.user.findMany({
+      where: {
+        role: { in: [Role.ADMIN, Role.FACILITATOR, Role.STUDENT] }
+      },
       orderBy: [{ role: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
       select: {
         id: true,
@@ -99,9 +101,6 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
             }
           }
         },
-        parents: {
-          include: { parent: true }
-        }
       }
     })
   ]);
@@ -190,15 +189,6 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
           });
         }
 
-        if (data.parentIds.length > 0) {
-          await tx.studentParent.createMany({
-            data: data.parentIds.map((parentId) => ({
-              parentId,
-              studentId: student.id
-            })),
-            skipDuplicates: true
-          });
-        }
       }
 
       if (data.role === Role.FACILITATOR && data.facilitatorClubIds.length > 0) {

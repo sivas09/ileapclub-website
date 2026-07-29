@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "FACILITATOR" | "PARENT" | "STUDENT";
+export type Role = "ADMIN" | "FACILITATOR" | "STUDENT";
 
 export type PortalUser = {
   id: string;
@@ -40,7 +40,6 @@ export type Student = {
   bandLevel: string;
   user: PortalUser;
   clubMemberships?: StudentClubMembership[];
-  parents?: StudentParent[];
 };
 
 export type StudentClubMembership = {
@@ -49,11 +48,6 @@ export type StudentClubMembership = {
   clubId: string;
   status: string;
   club: Club;
-};
-
-export type StudentParent = {
-  id: string;
-  parent: PortalUser;
 };
 
 export type ClubFacilitator = {
@@ -109,6 +103,20 @@ export type MeetingRoleScore = {
   studentId: string;
   score: number;
   feedback?: string | null;
+};
+
+export type FeedbackReportEntry = {
+  id: string;
+  studentName: string;
+  clubName: string;
+  meetingTitle: string;
+  meetingDate: string;
+  roleName: string;
+  score: number;
+  feedback?: string | null;
+  evaluatorName: string;
+  evaluatorRole?: Role | null;
+  scoredAt: string;
 };
 
 export type MeetingsOverview = {
@@ -283,7 +291,6 @@ export async function createUser(payload: {
   role: Role;
   grade?: string;
   clubIds?: string[];
-  parentIds?: string[];
   facilitatorClubIds?: string[];
 }) {
   return request<{ user: PortalUser }>("/api/admin/users", {
@@ -306,6 +313,23 @@ export async function createMeeting(payload: {
   roleDefinitionIds: string[];
 }) {
   return request<{ meeting: Meeting }>("/api/meetings", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createBulkMeetings(payload: {
+  clubId: string;
+  titlePrefix: string;
+  templateType: string;
+  startDate: string;
+  endDate: string;
+  dayOfWeek: number;
+  startTime: string;
+  location?: string;
+  roleDefinitionIds: string[];
+}) {
+  return request<{ meetings: Meeting[] }>("/api/meetings/bulk", {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -368,4 +392,8 @@ export async function updateStudentRequirement(studentId: string, requirementId:
     method: "PUT",
     body: JSON.stringify(payload)
   });
+}
+
+export async function getFeedbackReport() {
+  return request<{ feedback: FeedbackReportEntry[] }>("/api/reports/facilitator-feedback");
 }

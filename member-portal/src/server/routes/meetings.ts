@@ -16,6 +16,18 @@ const createMeetingSchema = z.object({
   roleDefinitionIds: z.array(z.string()).min(1)
 });
 
+const bulkMeetingSchema = z.object({
+  clubId: z.string().min(1),
+  titlePrefix: z.string().trim().min(2),
+  templateType: z.string().trim().min(2),
+  startDate: z.string().min(10),
+  endDate: z.string().min(10),
+  dayOfWeek: z.coerce.number().int().min(0).max(6),
+  startTime: z.string().trim().min(1),
+  location: z.string().trim().optional(),
+  roleDefinitionIds: z.array(z.string()).min(1)
+});
+
 const assignRoleSchema = z.object({
   studentId: z.string().nullable().optional()
 });
@@ -147,6 +159,92 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
   response.status(201).json({ meeting });
 }));
 
+meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can generate meetings." });
+    return;
+  }
+
+  const parsed = bulkMeetingSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter term dates, meeting day, time, and at least one role." });
+    return;
+  }
+
+  const data = parsed.data;
+  const canManageClub = await canManageClubId(user.id, user.role, data.clubId);
+
+  if (!canManageClub) {
+    response.status(403).json({ message: "You cannot generate meetings for this club." });
+    return;
+  }
+
+  const meetingDates = getMeetingDates(data.startDate, data.endDate, data.dayOfWeek);
+
+  if (meetingDates.length === 0) {
+    response.status(400).json({ message: "No matching meeting dates were found in this term range." });
+    return;
+  }
+
+  if (meetingDates.length > 40) {
+    response.status(400).json({ message: "Generate 40 or fewer meetings at a time." });
+    return;
+  }
+
+  const roleDefinitions = await prisma.roleDefinition.findMany({
+    where: {
+      id: { in: data.roleDefinitionIds },
+      isActive: true
+    },
+    select: { id: true, name: true }
+  });
+
+  if (roleDefinitions.length !== new Set(data.roleDefinitionIds).size) {
+    response.status(400).json({ message: "Choose valid active roles for these meetings." });
+    return;
+  }
+
+  const roleNameById = new Map(roleDefinitions.map((roleDefinition) => [roleDefinition.id, roleDefinition.name]));
+
+  const meetings = await prisma.$transaction(async (tx) => {
+    const createdMeetings = [];
+
+    for (const [index, meetingDate] of meetingDates.entries()) {
+      const createdMeeting = await tx.meeting.create({
+        data: {
+          clubId: data.clubId,
+          title: `${data.titlePrefix} ${index + 1}`,
+          templateType: data.templateType,
+          meetingDate,
+          startTime: data.startTime,
+          location: data.location || null
+        }
+      });
+
+      await tx.meetingRoleSlot.createMany({
+        data: data.roleDefinitionIds.map((roleDefinitionId, roleIndex) => ({
+          meetingId: createdMeeting.id,
+          roleDefinitionId,
+          slotLabel: roleNameById.get(roleDefinitionId) ?? `Role ${roleIndex + 1}`,
+          sortOrder: roleIndex + 1
+        }))
+      });
+
+      createdMeetings.push(await tx.meeting.findUniqueOrThrow({
+        where: { id: createdMeeting.id },
+        include: meetingInclude
+      }));
+    }
+
+    return createdMeetings;
+  });
+
+  response.status(201).json({ meetings });
+}));
+
 meetingsRouter.get("/:meetingId/agenda.rtf", asyncRoute(async (request, response) => {
   const user = request.user!;
   const meetingId = String(request.params.meetingId);
@@ -218,14 +316,46 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
     return;
   }
 
-  await prisma.meetingRoleSlot.update({
-    where: { id: slot.id },
-    data: {
-      assignedStudentId: student.id,
-      assignedByUserId: user.id,
-      assignedAt: new Date()
+  if (slot.assignedStudentId === student.id) {
+    const meeting = await getMeeting(meetingId);
+    response.json({ meeting });
+    return;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const claimedRoleCount = await tx.meetingRoleSlot.count({
+      where: {
+        meetingId,
+        assignedStudentId: student.id
+      }
+    });
+
+    if (claimedRoleCount >= 2) {
+      return null;
     }
+
+    return tx.meetingRoleSlot.updateMany({
+      where: {
+        id: slot.id,
+        assignedStudentId: null
+      },
+      data: {
+        assignedStudentId: student.id,
+        assignedByUserId: user.id,
+        assignedAt: new Date()
+      }
+    });
   });
+
+  if (!updated) {
+    response.status(409).json({ message: "You can claim a maximum of 2 roles for this meeting." });
+    return;
+  }
+
+  if (updated.count === 0) {
+    response.status(409).json({ message: "This role has already been claimed." });
+    return;
+  }
 
   const meeting = await getMeeting(meetingId);
   response.json({ meeting });
@@ -514,21 +644,6 @@ async function getVisibleClubFilter(userId: string, role: Role) {
     return memberships.map((membership) => membership.clubId);
   }
 
-  if (role === Role.PARENT) {
-    const memberships = await prisma.studentClubMembership.findMany({
-      where: {
-        student: {
-          parents: {
-            some: { parentId: userId }
-          }
-        },
-        status: "ACTIVE"
-      },
-      select: { clubId: true }
-    });
-    return memberships.map((membership) => membership.clubId);
-  }
-
   return [];
 }
 
@@ -599,21 +714,27 @@ async function canViewMeeting(userId: string, role: Role, clubId: string) {
     return Boolean(membership);
   }
 
-  if (role === Role.PARENT) {
-    const childMembership = await prisma.studentClubMembership.findFirst({
-      where: {
-        clubId,
-        status: "ACTIVE",
-        student: {
-          parents: {
-            some: { parentId: userId }
-          }
-        }
-      }
-    });
+  return false;
+}
 
-    return Boolean(childMembership);
+function getMeetingDates(startDate: string, endDate: string, dayOfWeek: number) {
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  const end = new Date(`${endDate}T00:00:00.000Z`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    return [];
   }
 
-  return false;
+  const dates: Date[] = [];
+  const cursor = new Date(start);
+
+  while (cursor <= end) {
+    if (cursor.getUTCDay() === dayOfWeek) {
+      dates.push(new Date(cursor));
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return dates;
 }
