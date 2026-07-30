@@ -526,15 +526,13 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
     try {
       const form = event.currentTarget;
       const formData = new FormData(form);
-      const roleSelect = form.elements.namedItem("roleDefinitionIds") as HTMLSelectElement;
       await createMeeting({
         clubId: String(formData.get("clubId") || ""),
         title: String(formData.get("title") || ""),
         templateType: String(formData.get("templateType") || ""),
         meetingDate: String(formData.get("meetingDate") || ""),
         startTime: String(formData.get("startTime") || ""),
-        location: String(formData.get("location") || ""),
-        roleDefinitionIds: Array.from(roleSelect.selectedOptions).map((option) => option.value)
+        location: String(formData.get("location") || "")
       });
       form.reset();
       await refreshMeetings();
@@ -555,7 +553,6 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
     try {
       const form = event.currentTarget;
       const formData = new FormData(form);
-      const roleSelect = form.elements.namedItem("roleDefinitionIds") as HTMLSelectElement;
       const result = await createBulkMeetings({
         clubId: String(formData.get("clubId") || ""),
         titlePrefix: String(formData.get("titlePrefix") || ""),
@@ -564,8 +561,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
         endDate: String(formData.get("endDate") || ""),
         dayOfWeek: Number(formData.get("dayOfWeek") || 0),
         startTime: String(formData.get("startTime") || ""),
-        location: String(formData.get("location") || ""),
-        roleDefinitionIds: Array.from(roleSelect.selectedOptions).map((option) => option.value)
+        location: String(formData.get("location") || "")
       });
       form.reset();
       await refreshMeetings();
@@ -651,15 +647,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             <label>Date<input name="meetingDate" type="date" required /></label>
             <label>Start Time<input name="startTime" placeholder="10:00 AM" required /></label>
             <label>Location or Link<input name="location" placeholder="Ottawa Centre or online link" /></label>
-            <label className="wide-field">
-              Member-selectable role slots
-              <select name="roleDefinitionIds" multiple required>
-                {overview?.roleDefinitions.map((roleDefinition) => (
-                  <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
-                ))}
-              </select>
-              <small className="field-note">Students can claim open roles after the meeting is created. Admins and facilitators can assign or override roles.</small>
-            </label>
+            <p className="wide-field field-note">All standard iLEAP role slots are added automatically when the meeting is created.</p>
           </div>
           <button type="submit" disabled={isSubmitting || !overview?.clubs.length}>Create Meeting</button>
         </form>
@@ -706,15 +694,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             <label>End Date<input name="endDate" type="date" required /></label>
             <label>Start Time<input name="startTime" placeholder="10:00 AM" required /></label>
             <label>Location or Link<input name="location" placeholder="Ottawa Centre or online link" /></label>
-            <label className="wide-field">
-              Member-selectable role slots
-              <select name="roleDefinitionIds" multiple required>
-                {overview?.roleDefinitions.map((roleDefinition) => (
-                  <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
-                ))}
-              </select>
-              <small className="field-note">Creates one meeting on each matching weekday in the selected date range.</small>
-            </label>
+            <p className="wide-field field-note">Each generated meeting includes all standard iLEAP role slots automatically.</p>
           </div>
           <button type="submit" disabled={isSubmitting || !overview?.clubs.length}>Generate Meetings</button>
         </form>

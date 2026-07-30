@@ -310,7 +310,6 @@ export async function createMeeting(payload: {
   meetingDate: string;
   startTime: string;
   location?: string;
-  roleDefinitionIds: string[];
 }) {
   return request<{ meeting: Meeting }>("/api/meetings", {
     method: "POST",
@@ -327,7 +326,6 @@ export async function createBulkMeetings(payload: {
   dayOfWeek: number;
   startTime: string;
   location?: string;
-  roleDefinitionIds: string[];
 }) {
   return request<{ meetings: Meeting[] }>("/api/meetings/bulk", {
     method: "POST",
@@ -345,6 +343,34 @@ export async function assignMeetingSlot(meetingId: string, slotId: string, stude
   return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}`, {
     method: "PUT",
     body: JSON.stringify({ studentId })
+  });
+}
+
+export async function addMeetingRoleSlot(meetingId: string, payload: {
+  roleDefinitionId: string;
+  slotLabel?: string;
+  sortOrder?: number;
+}) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function editMeetingRoleSlot(meetingId: string, slotId: string, payload: {
+  roleDefinitionId?: string;
+  slotLabel?: string;
+  sortOrder?: number;
+}) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function removeMeetingRoleSlot(meetingId: string, slotId: string) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}`, {
+    method: "DELETE"
   });
 }
 

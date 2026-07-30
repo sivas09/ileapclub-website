@@ -1,6 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient, Role } from "@prisma/client";
+import { standardIleapRoleDefinitions } from "../src/server/services/standardRoles.js";
 
 const prisma = new PrismaClient();
 const seedAdminEmail = process.env.SEED_ADMIN_EMAIL || "admin@ileapclub.com";
@@ -127,51 +128,7 @@ async function main() {
     }
   });
 
-  const roleDefinitions = [
-    ["iChair", "Lead the meeting, transitions, introductions, and closing."],
-    ["iGrammarian", "Introduce the phrase or idiom of the day and report language usage."],
-    ["iFiller Counter", "Track filler words and repeated phrases."],
-    ["iFinesMaster", "Lead the fine, quiz, or participation challenge."],
-    ["iTimer", "Track timing and present the timer report."],
-    ["Prepared Speech 1", "Deliver prepared speech 1."],
-    ["Prepared Speech 2", "Deliver prepared speech 2."],
-    ["Prepared Speech 3", "Deliver prepared speech 3."],
-    ["Prepared Speech 4", "Deliver prepared speech 4."],
-    ["Prepared Speech Evaluator 1", "Evaluate prepared speech 1."],
-    ["Prepared Speech Evaluator 2", "Evaluate prepared speech 2."],
-    ["Prepared Speech Evaluator 3", "Evaluate prepared speech 3."],
-    ["Prepared Speech Evaluator 4", "Evaluate prepared speech 4."],
-    ["Prepared Presentation 1", "Deliver prepared presentation 1."],
-    ["Prepared Presentation 2", "Deliver prepared presentation 2."],
-    ["Prepared Presentation 3", "Deliver prepared presentation 3."],
-    ["Prepared Presentation 4", "Deliver prepared presentation 4."],
-    ["Prepared Presentation Evaluator 1", "Evaluate prepared presentation 1."],
-    ["Prepared Presentation Evaluator 2", "Evaluate prepared presentation 2."],
-    ["Prepared Presentation Evaluator 3", "Evaluate prepared presentation 3."],
-    ["Prepared Presentation Evaluator 4", "Evaluate prepared presentation 4."],
-    ["iThink on My Feet Master", "Lead the impromptu speaking segment."],
-    ["iThink on My Feet Participant 1", "Complete impromptu speaking participant role 1."],
-    ["iThink on My Feet Participant 2", "Complete impromptu speaking participant role 2."],
-    ["iThink on My Feet Participant 3", "Complete impromptu speaking participant role 3."],
-    ["iThink on My Feet Participant 4", "Complete impromptu speaking participant role 4."],
-    ["iThink on My Feet Evaluator 1", "Evaluate impromptu participant 1."],
-    ["iThink on My Feet Evaluator 2", "Evaluate impromptu participant 2."],
-    ["iThink on My Feet Evaluator 3", "Evaluate impromptu participant 3."],
-    ["iThink on My Feet Evaluator 4", "Evaluate impromptu participant 4."],
-    ["iStory and Joke Master", "Lead the story and joke segment."],
-    ["iStory and Joke Speaker 1", "Deliver story or joke role 1."],
-    ["iStory and Joke Speaker 2", "Deliver story or joke role 2."],
-    ["iStory and Joke Evaluator 1", "Evaluate story or joke role 1."],
-    ["iStory and Joke Evaluator 2", "Evaluate story or joke role 2."],
-    ["Case Study Lead (20 Mins)", "Lead the 20-minute case study discussion."],
-    ["iChair Report", "Present the chair report."],
-    ["iGrammarian Report", "Present the grammarian report."],
-    ["iFiller Counter Report", "Present the filler counter report."],
-    ["iFinesMaster Report", "Present the fines master report."],
-    ["iTimer Report", "Present the timer report."]
-  ] as const;
-
-  for (const [name, description] of roleDefinitions) {
+  for (const [name, description] of standardIleapRoleDefinitions) {
     await prisma.roleDefinition.upsert({
       where: { name },
       update: { description, isActive: true },
@@ -219,10 +176,10 @@ async function main() {
   });
 
   const seededRoles = await prisma.roleDefinition.findMany({
-    where: { name: { in: roleDefinitions.map(([name]) => name) } }
+    where: { name: { in: standardIleapRoleDefinitions.map(([name]) => name) } }
   });
 
-  const seededRoleOrder = roleDefinitions.map(([name]) => name);
+  const seededRoleOrder = standardIleapRoleDefinitions.map(([name]) => name);
   const seededRoleByName = new Map(seededRoles.map((role) => [role.name, role]));
 
   for (const [index, roleName] of seededRoleOrder.entries()) {

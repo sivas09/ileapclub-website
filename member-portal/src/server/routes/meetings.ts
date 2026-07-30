@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
 import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
+import { standardIleapRoleNames } from "../services/standardRoles.js";
 
 const createMeetingSchema = z.object({
   clubId: z.string().min(1),
@@ -12,8 +13,7 @@ const createMeetingSchema = z.object({
   templateType: z.string().trim().min(2),
   meetingDate: z.string().min(10),
   startTime: z.string().trim().min(1),
-  location: z.string().trim().optional(),
-  roleDefinitionIds: z.array(z.string()).min(1)
+  location: z.string().trim().optional()
 });
 
 const bulkMeetingSchema = z.object({
@@ -24,12 +24,17 @@ const bulkMeetingSchema = z.object({
   endDate: z.string().min(10),
   dayOfWeek: z.coerce.number().int().min(0).max(6),
   startTime: z.string().trim().min(1),
-  location: z.string().trim().optional(),
-  roleDefinitionIds: z.array(z.string()).min(1)
+  location: z.string().trim().optional()
 });
 
 const assignRoleSchema = z.object({
   studentId: z.string().nullable().optional()
+});
+
+const roleSlotSchema = z.object({
+  roleDefinitionId: z.string().min(1),
+  slotLabel: z.string().trim().optional(),
+  sortOrder: z.coerce.number().int().min(1).optional()
 });
 
 const attendanceSchema = z.object({
@@ -102,7 +107,7 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
   const parsed = createMeetingSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Enter meeting details and choose at least one role." });
+    response.status(400).json({ message: "Enter meeting details." });
     return;
   }
 
@@ -114,20 +119,12 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
     return;
   }
 
-  const roleDefinitions = await prisma.roleDefinition.findMany({
-    where: {
-      id: { in: data.roleDefinitionIds },
-      isActive: true
-    },
-    select: { id: true, name: true }
-  });
+  const roleDefinitions = await getStandardRoleDefinitions();
 
-  if (roleDefinitions.length !== new Set(data.roleDefinitionIds).size) {
-    response.status(400).json({ message: "Choose valid active roles for this meeting." });
+  if (roleDefinitions.length !== standardIleapRoleNames.length) {
+    response.status(400).json({ message: "Standard iLEAP roles are not fully configured. Run the database seed first." });
     return;
   }
-
-  const roleNameById = new Map(roleDefinitions.map((roleDefinition) => [roleDefinition.id, roleDefinition.name]));
 
   const meeting = await prisma.$transaction(async (tx) => {
     const createdMeeting = await tx.meeting.create({
@@ -142,10 +139,10 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
     });
 
     await tx.meetingRoleSlot.createMany({
-      data: data.roleDefinitionIds.map((roleDefinitionId, index) => ({
+      data: roleDefinitions.map((roleDefinition, index) => ({
         meetingId: createdMeeting.id,
-        roleDefinitionId,
-        slotLabel: roleNameById.get(roleDefinitionId) ?? `Role ${index + 1}`,
+        roleDefinitionId: roleDefinition.id,
+        slotLabel: roleDefinition.name,
         sortOrder: index + 1
       }))
     });
@@ -170,7 +167,7 @@ meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
   const parsed = bulkMeetingSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Enter term dates, meeting day, time, and at least one role." });
+    response.status(400).json({ message: "Enter term dates, meeting day, and time." });
     return;
   }
 
@@ -194,20 +191,12 @@ meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
     return;
   }
 
-  const roleDefinitions = await prisma.roleDefinition.findMany({
-    where: {
-      id: { in: data.roleDefinitionIds },
-      isActive: true
-    },
-    select: { id: true, name: true }
-  });
+  const roleDefinitions = await getStandardRoleDefinitions();
 
-  if (roleDefinitions.length !== new Set(data.roleDefinitionIds).size) {
-    response.status(400).json({ message: "Choose valid active roles for these meetings." });
+  if (roleDefinitions.length !== standardIleapRoleNames.length) {
+    response.status(400).json({ message: "Standard iLEAP roles are not fully configured. Run the database seed first." });
     return;
   }
-
-  const roleNameById = new Map(roleDefinitions.map((roleDefinition) => [roleDefinition.id, roleDefinition.name]));
 
   const meetings = await prisma.$transaction(async (tx) => {
     const createdMeetings = [];
@@ -225,10 +214,10 @@ meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
       });
 
       await tx.meetingRoleSlot.createMany({
-        data: data.roleDefinitionIds.map((roleDefinitionId, roleIndex) => ({
+        data: roleDefinitions.map((roleDefinition, roleIndex) => ({
           meetingId: createdMeeting.id,
-          roleDefinitionId,
-          slotLabel: roleNameById.get(roleDefinitionId) ?? `Role ${roleIndex + 1}`,
+          roleDefinitionId: roleDefinition.id,
+          slotLabel: roleDefinition.name,
           sortOrder: roleIndex + 1
         }))
       });
@@ -270,6 +259,61 @@ meetingsRouter.get("/:meetingId/agenda.rtf", asyncRoute(async (request, response
   response.setHeader("Content-Type", "application/rtf; charset=utf-8");
   response.setHeader("Content-Disposition", `attachment; filename="${agendaFileName(meeting)}"`);
   response.send(rtf);
+}));
+
+meetingsRouter.post("/:meetingId/slots", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can add role slots." });
+    return;
+  }
+
+  const parsed = roleSlotSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Choose a valid role slot to add." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+
+  if (!meeting) {
+    response.status(404).json({ message: "Meeting not found." });
+    return;
+  }
+
+  if (!(await canManageClubId(user.id, user.role, meeting.clubId))) {
+    response.status(403).json({ message: "You cannot manage roles for this meeting." });
+    return;
+  }
+
+  const roleDefinition = await prisma.roleDefinition.findFirst({
+    where: {
+      id: parsed.data.roleDefinitionId,
+      isActive: true
+    }
+  });
+
+  if (!roleDefinition) {
+    response.status(400).json({ message: "Choose an active role definition." });
+    return;
+  }
+
+  const nextSortOrder = parsed.data.sortOrder ?? await getNextRoleSlotSortOrder(meetingId);
+
+  await prisma.meetingRoleSlot.create({
+    data: {
+      meetingId,
+      roleDefinitionId: roleDefinition.id,
+      slotLabel: parsed.data.slotLabel || roleDefinition.name,
+      sortOrder: nextSortOrder
+    }
+  });
+
+  const updatedMeeting = await getMeeting(meetingId);
+  response.status(201).json({ meeting: updatedMeeting });
 }));
 
 meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request, response) => {
@@ -359,6 +403,101 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
 
   const meeting = await getMeeting(meetingId);
   response.json({ meeting });
+}));
+
+meetingsRouter.patch("/:meetingId/slots/:slotId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can edit role slots." });
+    return;
+  }
+
+  const parsed = roleSlotSchema.partial().safeParse(request.body);
+
+  if (!parsed.success || Object.keys(parsed.data).length === 0) {
+    response.status(400).json({ message: "Enter role slot changes." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const slotId = String(request.params.slotId);
+  const slot = await prisma.meetingRoleSlot.findUnique({
+    where: { id: slotId },
+    include: { meeting: true, roleDefinition: true }
+  });
+
+  if (!slot || slot.meetingId !== meetingId) {
+    response.status(404).json({ message: "Role slot not found." });
+    return;
+  }
+
+  if (!(await canManageClubId(user.id, user.role, slot.meeting.clubId))) {
+    response.status(403).json({ message: "You cannot manage roles for this meeting." });
+    return;
+  }
+
+  const roleDefinition = parsed.data.roleDefinitionId
+    ? await prisma.roleDefinition.findFirst({
+      where: {
+        id: parsed.data.roleDefinitionId,
+        isActive: true
+      }
+    })
+    : null;
+
+  if (parsed.data.roleDefinitionId && !roleDefinition) {
+    response.status(400).json({ message: "Choose an active role definition." });
+    return;
+  }
+
+  await prisma.meetingRoleSlot.update({
+    where: { id: slot.id },
+    data: {
+      roleDefinitionId: roleDefinition?.id,
+      slotLabel: parsed.data.slotLabel || roleDefinition?.name || undefined,
+      sortOrder: parsed.data.sortOrder
+    }
+  });
+
+  const updatedMeeting = await getMeeting(meetingId);
+  response.json({ meeting: updatedMeeting });
+}));
+
+meetingsRouter.delete("/:meetingId/slots/:slotId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can remove role slots." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const slotId = String(request.params.slotId);
+  const slot = await prisma.meetingRoleSlot.findUnique({
+    where: { id: slotId },
+    include: { meeting: true, score: true }
+  });
+
+  if (!slot || slot.meetingId !== meetingId) {
+    response.status(404).json({ message: "Role slot not found." });
+    return;
+  }
+
+  if (!(await canManageClubId(user.id, user.role, slot.meeting.clubId))) {
+    response.status(403).json({ message: "You cannot manage roles for this meeting." });
+    return;
+  }
+
+  if (slot.assignedStudentId || slot.score) {
+    response.status(409).json({ message: "Clear the assignment and score before removing this role slot." });
+    return;
+  }
+
+  await prisma.meetingRoleSlot.delete({ where: { id: slot.id } });
+
+  const updatedMeeting = await getMeeting(meetingId);
+  response.json({ meeting: updatedMeeting });
 }));
 
 meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, response) => {
@@ -604,6 +743,16 @@ async function getMeeting(meetingId: string) {
   });
 }
 
+async function getNextRoleSlotSortOrder(meetingId: string) {
+  const lastSlot = await prisma.meetingRoleSlot.findFirst({
+    where: { meetingId },
+    orderBy: { sortOrder: "desc" },
+    select: { sortOrder: true }
+  });
+
+  return (lastSlot?.sortOrder ?? 0) + 1;
+}
+
 async function getVisibleClubFilter(userId: string, role: Role) {
   if (role === Role.ADMIN) {
     return null;
@@ -737,4 +886,21 @@ function getMeetingDates(startDate: string, endDate: string, dayOfWeek: number) 
   }
 
   return dates;
+}
+
+async function getStandardRoleDefinitions() {
+  const roles = await prisma.roleDefinition.findMany({
+    where: {
+      name: { in: standardIleapRoleNames },
+      isActive: true
+    },
+    select: { id: true, name: true }
+  });
+  const roleByName = new Map(roles.map((role) => [role.name, role]));
+
+  return standardIleapRoleNames.flatMap((roleName) => {
+    const role = roleByName.get(roleName);
+
+    return role ? [role] : [];
+  });
 }
