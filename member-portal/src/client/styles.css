@@ -886,6 +886,13 @@ button {
   background: #f8fafc;
 }
 
+.record-list li > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .record-list strong {
   color: #10223f;
 }
@@ -894,6 +901,44 @@ button {
   color: #64748b;
   font-size: 0.92rem;
   line-height: 1.45;
+}
+
+.status-badge {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.status-badge.is-active {
+  color: #155c3d;
+  background: #def7eb;
+}
+
+.status-badge.is-inactive {
+  color: #7f1d1d;
+  background: #fee2e2;
+}
+
+.text-action {
+  justify-self: start;
+  min-height: 32px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.text-action:hover {
+  border-color: var(--portal-teal);
+  color: var(--portal-teal);
 }
 
 @media (max-width: 860px) {

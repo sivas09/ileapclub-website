@@ -272,6 +272,13 @@ export async function createCentre(payload: {
   });
 }
 
+export async function setCentreActive(centreId: string, isActive: boolean) {
+  return request<{ centre: Centre }>(`/api/admin/centres/${centreId}/archive`, {
+    method: "PATCH",
+    body: JSON.stringify({ isActive })
+  });
+}
+
 export async function createClub(payload: {
   centreId: string;
   name: string;
@@ -280,6 +287,13 @@ export async function createClub(payload: {
   return request<{ club: Club }>("/api/admin/clubs", {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function setClubActive(clubId: string, isActive: boolean) {
+  return request<{ club: Club }>(`/api/admin/clubs/${clubId}/archive`, {
+    method: "PATCH",
+    body: JSON.stringify({ isActive })
   });
 }
 

@@ -131,11 +131,30 @@ adminRouter.post("/centres", asyncRoute(async (request, response) => {
   response.status(201).json({ centre });
 }));
 
+adminRouter.patch("/centres/:centreId/archive", asyncRoute(async (request, response) => {
+  const centreId = String(request.params.centreId);
+  const isActive = request.body?.isActive === true;
+  const centre = await prisma.centre.update({
+    where: { id: centreId },
+    data: { isActive },
+    include: { clubs: true }
+  });
+
+  response.json({ centre });
+}));
+
 adminRouter.post("/clubs", asyncRoute(async (request, response) => {
   const parsed = clubSchema.safeParse(request.body);
 
   if (!parsed.success) {
     response.status(400).json({ message: "Select a centre and enter club details." });
+    return;
+  }
+
+  const centre = await prisma.centre.findUnique({ where: { id: parsed.data.centreId } });
+
+  if (!centre?.isActive) {
+    response.status(400).json({ message: "Choose an active centre before creating a club." });
     return;
   }
 
@@ -145,6 +164,30 @@ adminRouter.post("/clubs", asyncRoute(async (request, response) => {
   });
 
   response.status(201).json({ club });
+}));
+
+adminRouter.patch("/clubs/:clubId/archive", asyncRoute(async (request, response) => {
+  const clubId = String(request.params.clubId);
+  const isActive = request.body?.isActive === true;
+  const club = await prisma.club.update({
+    where: { id: clubId },
+    data: { isActive },
+    include: {
+      centre: true,
+      studentMemberships: {
+        include: {
+          student: {
+            include: { user: true }
+          }
+        }
+      },
+      facilitators: {
+        include: { facilitator: true }
+      }
+    }
+  });
+
+  response.json({ club });
 }));
 
 adminRouter.post("/users", asyncRoute(async (request, response) => {

@@ -27,6 +27,8 @@ import {
   PortalUser,
   Role,
   scoreMeetingSlot,
+  setCentreActive,
+  setClubActive,
   storeToken,
   StudentProgress,
   toggleMeetingLock,
@@ -286,13 +288,14 @@ function AdminWorkspace() {
     successMessage: string
   ) {
     event.preventDefault();
+    const form = event.currentTarget;
     setError("");
     setStatus("");
     setIsSubmitting(true);
 
     try {
-      await action(event.currentTarget);
-      event.currentTarget.reset();
+      await action(form);
+      form?.reset();
       setNewUserRole("STUDENT");
       await refreshOverview();
       setStatus(successMessage);
@@ -304,6 +307,40 @@ function AdminWorkspace() {
   }
 
   const clubs = overview?.clubs ?? [];
+  const activeCentres = overview?.centres.filter((centre) => centre.isActive) ?? [];
+  const activeClubs = clubs.filter((club) => club.isActive && club.centre?.isActive !== false);
+
+  async function updateCentreStatus(centreId: string, isActive: boolean) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await setCentreActive(centreId, isActive);
+      await refreshOverview();
+      setStatus(isActive ? "Centre restored." : "Centre archived.");
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update centre.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function updateClubStatus(clubId: string, isActive: boolean) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await setClubActive(clubId, isActive);
+      await refreshOverview();
+      setStatus(isActive ? "Club restored." : "Club archived.");
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update club.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <section className="admin-workspace" id="admin" aria-label="Admin setup workspace">
@@ -374,7 +411,7 @@ function AdminWorkspace() {
             Centre
             <select name="centreId" required>
               <option value="">Select centre</option>
-              {overview?.centres.map((centre) => (
+              {activeCentres.map((centre) => (
                 <option key={centre.id} value={centre.id}>{centre.name} - {centre.city}</option>
               ))}
             </select>
@@ -428,7 +465,7 @@ function AdminWorkspace() {
                 <label>
                   Clubs
                   <select name="clubIds" multiple>
-                    {clubs.map((club) => (
+                    {activeClubs.map((club) => (
                       <option key={club.id} value={club.id}>{club.name}</option>
                     ))}
                   </select>
@@ -439,7 +476,7 @@ function AdminWorkspace() {
               <label>
                 Facilitator Clubs
                 <select name="facilitatorClubIds" multiple>
-                  {clubs.map((club) => (
+                  {activeClubs.map((club) => (
                     <option key={club.id} value={club.id}>{club.name}</option>
                   ))}
                 </select>
@@ -455,7 +492,16 @@ function AdminWorkspace() {
           {isLoading ? <p>Loading...</p> : overview?.centres.length ? (
             <ul className="record-list">
               {overview.centres.map((centre) => (
-                <li key={centre.id}><strong>{centre.name}</strong><span>{centre.city}, {centre.province} - {centre.clubs?.length ?? 0} clubs</span></li>
+                <li key={centre.id}>
+                  <div>
+                    <strong>{centre.name}</strong>
+                    <StatusBadge isActive={centre.isActive} />
+                  </div>
+                  <span>{centre.city}, {centre.province} - {centre.clubs?.length ?? 0} clubs</span>
+                  <button type="button" className="text-action" onClick={() => updateCentreStatus(centre.id, !centre.isActive)} disabled={isSubmitting}>
+                    {centre.isActive ? "Archive Centre" : "Restore Centre"}
+                  </button>
+                </li>
               ))}
             </ul>
           ) : <p>No centres yet.</p>}
@@ -465,7 +511,16 @@ function AdminWorkspace() {
           {overview?.clubs.length ? (
             <ul className="record-list">
               {overview.clubs.map((club) => (
-                <li key={club.id}><strong>{club.name}</strong><span>{club.program} - {club.studentMemberships?.length ?? 0} students - {club.facilitators?.length ?? 0} facilitators</span></li>
+                <li key={club.id}>
+                  <div>
+                    <strong>{club.name}</strong>
+                    <StatusBadge isActive={club.isActive} />
+                  </div>
+                  <span>{club.program} - {club.studentMemberships?.length ?? 0} students - {club.facilitators?.length ?? 0} facilitators</span>
+                  <button type="button" className="text-action" onClick={() => updateClubStatus(club.id, !club.isActive)} disabled={isSubmitting}>
+                    {club.isActive ? "Archive Club" : "Restore Club"}
+                  </button>
+                </li>
               ))}
             </ul>
           ) : <p>No clubs yet.</p>}
@@ -1164,6 +1219,10 @@ function DataPanel({ title, children }: { title: string; children: ReactNode }) 
       {children}
     </article>
   );
+}
+
+function StatusBadge({ isActive }: { isActive: boolean }) {
+  return <em className={isActive ? "status-badge is-active" : "status-badge is-inactive"}>{isActive ? "Active" : "Archived"}</em>;
 }
 
 function formatRole(role: Role) {

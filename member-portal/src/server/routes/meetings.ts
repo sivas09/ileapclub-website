@@ -73,7 +73,10 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
       orderBy: { name: "asc" }
     }),
     prisma.club.findMany({
-      where: clubFilter ? { id: { in: clubFilter } } : {},
+      where: {
+        isActive: true,
+        ...(clubFilter ? { id: { in: clubFilter } } : {})
+      },
       orderBy: { name: "asc" },
       include: { centre: true }
     }),
@@ -116,6 +119,11 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
 
   if (!canManageClub) {
     response.status(403).json({ message: "You cannot create meetings for this club." });
+    return;
+  }
+
+  if (!(await isActiveClub(data.clubId))) {
+    response.status(400).json({ message: "Choose an active club before creating a meeting." });
     return;
   }
 
@@ -176,6 +184,11 @@ meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
 
   if (!canManageClub) {
     response.status(403).json({ message: "You cannot generate meetings for this club." });
+    return;
+  }
+
+  if (!(await isActiveClub(data.clubId))) {
+    response.status(400).json({ message: "Choose an active club before generating meetings." });
     return;
   }
 
@@ -840,6 +853,20 @@ async function isStudentInClub(studentId: string, clubId: string) {
   });
 
   return membership?.status === "ACTIVE";
+}
+
+async function isActiveClub(clubId: string) {
+  const club = await prisma.club.findUnique({
+    where: { id: clubId },
+    select: {
+      isActive: true,
+      centre: {
+        select: { isActive: true }
+      }
+    }
+  });
+
+  return Boolean(club?.isActive && club.centre.isActive);
 }
 
 async function canViewMeeting(userId: string, role: Role, clubId: string) {
