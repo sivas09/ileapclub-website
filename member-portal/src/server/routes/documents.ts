@@ -40,7 +40,7 @@ const documentSchema = z.object({
   title: z.string().trim().min(2),
   description: z.string().trim().optional(),
   fileName: z.string().trim().optional(),
-  fileUrl: z.string().trim().url(),
+  fileUrl: z.string().trim().url().or(z.literal("")).optional(),
   programLevel: z.enum(["JUNIOR", "SENIOR"]),
   bandLevel: z.enum(bandLevels),
   clubId: z.string().nullable().optional(),
@@ -175,7 +175,7 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
       title: data.title,
       description: data.description || null,
       fileName: getDocumentFileName(data.fileName, data.fileUrl, data.title),
-      fileUrl: data.fileUrl,
+      fileUrl: data.fileUrl ?? "",
       programLevel: data.programLevel,
       bandLevel: data.bandLevel,
       bandOrder: getBandOrder(data.bandLevel),
@@ -386,9 +386,13 @@ function stringQuery(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
-function getDocumentFileName(fileName: string | undefined, fileUrl: string, title: string) {
+function getDocumentFileName(fileName: string | undefined, fileUrl: string | undefined, title: string) {
   if (fileName?.trim()) {
     return fileName.trim();
+  }
+
+  if (!fileUrl) {
+    return title.trim();
   }
 
   try {

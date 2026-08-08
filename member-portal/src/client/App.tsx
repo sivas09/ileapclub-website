@@ -331,6 +331,7 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [newUserRole, setNewUserRole] = useState<Role>("STUDENT");
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [editingUserRole, setEditingUserRole] = useState<Role>("STUDENT");
@@ -1456,6 +1457,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       });
       form.reset();
       await refreshDocuments();
+      setIsAddFormOpen(false);
       setStatus("Document added.");
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Unable to add document.");
@@ -1499,6 +1501,9 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
 
+      <div className="document-section-heading">
+        <h3>Find Existing Documents</h3>
+      </div>
       <form className="document-filter-form" onSubmit={(event) => event.preventDefault()}>
         <label>
           Program
@@ -1544,29 +1549,37 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
         </label>
       </form>
 
-      <form className="document-form" onSubmit={handleCreateDocument}>
-        <h3>Add Document</h3>
-        <label>Document Title<input name="title" required /></label>
-        <label>Description <span>Optional</span><textarea name="description" rows={3} /></label>
-        <label>
-          Program Level
-          <select name="programLevel" defaultValue="SENIOR">
-            {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        <label>
-          Band Level
-          <select name="bandLevel" defaultValue="White">
-            {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
-          </select>
-        </label>
-        <label className="document-link-field">
-          Document Link
-          <input name="fileUrl" type="url" placeholder="Paste Google Drive, PDF, or website link" required />
-        </label>
-        <p className="document-helper">File upload will be added later with Cloudflare R2 storage. Use a Google Drive, PDF, DOCX, PPTX, or website link for now.</p>
-        <button type="submit" disabled={isSubmitting}>Add Document</button>
-      </form>
+      <div className="document-add-toggle">
+        <button type="button" onClick={() => setIsAddFormOpen((isOpen) => !isOpen)}>
+          {isAddFormOpen ? "Cancel New Document" : "Add New Document"}
+        </button>
+      </div>
+
+      {isAddFormOpen ? (
+        <form className="document-form" onSubmit={handleCreateDocument}>
+          <h3>Add New Document</h3>
+          <label>Document Title<input name="title" required /></label>
+          <label>Description <span>Optional</span><textarea name="description" rows={3} /></label>
+          <label>
+            Program Level for this resource
+            <select name="programLevel" defaultValue="SENIOR">
+              {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Band Level for this resource
+            <select name="bandLevel" defaultValue="White">
+              {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
+            </select>
+          </label>
+          <label className="document-link-field">
+            Document Link <span>Optional</span>
+            <input name="fileUrl" type="url" placeholder="Paste Google Drive, PDF, or website link" />
+          </label>
+          <p className="document-helper">You can paste a Google Drive, PDF, DOCX, PPTX, or website link now. File upload will be added later.</p>
+          <button type="submit" disabled={isSubmitting}>Add Document</button>
+        </form>
+      ) : null}
 
       {isLoading ? <p className="loading-state">Loading documents...</p> : null}
       {!isLoading && !documents.length ? <p className="loading-state">No documents found.</p> : null}
@@ -1633,7 +1646,7 @@ function ManagerDocumentCard({
         <form className="document-edit-form" onSubmit={handleSubmit}>
           <label>Document Title<input name="title" defaultValue={document.title} required /></label>
           <label>Description<textarea name="description" defaultValue={document.description ?? ""} rows={3} /></label>
-          <label>Document Link<input name="fileUrl" type="url" defaultValue={document.fileUrl} required /></label>
+          <label>Document Link<input name="fileUrl" type="url" defaultValue={document.fileUrl} placeholder="Paste Google Drive, PDF, or website link" /></label>
           <label>
             Program
             <select name="programLevel" defaultValue={document.programLevel}>
@@ -1679,8 +1692,11 @@ function ManagerDocumentCard({
             <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
             <div><dt>Status</dt><dd>{document.status === "ARCHIVED" ? "Archived" : "Active"}</dd></div>
           </dl>
+          {!document.fileUrl ? <p className="document-link-missing">Link not added yet</p> : null}
           <div className="document-actions">
-            <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
+            {document.fileUrl
+              ? <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
+              : <span className="document-disabled-action">Open / Download</span>}
             {canEdit ? <button type="button" onClick={onEdit}>Edit</button> : null}
             {canEdit ? (
               <button type="button" onClick={() => onStatusChange(document)} disabled={isSubmitting}>
@@ -1761,8 +1777,11 @@ function ResourceGroup({ title, documents, emptyText }: { title: string; documen
                 <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
                 <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
               </dl>
+              {!document.fileUrl ? <p className="document-link-missing">Resource link not added yet.</p> : null}
               <div className="document-actions">
-                <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
+                {document.fileUrl
+                  ? <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
+                  : <span className="document-disabled-action">Coming soon</span>}
               </div>
             </article>
           ))}
