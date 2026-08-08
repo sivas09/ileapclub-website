@@ -2131,7 +2131,7 @@ function FeedbackReportPanel() {
       </div>
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
       {isLoading ? <p className="loading-state">Loading feedback...</p> : null}
-      {!isLoading && !feedback.length ? <p className="loading-state">No scored role feedback yet.</p> : null}
+      {!isLoading && !feedback.length ? <p className="loading-state">No facilitator feedback yet.</p> : null}
       {feedback.length ? (
         <div className="feedback-table-wrap">
           <table className="feedback-table">
@@ -2538,7 +2538,7 @@ function StudentProgressDashboard() {
               ) : <p>No roles claimed yet.</p>}
             </DataPanel>
 
-            <DataPanel title="Score Feedback">
+            <DataPanel title="Role-Specific Scores">
               {progress.student.roleScores.length ? (
                 <ul className="record-list">
                   {progress.student.roleScores.slice(0, 8).map((score) => (
@@ -2548,7 +2548,7 @@ function StudentProgressDashboard() {
                     </li>
                   ))}
                 </ul>
-              ) : <p>No scores yet.</p>}
+              ) : <p>No role-specific scores yet.</p>}
             </DataPanel>
 
             <DataPanel title="Attendance History">

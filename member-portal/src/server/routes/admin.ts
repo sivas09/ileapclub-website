@@ -722,6 +722,8 @@ async function deleteSampleUser(userId: string, currentUserId: string) {
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    const roleScores = await tx.meetingRoleScore.deleteMany({ where: { scoredByUserId: user.id } });
+    const studentFeedback = await tx.studentMeetingFeedback.deleteMany({ where: { scoredByUserId: user.id } });
     const clubAssignments = await tx.clubFacilitator.deleteMany({ where: { facilitatorId: user.id } });
     const centreAssignments = await tx.centreFacilitator.deleteMany({ where: { facilitatorId: user.id } });
 
@@ -729,6 +731,8 @@ async function deleteSampleUser(userId: string, currentUserId: string) {
 
     return {
       deletedUser: user.email,
+      deletedRoleScores: roleScores.count,
+      deletedStudentFeedback: studentFeedback.count,
       deletedClubAssignments: clubAssignments.count,
       deletedCentreAssignments: centreAssignments.count
     };
