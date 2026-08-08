@@ -168,6 +168,13 @@ export type StudentFeedbackEntry = {
   scoredAt: string;
 };
 
+export type StudentClubMember = {
+  displayName: string;
+  programLevel?: string | null;
+  currentBandLevel: string;
+  clubName: string;
+};
+
 export type BandRequirement = {
   id: string;
   programLevel: string;
@@ -498,6 +505,10 @@ export async function scoreMeetingSlot(meetingId: string, slotId: string, payloa
 
 export async function getStudentProgress() {
   return request<StudentProgress>("/api/student/me/progress");
+}
+
+export async function getStudentClubMembers() {
+  return request<{ members: StudentClubMember[] }>("/api/student/me/club-members");
 }
 
 export async function fetchStudentProgressForManager(studentId: string) {

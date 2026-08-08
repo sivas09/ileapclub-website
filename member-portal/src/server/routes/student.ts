@@ -193,6 +193,82 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
   });
 }));
 
+studentRouter.get("/me/club-members", requireRole([Role.STUDENT]), asyncRoute(async (request, response) => {
+  const student = await prisma.student.findUnique({
+    where: { userId: request.user!.id },
+    include: {
+      clubMemberships: {
+        where: {
+          status: "ACTIVE",
+          club: {
+            isActive: true,
+            centre: { isActive: true }
+          }
+        },
+        include: {
+          club: true
+        }
+      }
+    }
+  });
+
+  if (!student) {
+    response.status(404).json({ message: "Student profile not found." });
+    return;
+  }
+
+  const clubIds = student.clubMemberships.map((membership) => membership.clubId);
+
+  if (!clubIds.length) {
+    response.json({ members: [] });
+    return;
+  }
+
+  const memberships = await prisma.studentClubMembership.findMany({
+    where: {
+      clubId: { in: clubIds },
+      status: "ACTIVE",
+      club: {
+        isActive: true,
+        centre: { isActive: true }
+      },
+      student: {
+        user: {
+          role: Role.STUDENT,
+          isActive: true
+        }
+      }
+    },
+    orderBy: [
+      { club: { name: "asc" } },
+      { student: { user: { lastName: "asc" } } },
+      { student: { user: { firstName: "asc" } } }
+    ],
+    include: {
+      club: true,
+      student: {
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  response.json({
+    members: memberships.map((membership) => ({
+      displayName: `${membership.student.user.firstName} ${membership.student.user.lastName}`,
+      programLevel: membership.student.programLevel ?? inferProgramLevel(membership.club.program),
+      currentBandLevel: membership.student.bandLevel,
+      clubName: membership.club.name
+    }))
+  });
+}));
+
 studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (request, response) => {
   const user = request.user!;
 

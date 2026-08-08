@@ -21,6 +21,7 @@ import {
   getFeedbackReport,
   getMeetingsOverview,
   getStoredToken,
+  getStudentClubMembers,
   getStudentProgress,
   login,
   Meeting,
@@ -34,6 +35,7 @@ import {
   setClubActive,
   setUserActive,
   storeToken,
+  StudentClubMember,
   StudentProgress,
   toggleMeetingLock,
   updateMeetingDetails,
@@ -110,6 +112,7 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
   STUDENT: [
     { href: "#overview", label: "Overview" },
     { href: "#meetings", label: "Meetings" },
+    { href: "#club-members", label: "My Club" },
     { href: "#progress", label: "My Progress" }
   ]
 };
@@ -274,6 +277,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
       {user.role === "ADMIN" ? <AdminWorkspace currentUser={user} /> : null}
       <MeetingWorkspace user={user} />
       {user.role !== "STUDENT" ? <FeedbackReportPanel /> : null}
+      {user.role === "STUDENT" ? <StudentClubMembersPanel /> : null}
       {user.role === "STUDENT" ? <StudentProgressDashboard /> : null}
       </div>
     </main>
@@ -1840,6 +1844,59 @@ function ScoreFeedbackRow({
       </label>
       <button type="button" onClick={() => onScore(Number(score), feedback)} disabled={isSubmitting || score === ""}>Save Feedback</button>
     </article>
+  );
+}
+
+function StudentClubMembersPanel() {
+  const [members, setMembers] = useState<StudentClubMember[]>([]);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    getStudentClubMembers()
+      .then((result) => setMembers(result.members))
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load club members."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  return (
+    <section className="student-progress" id="club-members" aria-label="Student club members">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">My club</p>
+          <h2>Club Members</h2>
+        </div>
+      </div>
+
+      {isLoading ? <p className="loading-state">Loading club members...</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {!isLoading && !members.length ? <p className="loading-state">No active club members found.</p> : null}
+
+      {members.length ? (
+        <div className="student-feedback-table-wrap">
+          <table className="student-feedback-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Current Band</th>
+                <th>Program Level</th>
+                <th>Club</th>
+              </tr>
+            </thead>
+            <tbody>
+              {members.map((member, index) => (
+                <tr key={`${member.clubName}-${member.displayName}-${index}`}>
+                  <td>{member.displayName}</td>
+                  <td>{member.currentBandLevel}</td>
+                  <td>{formatProgramLevel(member.programLevel)}</td>
+                  <td>{member.clubName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
