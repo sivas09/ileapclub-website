@@ -50,6 +50,11 @@ const scoreSchema = z.object({
   feedback: z.string().trim().optional()
 });
 
+const studentFeedbackSchema = scoreSchema.extend({
+  studentId: z.string().min(1),
+  roleSlotId: z.string().nullable().optional()
+});
+
 export const meetingsRouter = Router();
 
 meetingsRouter.use(requireAuth);
@@ -831,6 +836,78 @@ meetingsRouter.put("/:meetingId/slots/:slotId/score", asyncRoute(async (request,
   response.json({ meeting: updatedMeeting });
 }));
 
+meetingsRouter.put("/:meetingId/student-feedback", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can save student feedback." });
+    return;
+  }
+
+  const parsed = studentFeedbackSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Choose a student and enter a score between 0 and 100." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+
+  if (!meeting) {
+    response.status(404).json({ message: "Meeting not found." });
+    return;
+  }
+
+  if (!(await canManageClubId(user.id, user.role, meeting.clubId))) {
+    response.status(403).json({ message: "You cannot save feedback for this meeting." });
+    return;
+  }
+
+  const student = await prisma.student.findUnique({ where: { id: parsed.data.studentId } });
+
+  if (!student || !(await isStudentInClub(student.id, meeting.clubId))) {
+    response.status(400).json({ message: "Choose a student assigned to this club." });
+    return;
+  }
+
+  if (parsed.data.roleSlotId) {
+    const roleSlot = await prisma.meetingRoleSlot.findUnique({ where: { id: parsed.data.roleSlotId } });
+
+    if (!roleSlot || roleSlot.meetingId !== meetingId || roleSlot.assignedStudentId !== student.id) {
+      response.status(400).json({ message: "Choose one of this student's assigned roles for this meeting." });
+      return;
+    }
+  }
+
+  await prisma.studentMeetingFeedback.upsert({
+    where: {
+      meetingId_studentId: {
+        meetingId,
+        studentId: student.id
+      }
+    },
+    update: {
+      roleSlotId: parsed.data.roleSlotId || null,
+      score: parsed.data.score,
+      feedback: parsed.data.feedback || null,
+      scoredByUserId: user.id,
+      scoredAt: new Date()
+    },
+    create: {
+      meetingId,
+      studentId: student.id,
+      roleSlotId: parsed.data.roleSlotId || null,
+      score: parsed.data.score,
+      feedback: parsed.data.feedback || null,
+      scoredByUserId: user.id
+    }
+  });
+
+  const updatedMeeting = await getMeeting(meetingId);
+  response.json({ meeting: updatedMeeting });
+}));
+
 const meetingInclude = {
   club: {
     include: { centre: true }
@@ -852,7 +929,14 @@ const meetingInclude = {
       }
     }
   },
-  roleScores: true
+  roleScores: true,
+  studentFeedbacks: {
+    include: {
+      student: {
+        include: { user: true }
+      }
+    }
+  }
 } satisfies Prisma.MeetingInclude;
 
 async function getMeeting(meetingId: string) {
@@ -881,7 +965,8 @@ function sanitizeMeetingsForUser<T extends Array<Prisma.MeetingGetPayload<{ incl
       const slot = meeting.roleSlots.find((candidate) => candidate.id === score.roleSlotId);
 
       return slot?.assignedStudent?.user.id === userId;
-    })
+    }),
+    studentFeedbacks: meeting.studentFeedbacks.filter((feedback) => feedback.student.user.id === userId)
   }));
 }
 

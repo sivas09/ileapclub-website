@@ -88,6 +88,7 @@ export type Meeting = {
   roleSlots: MeetingRoleSlot[];
   attendance: MeetingAttendance[];
   roleScores: MeetingRoleScore[];
+  studentFeedbacks: StudentMeetingFeedback[];
 };
 
 export type MeetingAttendance = {
@@ -106,6 +107,17 @@ export type MeetingRoleScore = {
   studentId: string;
   score: number;
   feedback?: string | null;
+};
+
+export type StudentMeetingFeedback = {
+  id: string;
+  meetingId: string;
+  studentId: string;
+  roleSlotId?: string | null;
+  score: number;
+  feedback?: string | null;
+  scoredByUserId?: string | null;
+  scoredAt: string;
 };
 
 export type FeedbackReportEntry = {
@@ -160,6 +172,7 @@ export type StudentFeedbackEntry = {
   meetingTitle: string;
   clubName: string;
   roleName: string;
+  roleNames?: string[];
   score: number;
   feedback?: string | null;
   facilitatorName: string;
@@ -498,6 +511,18 @@ export async function scoreMeetingSlot(meetingId: string, slotId: string, payloa
   feedback?: string;
 }) {
   return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}/score`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function saveStudentMeetingFeedback(meetingId: string, payload: {
+  studentId: string;
+  roleSlotId?: string | null;
+  score: number;
+  feedback?: string;
+}) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/student-feedback`, {
     method: "PUT",
     body: JSON.stringify(payload)
   });

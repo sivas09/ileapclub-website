@@ -75,6 +75,7 @@ model Student {
   roleSlots MeetingRoleSlot[]
   attendance MeetingAttendance[]
   roleScores MeetingRoleScore[]
+  meetingFeedbacks StudentMeetingFeedback[]
   requirementProgress StudentRequirementProgress[]
 }
 
@@ -159,6 +160,7 @@ model Meeting {
   roleSlots MeetingRoleSlot[]
   attendance MeetingAttendance[]
   roleScores MeetingRoleScore[]
+  studentFeedbacks StudentMeetingFeedback[]
 }
 
 model MeetingRoleSlot {
@@ -217,6 +219,27 @@ model MeetingRoleScore {
 
   @@index([meetingId])
   @@index([studentId])
+}
+
+model StudentMeetingFeedback {
+  id             String   @id @default(cuid())
+  meetingId      String
+  studentId      String
+  roleSlotId     String?
+  score          Int
+  feedback       String?
+  scoredByUserId String?
+  scoredAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  meeting  Meeting @relation(fields: [meetingId], references: [id])
+  student  Student @relation(fields: [studentId], references: [id])
+
+  @@unique([meetingId, studentId])
+  @@index([meetingId])
+  @@index([studentId])
+  @@index([roleSlotId])
 }
 
 model BandRequirement {

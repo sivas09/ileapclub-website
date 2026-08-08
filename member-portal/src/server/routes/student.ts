@@ -128,6 +128,21 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
           }
         }
       },
+      meetingFeedbacks: {
+        orderBy: { scoredAt: "desc" },
+        include: {
+          meeting: {
+            include: {
+              club: true,
+              roleSlots: {
+                include: {
+                  roleDefinition: true
+                }
+              }
+            }
+          }
+        }
+      },
       requirementProgress: {
         include: {
           requirement: true
@@ -143,11 +158,11 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
 
   const totalAttendance = student.attendance.length;
   const presentCount = student.attendance.filter((entry) => entry.status === "PRESENT" || entry.status === "LATE").length;
-  const scoredRoles = student.roleScores.length;
-  const averageScore = scoredRoles
-    ? Math.round(student.roleScores.reduce((sum, entry) => sum + entry.score, 0) / scoredRoles)
+  const scoredFeedback = student.meetingFeedbacks.length;
+  const averageScore = scoredFeedback
+    ? Math.round(student.meetingFeedbacks.reduce((sum, entry) => sum + entry.score, 0) / scoredFeedback)
     : null;
-  const scorerIds = [...new Set(student.roleScores.map((score) => score.scoredByUserId).filter(Boolean))] as string[];
+  const scorerIds = [...new Set(student.meetingFeedbacks.map((score) => score.scoredByUserId).filter(Boolean))] as string[];
   const scorers = scorerIds.length
     ? await prisma.user.findMany({
       where: { id: { in: scorerIds } },
@@ -159,16 +174,20 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
 
   response.json({
     student,
-    feedback: student.roleScores.map((score) => {
+    feedback: student.meetingFeedbacks.map((score) => {
       const scorer = score.scoredByUserId ? scorerById.get(score.scoredByUserId) : null;
       const attendance = student.attendance.find((entry) => entry.meetingId === score.meetingId);
+      const rolesPerformed = score.meeting.roleSlots
+        .filter((slot) => slot.assignedStudentId === student.id)
+        .map((slot) => slot.slotLabel || slot.roleDefinition.name);
 
       return {
         id: score.id,
         meetingDate: score.meeting.meetingDate,
         meetingTitle: score.meeting.title,
         clubName: score.meeting.club.name,
-        roleName: score.roleSlot.slotLabel || score.roleSlot.roleDefinition.name,
+        roleName: rolesPerformed.join(", ") || "General meeting feedback",
+        roleNames: rolesPerformed,
         score: score.score,
         feedback: score.feedback,
         facilitatorName: scorer ? `${scorer.firstName} ${scorer.lastName}` : "Not recorded",
@@ -187,7 +206,7 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
       attendanceRate: totalAttendance ? Math.round((presentCount / totalAttendance) * 100) : null,
       totalMeetingsMarked: totalAttendance,
       rolesCompleted: student.roleSlots.filter((slot) => slot.assignedStudentId === student.id).length,
-      scoredRoles,
+      scoredRoles: scoredFeedback,
       averageScore
     }
   });

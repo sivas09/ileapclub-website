@@ -1005,7 +1005,7 @@ button {
 }
 
 .score-feedback-row {
-  grid-template-columns: minmax(190px, 0.8fr) 110px minmax(280px, 1.2fr) auto;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(180px, 0.85fr) 110px minmax(260px, 1.2fr) auto;
 }
 
 .manager-role-row label,
@@ -1021,6 +1021,7 @@ button {
 .manager-role-row input,
 .manager-role-row select,
 .score-feedback-row input,
+.score-feedback-row select,
 .score-feedback-row textarea {
   min-height: 40px;
   border: 1px solid #cbd7e6;

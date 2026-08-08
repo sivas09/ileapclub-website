@@ -28,7 +28,7 @@ import {
   MeetingsOverview,
   PortalUser,
   Role,
-  scoreMeetingSlot,
+  saveStudentMeetingFeedback,
   removeMeetingRoleSlot,
   removeClubFacilitator,
   setCentreActive,
@@ -1098,8 +1098,12 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
           {canManageMeetings && meetingMode === "score" ? (
             <ScoreFeedback
               meeting={selectedMeeting}
+              students={selectedMeetingStudents}
               isSubmitting={isSubmitting}
-              onScore={(slotId, score, feedback) => updateMeeting(() => scoreMeetingSlot(selectedMeeting.id, slotId, { score, feedback }), "Score saved.")}
+              onScore={(studentId, roleSlotId, score, feedback) => updateMeeting(
+                () => saveStudentMeetingFeedback(selectedMeeting.id, { studentId, roleSlotId, score, feedback }),
+                "Feedback saved."
+              )}
             />
           ) : null}
         </div>
@@ -1292,14 +1296,17 @@ function ManageRoles({
 
 function ScoreFeedback({
   meeting,
+  students,
   isSubmitting,
   onScore
 }: {
   meeting: Meeting;
+  students: MeetingsOverview["students"];
   isSubmitting: boolean;
-  onScore: (slotId: string, score: number, feedback?: string) => void;
+  onScore: (studentId: string, roleSlotId: string | null, score: number, feedback?: string) => void;
 }) {
-  const assignedSlots = meeting.roleSlots.filter((slot) => slot.assignedStudentId);
+  const assignedStudentIds = new Set(meeting.roleSlots.flatMap((slot) => slot.assignedStudentId ? [slot.assignedStudentId] : []));
+  const feedbackStudents = students.filter((student) => assignedStudentIds.has(student.id));
 
   return (
     <section className="meeting-mode-section" aria-label="Score feedback">
@@ -1308,14 +1315,15 @@ function ScoreFeedback({
         <strong>{meeting.title}</strong>
         <span>{formatDate(meeting.meetingDate)} - {meeting.club.name}</span>
       </div>
-      {!assignedSlots.length ? <p className="loading-state">Assign students to roles before scoring feedback.</p> : null}
+      {!feedbackStudents.length ? <p className="loading-state">Assign students to roles before scoring feedback.</p> : null}
       <div className="score-feedback-list">
-        {assignedSlots.map((slot) => (
-          <ScoreFeedbackRow
-            key={slot.id}
-            slot={slot}
+        {feedbackStudents.map((student) => (
+          <StudentFeedbackRow
+            key={student.id}
+            meeting={meeting}
+            student={student}
             isSubmitting={isSubmitting}
-            onScore={(score, feedback) => onScore(slot.id, score, feedback)}
+            onScore={onScore}
           />
         ))}
       </div>
@@ -1656,7 +1664,7 @@ function FeedbackReportPanel() {
                 <th>Student</th>
                 <th>Club</th>
                 <th>Meeting</th>
-                <th>Role</th>
+                <th>Related Roles</th>
                 <th>Score</th>
                 <th>Feedback</th>
                 <th>Evaluator</th>
@@ -1806,29 +1814,44 @@ function ManageRoleSlotRow({
   );
 }
 
-function ScoreFeedbackRow({
-  slot,
+function StudentFeedbackRow({
+  meeting,
+  student,
   isSubmitting,
   onScore
 }: {
-  slot: Meeting["roleSlots"][number];
+  meeting: Meeting;
+  student: MeetingsOverview["students"][number];
   isSubmitting: boolean;
-  onScore: (score: number, feedback?: string) => void;
+  onScore: (studentId: string, roleSlotId: string | null, score: number, feedback?: string) => void;
 }) {
-  const [score, setScore] = useState(String(slot.score?.score ?? ""));
-  const [feedback, setFeedback] = useState(slot.score?.feedback ?? "");
+  const existingFeedback = meeting.studentFeedbacks.find((entry) => entry.studentId === student.id);
+  const assignedSlots = meeting.roleSlots.filter((slot) => slot.assignedStudentId === student.id);
+  const [roleSlotId, setRoleSlotId] = useState(existingFeedback?.roleSlotId ?? "");
+  const [score, setScore] = useState(String(existingFeedback?.score ?? ""));
+  const [feedback, setFeedback] = useState(existingFeedback?.feedback ?? "");
 
   useEffect(() => {
-    setScore(String(slot.score?.score ?? ""));
-    setFeedback(slot.score?.feedback ?? "");
-  }, [slot.id, slot.score?.score, slot.score?.feedback]);
+    setRoleSlotId(existingFeedback?.roleSlotId ?? "");
+    setScore(String(existingFeedback?.score ?? ""));
+    setFeedback(existingFeedback?.feedback ?? "");
+  }, [existingFeedback?.id, existingFeedback?.roleSlotId, existingFeedback?.score, existingFeedback?.feedback]);
 
   return (
     <article className="score-feedback-row">
       <div>
-        <strong>{roleSlotName(slot)}</strong>
-        <span>Assigned student: {slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
+        <strong>{formatStudentName(student)}</strong>
+        <span>Roles: {assignedSlots.map(roleSlotName).join(", ") || "No role assigned"}</span>
       </div>
+      <label>
+        Related Role
+        <select value={roleSlotId} disabled={isSubmitting} onChange={(event) => setRoleSlotId(event.currentTarget.value)}>
+          <option value="">General meeting feedback</option>
+          {assignedSlots.map((slot) => (
+            <option key={slot.id} value={slot.id}>{roleSlotName(slot)}</option>
+          ))}
+        </select>
+      </label>
       <label>
         Score
         <input type="number" min="0" max="100" value={score} placeholder="0-100" disabled={isSubmitting} onChange={(event) => setScore(event.currentTarget.value)} />
@@ -1842,7 +1865,7 @@ function ScoreFeedbackRow({
           onChange={(event) => setFeedback(event.currentTarget.value)}
         />
       </label>
-      <button type="button" onClick={() => onScore(Number(score), feedback)} disabled={isSubmitting || score === ""}>Save Feedback</button>
+      <button type="button" onClick={() => onScore(student.id, roleSlotId || null, Number(score), feedback)} disabled={isSubmitting || score === ""}>Save Feedback</button>
     </article>
   );
 }
@@ -1950,7 +1973,7 @@ function StudentProgressDashboard() {
                       <th>Date</th>
                       <th>Meeting</th>
                       <th>Club</th>
-                      <th>Role Performed</th>
+                      <th>Related Roles</th>
                       <th>Score</th>
                       <th>Feedback</th>
                       <th>Facilitator</th>

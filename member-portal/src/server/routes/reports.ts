@@ -23,7 +23,7 @@ reportsRouter.get("/facilitator-feedback", asyncRoute(async (request, response) 
     return;
   }
 
-  const scores = await prisma.meetingRoleScore.findMany({
+  const scores = await prisma.studentMeetingFeedback.findMany({
     where,
     orderBy: [
       { meeting: { meetingDate: "desc" } },
@@ -32,12 +32,12 @@ reportsRouter.get("/facilitator-feedback", asyncRoute(async (request, response) 
     include: {
       meeting: {
         include: {
-          club: true
-        }
-      },
-      roleSlot: {
-        include: {
-          roleDefinition: true
+          club: true,
+          roleSlots: {
+            include: {
+              roleDefinition: true
+            }
+          }
         }
       },
       student: {
@@ -67,7 +67,7 @@ reportsRouter.get("/facilitator-feedback", asyncRoute(async (request, response) 
         clubName: score.meeting.club.name,
         meetingTitle: score.meeting.title,
         meetingDate: score.meeting.meetingDate,
-        roleName: score.roleSlot.slotLabel || score.roleSlot.roleDefinition.name,
+        roleName: roleNamesForFeedback(score).join(", ") || "General meeting feedback",
         score: score.score,
         feedback: score.feedback,
         evaluatorName: scorer ? `${scorer.firstName} ${scorer.lastName}` : "Not recorded",
@@ -77,6 +77,33 @@ reportsRouter.get("/facilitator-feedback", asyncRoute(async (request, response) 
     })
   });
 }));
+
+type FeedbackWithMeetingRoles = Awaited<ReturnType<typeof prisma.studentMeetingFeedback.findMany>>[number] & {
+  roleSlotId: string | null;
+  studentId: string;
+  meeting: {
+    roleSlots: Array<{
+      id: string;
+      assignedStudentId: string | null;
+      slotLabel: string;
+      roleDefinition: { name: string };
+    }>;
+  };
+};
+
+function roleNamesForFeedback(score: FeedbackWithMeetingRoles) {
+  const relatedRole = score.roleSlotId
+    ? score.meeting.roleSlots.find((slot) => slot.id === score.roleSlotId)
+    : null;
+
+  if (relatedRole) {
+    return [relatedRole.slotLabel || relatedRole.roleDefinition.name];
+  }
+
+  return score.meeting.roleSlots
+    .filter((slot) => slot.assignedStudentId === score.studentId)
+    .map((slot) => slot.slotLabel || slot.roleDefinition.name);
+}
 
 async function feedbackVisibilityFilter(userId: string, role: Role) {
   if (role === Role.ADMIN) {
