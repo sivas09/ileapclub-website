@@ -877,6 +877,13 @@ button {
   grid-column: 1 / -1;
 }
 
+.document-helper {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  color: var(--portal-muted);
+  line-height: 1.5;
+}
+
 .document-form label,
 .document-edit-form label {
   display: grid;

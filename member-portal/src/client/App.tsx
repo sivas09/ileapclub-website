@@ -1452,9 +1452,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
         description: String(formData.get("description") || ""),
         fileUrl: String(formData.get("fileUrl") || ""),
         programLevel: String(formData.get("programLevel") || "SENIOR"),
-        bandLevel: String(formData.get("bandLevel") || "White"),
-        clubId: String(formData.get("clubId") || "") || null,
-        category: String(formData.get("category") || "Other")
+        bandLevel: String(formData.get("bandLevel") || "White")
       });
       form.reset();
       await refreshDocuments();
@@ -1562,23 +1560,11 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
             {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
           </select>
         </label>
-        <label>
-          Club
-          <select name="clubId" defaultValue="" required={user.role === "FACILITATOR"}>
-            <option value="">{user.role === "ADMIN" ? "All clubs" : "Choose assigned club"}</option>
-            {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
-          </select>
-        </label>
-        <label>
-          Category <span>Optional</span>
-          <select name="category" defaultValue="Other">
-            {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-        </label>
         <label className="document-link-field">
           Document Link
           <input name="fileUrl" type="url" placeholder="Paste Google Drive, PDF, or website link" required />
         </label>
+        <p className="document-helper">File upload will be added later with Cloudflare R2 storage. Use a Google Drive, PDF, DOCX, PPTX, or website link for now.</p>
         <button type="submit" disabled={isSubmitting}>Add Document</button>
       </form>
 
@@ -1591,7 +1577,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
             key={document.id}
             document={document}
             clubs={clubs}
-            canArchive={user.role === "ADMIN"}
+            canEdit={user.role === "ADMIN"}
             isEditing={editingDocument?.id === document.id}
             isSubmitting={isSubmitting}
             onEdit={() => setEditingDocument(document)}
@@ -1608,7 +1594,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
 function ManagerDocumentCard({
   document,
   clubs,
-  canArchive,
+  canEdit,
   isEditing,
   isSubmitting,
   onEdit,
@@ -1618,7 +1604,7 @@ function ManagerDocumentCard({
 }: {
   document: BandDocument;
   clubs: AdminOverview["clubs"];
-  canArchive: boolean;
+  canEdit: boolean;
   isEditing: boolean;
   isSubmitting: boolean;
   onEdit: () => void;
@@ -1691,13 +1677,12 @@ function ManagerDocumentCard({
           <dl className="document-meta">
             <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
             <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
-            <div><dt>Club</dt><dd>{document.clubName}</dd></div>
-            <div><dt>Uploaded By</dt><dd>{document.uploadedBy}</dd></div>
+            <div><dt>Status</dt><dd>{document.status === "ARCHIVED" ? "Archived" : "Active"}</dd></div>
           </dl>
           <div className="document-actions">
-            <a href={document.fileUrl} target="_blank" rel="noreferrer">Open</a>
-            <button type="button" onClick={onEdit}>Edit</button>
-            {canArchive ? (
+            <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
+            {canEdit ? <button type="button" onClick={onEdit}>Edit</button> : null}
+            {canEdit ? (
               <button type="button" onClick={() => onStatusChange(document)} disabled={isSubmitting}>
                 {document.status === "ARCHIVED" ? "Restore" : "Archive"}
               </button>
@@ -1773,11 +1758,11 @@ function ResourceGroup({ title, documents, emptyText }: { title: string; documen
               </div>
               <p>{document.description || "No description provided."}</p>
               <dl className="document-meta">
+                <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
                 <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
-                <div><dt>Club</dt><dd>{document.clubName}</dd></div>
               </dl>
               <div className="document-actions">
-                <a href={document.fileUrl} target="_blank" rel="noreferrer">Open</a>
+                <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
               </div>
             </article>
           ))}

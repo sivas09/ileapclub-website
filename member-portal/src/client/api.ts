@@ -715,7 +715,7 @@ export async function createBandDocument(payload: {
   programLevel: string;
   bandLevel: string;
   clubId?: string | null;
-  category: string;
+  category?: string;
   status?: string;
 }) {
   return request<{ document: BandDocument }>("/api/documents", {

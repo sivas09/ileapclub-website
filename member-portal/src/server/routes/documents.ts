@@ -44,7 +44,7 @@ const documentSchema = z.object({
   programLevel: z.enum(["JUNIOR", "SENIOR"]),
   bandLevel: z.enum(bandLevels),
   clubId: z.string().nullable().optional(),
-  category: z.enum(categories),
+  category: z.enum(categories).optional(),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional()
 });
 
@@ -153,11 +153,16 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
   }
 
   const data = parsed.data;
-  const clubId = data.clubId || null;
+  let clubId = data.clubId || null;
 
   if (user.role === Role.FACILITATOR && !clubId) {
-    response.status(400).json({ message: "Facilitators must choose one of their assigned clubs." });
-    return;
+    const assignedClubIds = await getVisibleClubIds(user.id, user.role);
+    clubId = assignedClubIds?.[0] ?? null;
+
+    if (!clubId) {
+      response.status(400).json({ message: "Facilitators need an assigned active club before adding documents." });
+      return;
+    }
   }
 
   if (clubId && !(await canManageDocumentClub(user.id, user.role, clubId))) {
@@ -175,7 +180,7 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
       bandLevel: data.bandLevel,
       bandOrder: getBandOrder(data.bandLevel),
       clubId,
-      category: data.category,
+      category: data.category ?? "Other",
       uploadedById: user.id,
       status: user.role === Role.ADMIN ? data.status ?? "ACTIVE" : "ACTIVE"
     },
@@ -188,8 +193,8 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
 documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can edit documents." });
+  if (user.role !== Role.ADMIN) {
+    response.status(403).json({ message: "Only admins can edit documents." });
     return;
   }
 
@@ -208,24 +213,7 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
     return;
   }
 
-  if (user.role === Role.FACILITATOR) {
-    if (parsed.data.status && parsed.data.status !== existing.status) {
-      response.status(403).json({ message: "Only admins can archive or restore documents." });
-      return;
-    }
-
-    if (!existing.clubId || !(await canManageDocumentClub(user.id, user.role, existing.clubId))) {
-      response.status(403).json({ message: "You cannot edit this document." });
-      return;
-    }
-  }
-
   const targetClubId = parsed.data.clubId === undefined ? existing.clubId : parsed.data.clubId || null;
-
-  if (user.role === Role.FACILITATOR && !targetClubId) {
-    response.status(400).json({ message: "Facilitators must keep documents assigned to one of their clubs." });
-    return;
-  }
 
   if (targetClubId && !(await canManageDocumentClub(user.id, user.role, targetClubId))) {
     response.status(403).json({ message: "You cannot assign documents to this club." });
