@@ -866,6 +866,17 @@ button {
   color: var(--portal-blue);
 }
 
+.document-form label span {
+  color: #7891aa;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.document-link-field {
+  grid-column: 1 / -1;
+}
+
 .document-form label,
 .document-edit-form label {
   display: grid;

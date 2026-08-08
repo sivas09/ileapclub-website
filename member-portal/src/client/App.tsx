@@ -1450,7 +1450,6 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       await createBandDocument({
         title: String(formData.get("title") || ""),
         description: String(formData.get("description") || ""),
-        fileName: String(formData.get("fileName") || ""),
         fileUrl: String(formData.get("fileUrl") || ""),
         programLevel: String(formData.get("programLevel") || "SENIOR"),
         bandLevel: String(formData.get("bandLevel") || "White"),
@@ -1548,11 +1547,9 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       </form>
 
       <form className="document-form" onSubmit={handleCreateDocument}>
-        <h3>Add Document Link</h3>
-        <label>Title<input name="title" required /></label>
-        <label>Description<textarea name="description" rows={3} /></label>
-        <label>File Name<input name="fileName" placeholder="worksheet.pdf" required /></label>
-        <label>File URL<input name="fileUrl" type="url" placeholder="https://..." required /></label>
+        <h3>Add Document</h3>
+        <label>Document Title<input name="title" required /></label>
+        <label>Description <span>Optional</span><textarea name="description" rows={3} /></label>
         <label>
           Program Level
           <select name="programLevel" defaultValue="SENIOR">
@@ -1573,10 +1570,14 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
           </select>
         </label>
         <label>
-          Category
+          Category <span>Optional</span>
           <select name="category" defaultValue="Other">
             {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
+        </label>
+        <label className="document-link-field">
+          Document Link
+          <input name="fileUrl" type="url" placeholder="Paste Google Drive, PDF, or website link" required />
         </label>
         <button type="submit" disabled={isSubmitting}>Add Document</button>
       </form>
@@ -1632,7 +1633,6 @@ function ManagerDocumentCard({
     onSave(document.id, {
       title: String(formData.get("title") || ""),
       description: String(formData.get("description") || ""),
-      fileName: String(formData.get("fileName") || ""),
       fileUrl: String(formData.get("fileUrl") || ""),
       programLevel: String(formData.get("programLevel") || "SENIOR"),
       bandLevel: String(formData.get("bandLevel") || "White"),
@@ -1645,10 +1645,9 @@ function ManagerDocumentCard({
     <article className={`document-card ${document.status === "ARCHIVED" ? "is-archived" : ""}`}>
       {isEditing ? (
         <form className="document-edit-form" onSubmit={handleSubmit}>
-          <label>Title<input name="title" defaultValue={document.title} required /></label>
+          <label>Document Title<input name="title" defaultValue={document.title} required /></label>
           <label>Description<textarea name="description" defaultValue={document.description ?? ""} rows={3} /></label>
-          <label>File Name<input name="fileName" defaultValue={document.fileName} required /></label>
-          <label>File URL<input name="fileUrl" type="url" defaultValue={document.fileUrl} required /></label>
+          <label>Document Link<input name="fileUrl" type="url" defaultValue={document.fileUrl} required /></label>
           <label>
             Program
             <select name="programLevel" defaultValue={document.programLevel}>

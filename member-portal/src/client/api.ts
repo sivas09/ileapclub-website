@@ -710,7 +710,7 @@ export async function getBandDocuments(params: {
 export async function createBandDocument(payload: {
   title: string;
   description?: string;
-  fileName: string;
+  fileName?: string;
   fileUrl: string;
   programLevel: string;
   bandLevel: string;

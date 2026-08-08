@@ -39,7 +39,7 @@ const categories = [
 const documentSchema = z.object({
   title: z.string().trim().min(2),
   description: z.string().trim().optional(),
-  fileName: z.string().trim().min(1),
+  fileName: z.string().trim().optional(),
   fileUrl: z.string().trim().url(),
   programLevel: z.enum(["JUNIOR", "SENIOR"]),
   bandLevel: z.enum(bandLevels),
@@ -169,7 +169,7 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
     data: {
       title: data.title,
       description: data.description || null,
-      fileName: data.fileName,
+      fileName: getDocumentFileName(data.fileName, data.fileUrl, data.title),
       fileUrl: data.fileUrl,
       programLevel: data.programLevel,
       bandLevel: data.bandLevel,
@@ -237,7 +237,9 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
     data: {
       title: parsed.data.title,
       description: parsed.data.description === undefined ? undefined : parsed.data.description || null,
-      fileName: parsed.data.fileName,
+      fileName: parsed.data.fileName !== undefined || parsed.data.fileUrl !== undefined || parsed.data.title !== undefined
+        ? getDocumentFileName(parsed.data.fileName, parsed.data.fileUrl ?? existing.fileUrl, parsed.data.title ?? existing.title)
+        : undefined,
       fileUrl: parsed.data.fileUrl,
       programLevel: parsed.data.programLevel,
       bandLevel: parsed.data.bandLevel,
@@ -394,4 +396,23 @@ function getBandOrder(bandLevel: string) {
 
 function stringQuery(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function getDocumentFileName(fileName: string | undefined, fileUrl: string, title: string) {
+  if (fileName?.trim()) {
+    return fileName.trim();
+  }
+
+  try {
+    const url = new URL(fileUrl);
+    const urlFileName = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "");
+
+    if (urlFileName) {
+      return urlFileName;
+    }
+  } catch {
+    // URL validation happens before this helper; title fallback keeps the database field populated.
+  }
+
+  return title.trim();
 }
