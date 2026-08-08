@@ -5,6 +5,7 @@ import {
   addMeetingRoleSlot,
   assignClubFacilitator,
   assignMeetingSlot,
+  backfillPreviousBandRequirements,
   claimMeetingSlot,
   clearToken,
   createBulkMeetings,
@@ -1504,6 +1505,7 @@ function RequirementManagementPanel({
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!selectedStudentId) {
@@ -1518,22 +1520,47 @@ function RequirementManagementPanel({
       .finally(() => setIsLoading(false));
   }, [selectedStudentId]);
 
-  async function handleRequirementUpdate(requirementId: string, currentCount: number, isCompleted: boolean) {
+  async function handleRequirementUpdate(requirementId: string, currentCount: number, isCompleted: boolean, notes?: string) {
     if (!selectedStudentId) {
       return;
     }
 
     setError("");
     setStatus("");
+    setIsSubmitting(true);
 
     try {
-      await updateStudentRequirement(selectedStudentId, requirementId, { currentCount, isCompleted });
+      await updateStudentRequirement(selectedStudentId, requirementId, { currentCount, isCompleted, notes });
       const updatedProgress = await fetchStudentProgressForManager(selectedStudentId);
       setProgress(updatedProgress);
-      setStatus("Requirement progress updated.");
+      setStatus(isCompleted ? "Requirement marked complete." : "Requirement completion undone.");
       onUpdated();
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update requirement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleBackfillPreviousBands() {
+    if (!selectedStudentId || !window.confirm("This will mark all requirements before the student's current band as completed. Continue?")) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await backfillPreviousBandRequirements(selectedStudentId);
+      const updatedProgress = await fetchStudentProgressForManager(selectedStudentId);
+      setProgress(updatedProgress);
+      setStatus(`Previous band requirements backfilled. ${result.updatedCount} requirements marked complete.`);
+      onUpdated();
+    } catch (backfillError) {
+      setError(backfillError instanceof Error ? backfillError.message : "Unable to backfill previous bands.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -1547,6 +1574,7 @@ function RequirementManagementPanel({
     const formData = new FormData(event.currentTarget);
     setError("");
     setStatus("");
+    setIsSubmitting(true);
 
     try {
       const updatedProgress = await updateStudentProfile(selectedStudentId, {
@@ -1558,6 +1586,8 @@ function RequirementManagementPanel({
       onUpdated();
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update student placement.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -1601,7 +1631,10 @@ function RequirementManagementPanel({
                 ))}
               </select>
             </label>
-            <button type="submit">Update Student</button>
+            <button type="submit" disabled={isSubmitting}>Update Student</button>
+            <button type="button" onClick={handleBackfillPreviousBands} disabled={isSubmitting || !progress.summary.programLevel}>
+              Backfill Previous Bands
+            </button>
           </form>
           <ul className="requirement-list manager">
             {progress.requirements.map((entry) => (
@@ -1617,9 +1650,21 @@ function RequirementManagementPanel({
                     min="0"
                     max={entry.requirement.targetCount}
                     defaultValue={entry.currentCount}
+                    disabled={isSubmitting}
                     onBlur={(event) => handleRequirementUpdate(entry.requirement.id, Number(event.currentTarget.value), Number(event.currentTarget.value) >= entry.requirement.targetCount)}
                   />
-                  <button type="button" onClick={() => handleRequirementUpdate(entry.requirement.id, entry.requirement.targetCount, true)}>Complete</button>
+                  <button
+                    type="button"
+                    onClick={() => handleRequirementUpdate(
+                      entry.requirement.id,
+                      entry.isCompleted ? 0 : entry.requirement.targetCount,
+                      !entry.isCompleted,
+                      entry.isCompleted ? "Completion undone by manager" : "Marked complete by manager"
+                    )}
+                    disabled={isSubmitting}
+                  >
+                    {entry.isCompleted ? "Undo Completion" : "Mark Complete"}
+                  </button>
                 </div>
               </li>
             ))}

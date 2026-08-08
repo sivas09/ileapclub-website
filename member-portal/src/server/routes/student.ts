@@ -35,7 +35,25 @@ const profileSchema = z.object({
   ])
 });
 
+const bandOrder = [
+  "White",
+  "Yellow",
+  "Orange I",
+  "Orange II",
+  "Green I",
+  "Green II",
+  "Blue I",
+  "Blue II",
+  "Red I",
+  "Red II",
+  "Brown I",
+  "Brown II",
+  "Black I",
+  "Black II"
+] as const;
+
 type StudentWithClubs = {
+  bandLevel: string;
   programLevel?: string | null;
   clubMemberships: Array<{
     status: string;
@@ -238,6 +256,14 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
       adminOverrideAt: new Date()
     }
     : {};
+  const clearedCompletionData = !isCompleted
+    ? {
+      facilitatorSignedOffByUserId: null,
+      facilitatorSignedOffAt: null,
+      adminOverrideByUserId: null,
+      adminOverrideAt: null
+    }
+    : {};
 
   const progress = await prisma.studentRequirementProgress.upsert({
     where: {
@@ -253,7 +279,8 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
       notes: parsed.data.notes || null,
       updatedByUserId: user.id,
       ...signOffData,
-      ...adminOverrideData
+      ...adminOverrideData,
+      ...clearedCompletionData
     },
     create: {
       studentId,
@@ -264,7 +291,8 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
       notes: parsed.data.notes || null,
       updatedByUserId: user.id,
       ...signOffData,
-      ...adminOverrideData
+      ...adminOverrideData,
+      ...clearedCompletionData
     },
     include: {
       requirement: true
@@ -272,6 +300,101 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
   });
 
   response.json({ progress });
+}));
+
+studentRouter.post("/:studentId/requirements/backfill", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can backfill band requirements." });
+    return;
+  }
+
+  const studentId = String(request.params.studentId);
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: {
+      clubMemberships: {
+        include: {
+          club: {
+            include: { centre: true }
+          }
+        }
+      }
+    }
+  });
+
+  if (!student) {
+    response.status(404).json({ message: "Student not found." });
+    return;
+  }
+
+  if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
+    response.status(403).json({ message: "You cannot backfill this student's requirements." });
+    return;
+  }
+
+  const selectedProgramLevel = getStudentProgramLevel(student);
+
+  if (!selectedProgramLevel) {
+    response.status(400).json({ message: programLevelWarning });
+    return;
+  }
+
+  const currentBandOrder = getBandOrder(student.bandLevel);
+
+  if (!currentBandOrder) {
+    response.status(400).json({ message: "Choose a valid current band level before backfilling requirements." });
+    return;
+  }
+
+  const requirements = await prisma.bandRequirement.findMany({
+    where: {
+      programLevel: selectedProgramLevel,
+      isActive: true,
+      bandOrder: { lt: currentBandOrder }
+    }
+  });
+
+  const completedAt = new Date();
+  const progressData = requirements.map((requirement) => ({
+    studentId,
+    requirementId: requirement.id,
+    currentCount: requirement.targetCount,
+    isCompleted: true,
+    completedAt,
+    notes: "Backfilled based on current band level",
+    updatedByUserId: user.id,
+    facilitatorSignedOffByUserId: user.role === Role.FACILITATOR ? user.id : null,
+    facilitatorSignedOffAt: user.role === Role.FACILITATOR ? completedAt : null,
+    adminOverrideByUserId: user.role === Role.ADMIN ? user.id : null,
+    adminOverrideAt: user.role === Role.ADMIN ? completedAt : null
+  }));
+
+  if (progressData.length > 0) {
+    await prisma.$transaction(progressData.map((entry) => prisma.studentRequirementProgress.upsert({
+      where: {
+        studentId_requirementId: {
+          studentId: entry.studentId,
+          requirementId: entry.requirementId
+        }
+      },
+      update: {
+        currentCount: entry.currentCount,
+        isCompleted: entry.isCompleted,
+        completedAt: entry.completedAt,
+        notes: entry.notes,
+        updatedByUserId: entry.updatedByUserId,
+        facilitatorSignedOffByUserId: entry.facilitatorSignedOffByUserId,
+        facilitatorSignedOffAt: entry.facilitatorSignedOffAt,
+        adminOverrideByUserId: entry.adminOverrideByUserId,
+        adminOverrideAt: entry.adminOverrideAt
+      },
+      create: entry
+    })));
+  }
+
+  response.json({ updatedCount: progressData.length });
 }));
 
 studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) => {
@@ -466,6 +589,12 @@ function inferProgramLevel(program: string): ProgramLevel | null {
   }
 
   return null;
+}
+
+function getBandOrder(bandLevel: string) {
+  const index = bandOrder.findIndex((level) => level === bandLevel);
+
+  return index === -1 ? null : index + 1;
 }
 
 async function canFacilitatorAccessStudent(facilitatorId: string, studentId: string) {

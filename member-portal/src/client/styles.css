@@ -510,7 +510,7 @@ button {
 
 .student-placement-form {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) auto auto;
   gap: 12px;
   align-items: end;
   margin-top: 18px;

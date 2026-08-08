@@ -525,6 +525,12 @@ export async function updateStudentRequirement(studentId: string, requirementId:
   });
 }
 
+export async function backfillPreviousBandRequirements(studentId: string) {
+  return request<{ updatedCount: number }>(`/api/student/${studentId}/requirements/backfill`, {
+    method: "POST"
+  });
+}
+
 export async function getFeedbackReport() {
   return request<{ feedback: FeedbackReportEntry[] }>("/api/reports/facilitator-feedback");
 }
