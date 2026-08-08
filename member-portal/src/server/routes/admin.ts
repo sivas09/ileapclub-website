@@ -30,6 +30,10 @@ const userSchema = z.object({
   facilitatorClubIds: z.array(z.string()).default([])
 });
 
+const facilitatorAssignmentSchema = z.object({
+  facilitatorId: z.string().min(1)
+});
+
 export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRole([Role.ADMIN]));
@@ -188,6 +192,67 @@ adminRouter.patch("/clubs/:clubId/archive", asyncRoute(async (request, response)
   });
 
   response.json({ club });
+}));
+
+adminRouter.post("/clubs/:clubId/facilitators", asyncRoute(async (request, response) => {
+  const clubId = String(request.params.clubId);
+  const parsed = facilitatorAssignmentSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Choose a facilitator to assign." });
+    return;
+  }
+
+  const [club, facilitator] = await Promise.all([
+    prisma.club.findUnique({
+      where: { id: clubId },
+      include: { centre: true }
+    }),
+    prisma.user.findUnique({
+      where: { id: parsed.data.facilitatorId }
+    })
+  ]);
+
+  if (!club?.isActive || !club.centre.isActive) {
+    response.status(400).json({ message: "Choose an active club in an active centre." });
+    return;
+  }
+
+  if (!facilitator || facilitator.role !== Role.FACILITATOR || !facilitator.isActive) {
+    response.status(400).json({ message: "Choose an active facilitator." });
+    return;
+  }
+
+  const assignment = await prisma.clubFacilitator.upsert({
+    where: {
+      clubId_facilitatorId: {
+        clubId,
+        facilitatorId: facilitator.id
+      }
+    },
+    update: {},
+    create: {
+      clubId,
+      facilitatorId: facilitator.id
+    },
+    include: { facilitator: true }
+  });
+
+  response.status(201).json({ assignment });
+}));
+
+adminRouter.delete("/clubs/:clubId/facilitators/:facilitatorId", asyncRoute(async (request, response) => {
+  const clubId = String(request.params.clubId);
+  const facilitatorId = String(request.params.facilitatorId);
+
+  await prisma.clubFacilitator.deleteMany({
+    where: {
+      clubId,
+      facilitatorId
+    }
+  });
+
+  response.json({ ok: true });
 }));
 
 adminRouter.post("/users", asyncRoute(async (request, response) => {

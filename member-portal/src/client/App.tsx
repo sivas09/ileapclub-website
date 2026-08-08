@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import {
   AdminOverview,
   addMeetingRoleSlot,
+  assignClubFacilitator,
   assignMeetingSlot,
   claimMeetingSlot,
   clearToken,
@@ -28,6 +29,7 @@ import {
   Role,
   scoreMeetingSlot,
   removeMeetingRoleSlot,
+  removeClubFacilitator,
   setCentreActive,
   setClubActive,
   setUserActive,
@@ -312,6 +314,7 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const clubs = overview?.clubs ?? [];
   const activeCentres = overview?.centres.filter((centre) => centre.isActive) ?? [];
   const activeClubs = clubs.filter((club) => club.isActive && club.centre?.isActive !== false);
+  const activeFacilitators = overview?.users.filter((portalUser) => portalUser.role === "FACILITATOR" && portalUser.isActive) ?? [];
 
   async function updateCentreStatus(centreId: string, isActive: boolean) {
     setError("");
@@ -356,6 +359,45 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
       setStatus(isActive ? "User reactivated." : "User deactivated.");
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update user.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleFacilitatorAssignment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await assignClubFacilitator(
+        String(formData.get("clubId") || ""),
+        String(formData.get("facilitatorId") || "")
+      );
+      form.reset();
+      await refreshOverview();
+      setStatus("Facilitator assigned to club.");
+    } catch (assignmentError) {
+      setError(assignmentError instanceof Error ? assignmentError.message : "Unable to assign facilitator.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleRemoveFacilitatorAssignment(clubId: string, facilitatorId: string) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await removeClubFacilitator(clubId, facilitatorId);
+      await refreshOverview();
+      setStatus("Facilitator access removed.");
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Unable to remove facilitator access.");
     } finally {
       setIsSubmitting(false);
     }
@@ -505,6 +547,56 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
           <button type="submit" disabled={isSubmitting}>Save User</button>
         </form>
       </div>
+
+      <section className="assignment-panel" aria-label="Facilitator club assignments">
+        <div className="admin-heading">
+          <div>
+            <p className="eyebrow">Facilitator access</p>
+            <h3>Assign Facilitators to Clubs</h3>
+          </div>
+        </div>
+        <form className="assignment-form" onSubmit={handleFacilitatorAssignment}>
+          <label>
+            Facilitator
+            <select name="facilitatorId" required>
+              <option value="">Select facilitator</option>
+              {activeFacilitators.map((facilitator) => (
+                <option key={facilitator.id} value={facilitator.id}>{facilitator.firstName} {facilitator.lastName}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Active Club
+            <select name="clubId" required>
+              <option value="">Select club</option>
+              {activeClubs.map((club) => (
+                <option key={club.id} value={club.id}>{club.name}</option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" disabled={isSubmitting || !activeFacilitators.length || !activeClubs.length}>Assign Access</button>
+        </form>
+        {clubs.some((club) => club.facilitators?.length) ? (
+          <ul className="assignment-list">
+            {clubs.flatMap((club) => (club.facilitators ?? []).map((assignment) => (
+              <li key={assignment.id}>
+                <div>
+                  <strong>{assignment.facilitator.firstName} {assignment.facilitator.lastName}</strong>
+                  <span>{club.name}</span>
+                </div>
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => handleRemoveFacilitatorAssignment(club.id, assignment.facilitator.id)}
+                  disabled={isSubmitting}
+                >
+                  Remove Access
+                </button>
+              </li>
+            )))}
+          </ul>
+        ) : <p className="loading-state">No facilitator club assignments yet.</p>}
+      </section>
 
       <div className="admin-table-grid">
         <DataPanel title="Centres">

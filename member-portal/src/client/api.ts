@@ -52,6 +52,8 @@ export type StudentClubMembership = {
 
 export type ClubFacilitator = {
   id: string;
+  clubId: string;
+  facilitatorId: string;
   facilitator: PortalUser;
 };
 
@@ -309,6 +311,19 @@ export async function setClubActive(clubId: string, isActive: boolean) {
   return request<{ club: Club }>(`/api/admin/clubs/${clubId}/archive`, {
     method: "PATCH",
     body: JSON.stringify({ isActive })
+  });
+}
+
+export async function assignClubFacilitator(clubId: string, facilitatorId: string) {
+  return request<{ assignment: ClubFacilitator }>(`/api/admin/clubs/${clubId}/facilitators`, {
+    method: "POST",
+    body: JSON.stringify({ facilitatorId })
+  });
+}
+
+export async function removeClubFacilitator(clubId: string, facilitatorId: string) {
+  return request<{ ok: boolean }>(`/api/admin/clubs/${clubId}/facilitators/${facilitatorId}`, {
+    method: "DELETE"
   });
 }
 
