@@ -38,7 +38,8 @@ import {
   toggleMeetingLock,
   updateMeetingDetails,
   updateStudentProfile,
-  updateStudentRequirement
+  updateStudentRequirement,
+  updateUser
 } from "./api";
 
 const roleCopy: Record<Role, { title: string; summary: string; actions: string[]; reports: string[] }> = {
@@ -291,6 +292,8 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+type AdminUser = AdminOverview["users"][number];
+
 function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [status, setStatus] = useState("");
@@ -298,6 +301,8 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newUserRole, setNewUserRole] = useState<Role>("STUDENT");
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [editingUserRole, setEditingUserRole] = useState<Role>("STUDENT");
 
   async function refreshOverview() {
     const data = await getAdminOverview();
@@ -338,6 +343,19 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const activeCentres = overview?.centres.filter((centre) => centre.isActive) ?? [];
   const activeClubs = clubs.filter((club) => club.isActive && club.centre?.isActive !== false);
   const activeFacilitators = overview?.users.filter((portalUser) => portalUser.role === "FACILITATOR" && portalUser.isActive) ?? [];
+
+  function facilitatorClubIdsForUser(userId: string) {
+    return clubs
+      .filter((club) => club.facilitators?.some((assignment) => assignment.facilitator.id === userId))
+      .map((club) => club.id);
+  }
+
+  function startEditingUser(portalUser: AdminUser) {
+    setError("");
+    setStatus("");
+    setEditingUser(portalUser);
+    setEditingUserRole(portalUser.role);
+  }
 
   async function updateCentreStatus(centreId: string, isActive: boolean) {
     setError("");
@@ -421,6 +439,46 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
       setStatus("Facilitator access removed.");
     } catch (removeError) {
       setError(removeError instanceof Error ? removeError.message : "Unable to remove facilitator access.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleEditUserSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingUser) {
+      return;
+    }
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const clubSelect = form.elements.namedItem("clubIds") as HTMLSelectElement | null;
+    const facilitatorClubSelect = form.elements.namedItem("facilitatorClubIds") as HTMLSelectElement | null;
+    const role = String(formData.get("role") || editingUser.role) as Role;
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await updateUser(editingUser.id, {
+        firstName: String(formData.get("firstName") || ""),
+        lastName: String(formData.get("lastName") || ""),
+        email: String(formData.get("email") || ""),
+        role,
+        isActive: String(formData.get("isActive") || "true") === "true",
+        grade: String(formData.get("grade") || ""),
+        programLevel: String(formData.get("programLevel") || "SENIOR"),
+        bandLevel: String(formData.get("bandLevel") || "White"),
+        clubIds: role === "STUDENT" && clubSelect ? Array.from(clubSelect.selectedOptions).map((option) => option.value) : [],
+        facilitatorClubIds: role === "FACILITATOR" && facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : []
+      });
+      await refreshOverview();
+      setEditingUser(null);
+      setStatus("User updated.");
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update user.");
     } finally {
       setIsSubmitting(false);
     }
@@ -680,28 +738,130 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
 
         <DataPanel title="Users">
           {overview?.users.length ? (
-            <ul className="record-list">
-              {overview.users.map((portalUser) => (
-                <li key={portalUser.id}>
-                  <div>
-                    <strong>{portalUser.firstName} {portalUser.lastName}</strong>
-                    <StatusBadge isActive={portalUser.isActive} />
+            <>
+              <ul className="record-list">
+                {overview.users.map((portalUser) => (
+                  <li key={portalUser.id}>
+                    <div>
+                      <strong>{portalUser.firstName} {portalUser.lastName}</strong>
+                      <StatusBadge isActive={portalUser.isActive} />
+                    </div>
+                    <span>
+                      {formatRole(portalUser.role)} - {portalUser.email}
+                      {portalUser.role === "STUDENT" && portalUser.studentProfile ? ` - ${formatProgramLevel(portalUser.studentProfile.programLevel)} - ${portalUser.studentProfile.bandLevel}` : ""}
+                    </span>
+                    <div className="record-actions">
+                      <button
+                        type="button"
+                        className="text-action"
+                        onClick={() => startEditingUser(portalUser)}
+                        disabled={isSubmitting}
+                      >
+                        Edit User
+                      </button>
+                      <button
+                        type="button"
+                        className="text-action"
+                        onClick={() => updateUserStatus(portalUser.id, !portalUser.isActive)}
+                        disabled={isSubmitting || portalUser.id === currentUser.id}
+                      >
+                        {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {editingUser ? (
+                <form key={editingUser.id} className="edit-user-panel" onSubmit={handleEditUserSubmit}>
+                  <div className="admin-heading">
+                    <div>
+                      <p className="eyebrow">Edit user</p>
+                      <h3>{editingUser.firstName} {editingUser.lastName}</h3>
+                    </div>
                   </div>
-                  <span>
-                    {formatRole(portalUser.role)} - {portalUser.email}
-                    {portalUser.studentProfile ? ` - ${formatProgramLevel(portalUser.studentProfile.programLevel)} - ${portalUser.studentProfile.bandLevel}` : ""}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-action"
-                    onClick={() => updateUserStatus(portalUser.id, !portalUser.isActive)}
-                    disabled={isSubmitting || portalUser.id === currentUser.id}
-                  >
-                    {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
-                  </button>
-                </li>
-              ))}
-            </ul>
+                  <div className="form-two-column">
+                    <label>First Name<input name="firstName" defaultValue={editingUser.firstName} required /></label>
+                    <label>Last Name<input name="lastName" defaultValue={editingUser.lastName} required /></label>
+                    <label>Email<input name="email" type="email" defaultValue={editingUser.email} required /></label>
+                    <label>
+                      Role
+                      <select
+                        name="role"
+                        value={editingUserRole}
+                        onChange={(event) => setEditingUserRole(event.target.value as Role)}
+                        disabled={editingUser.id === currentUser.id}
+                        required
+                      >
+                        <option value="STUDENT">Student</option>
+                        <option value="FACILITATOR">Facilitator</option>
+                        <option value="ADMIN">Admin</option>
+                      </select>
+                    </label>
+                    <label>
+                      Account Status
+                      <select name="isActive" defaultValue={String(editingUser.isActive)} disabled={editingUser.id === currentUser.id}>
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                      </select>
+                    </label>
+                    {editingUser.id === currentUser.id ? (
+                      <>
+                        <input type="hidden" name="role" value="ADMIN" />
+                        <input type="hidden" name="isActive" value="true" />
+                      </>
+                    ) : null}
+                    {editingUserRole === "STUDENT" ? (
+                      <>
+                        <label>Grade<input name="grade" defaultValue={editingUser.studentProfile?.grade ?? ""} placeholder="Grade 6" /></label>
+                        <label>
+                          Program Level
+                          <select name="programLevel" defaultValue={editingUser.studentProfile?.programLevel ?? "SENIOR"}>
+                            {programLevelOptions.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Current Band Level
+                          <select name="bandLevel" defaultValue={editingUser.studentProfile?.bandLevel ?? "White"}>
+                            {bandLevelOptions.map((bandLevel) => (
+                              <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Clubs
+                          <select
+                            name="clubIds"
+                            multiple
+                            defaultValue={editingUser.studentProfile?.clubMemberships?.map((membership) => membership.clubId) ?? []}
+                          >
+                            {activeClubs.map((club) => (
+                              <option key={club.id} value={club.id}>{club.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </>
+                    ) : null}
+                    {editingUserRole === "FACILITATOR" ? (
+                      <label>
+                        Facilitator Clubs
+                        <select name="facilitatorClubIds" multiple defaultValue={facilitatorClubIdsForUser(editingUser.id)}>
+                          {activeClubs.map((club) => (
+                            <option key={club.id} value={club.id}>{club.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
+                  <div className="edit-user-actions">
+                    <button type="submit" disabled={isSubmitting}>Save</button>
+                    <button type="button" className="text-action" onClick={() => setEditingUser(null)} disabled={isSubmitting}>Cancel</button>
+                  </div>
+                </form>
+              ) : null}
+            </>
           ) : <p>No users yet.</p>}
         </DataPanel>
 

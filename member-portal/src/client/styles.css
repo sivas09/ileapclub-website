@@ -577,6 +577,61 @@ button {
   background: #ffffff;
 }
 
+.edit-user-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #d6e0eb;
+  border-left: 4px solid var(--portal-teal);
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.edit-user-panel h3 {
+  margin: 8px 0 0;
+  color: var(--portal-blue);
+}
+
+.edit-user-panel label {
+  display: grid;
+  gap: 7px;
+  color: #243657;
+  font-weight: 800;
+}
+
+.edit-user-panel input,
+.edit-user-panel select {
+  min-height: 44px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--portal-ink);
+  background: #ffffff;
+}
+
+.edit-user-panel select[multiple] {
+  min-height: 116px;
+  padding: 8px 12px;
+}
+
+.edit-user-actions,
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.edit-user-actions button[type="submit"] {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: #ffffff;
+  background: var(--portal-blue);
+  font-weight: 900;
+}
+
 .assignment-panel h3 {
   margin: 8px 0 0;
   color: var(--portal-blue);

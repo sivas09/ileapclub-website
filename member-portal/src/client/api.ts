@@ -354,6 +354,24 @@ export async function createUser(payload: {
   });
 }
 
+export async function updateUser(userId: string, payload: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  isActive: boolean;
+  grade?: string;
+  programLevel?: string;
+  bandLevel?: string;
+  clubIds?: string[];
+  facilitatorClubIds?: string[];
+}) {
+  return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function setUserActive(userId: string, isActive: boolean) {
   return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}/active`, {
     method: "PATCH",

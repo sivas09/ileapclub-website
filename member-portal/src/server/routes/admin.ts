@@ -32,6 +32,10 @@ const userSchema = z.object({
   facilitatorClubIds: z.array(z.string()).default([])
 });
 
+const updateUserSchema = userSchema.omit({ password: true }).extend({
+  isActive: z.boolean()
+});
+
 const facilitatorAssignmentSchema = z.object({
   facilitatorId: z.string().min(1)
 });
@@ -52,6 +56,8 @@ const validBandLevels = new Set([
   "Black I",
   "Black II"
 ]);
+
+const editableRoles = new Set<Role>([Role.ADMIN, Role.FACILITATOR, Role.STUDENT]);
 
 export const adminRouter = Router();
 
@@ -115,6 +121,11 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
       }
     }),
     prisma.student.findMany({
+      where: {
+        user: {
+          role: Role.STUDENT
+        }
+      },
       orderBy: [{ user: { lastName: "asc" } }],
       include: {
         user: true,
@@ -357,6 +368,160 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
     });
 
     response.status(201).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        isActive: user.isActive
+      }
+    });
+  } catch (error) {
+    const prismaError = error as { code?: string };
+
+    if (prismaError.code === "P2002") {
+      response.status(409).json({ message: "A user with this email already exists." });
+      return;
+    }
+
+    throw error;
+  }
+}));
+
+adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
+  const userId = String(request.params.userId);
+  const parsed = updateUserSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid user details." });
+    return;
+  }
+
+  const data = parsed.data;
+  const email = data.email.toLowerCase();
+  const requestedClubIds = [...new Set([
+    ...(data.role === Role.STUDENT ? data.clubIds : []),
+    ...(data.role === Role.FACILITATOR ? data.facilitatorClubIds : [])
+  ])];
+
+  if (userId === request.user?.id && data.role !== Role.ADMIN) {
+    response.status(400).json({ message: "You cannot remove your own admin role." });
+    return;
+  }
+
+  if (userId === request.user?.id && !data.isActive) {
+    response.status(400).json({ message: "You cannot deactivate your own admin account." });
+    return;
+  }
+
+  if (data.role === Role.STUDENT && data.bandLevel && !validBandLevels.has(data.bandLevel)) {
+    response.status(400).json({ message: "Choose a valid current band level." });
+    return;
+  }
+
+  if (requestedClubIds.length > 0) {
+    const activeClubCount = await prisma.club.count({
+      where: {
+        id: { in: requestedClubIds },
+        isActive: true,
+        centre: { isActive: true }
+      }
+    });
+
+    if (activeClubCount !== requestedClubIds.length) {
+      response.status(400).json({ message: "Assign users only to active clubs in active centres." });
+      return;
+    }
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { studentProfile: true }
+  });
+
+  if (!existingUser || !editableRoles.has(existingUser.role)) {
+    response.status(404).json({ message: "User not found." });
+    return;
+  }
+
+  try {
+    const user = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: {
+          email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          role: data.role,
+          isActive: data.isActive
+        }
+      });
+
+      if (data.role === Role.STUDENT) {
+        const student = existingUser.studentProfile
+          ? await tx.student.update({
+            where: { id: existingUser.studentProfile.id },
+            data: {
+              grade: data.grade || "Not set",
+              programLevel: data.programLevel ?? null,
+              bandLevel: data.bandLevel || "White"
+            }
+          })
+          : await tx.student.create({
+            data: {
+              userId,
+              grade: data.grade || "Not set",
+              programLevel: data.programLevel ?? null,
+              bandLevel: data.bandLevel || "White"
+            }
+          });
+
+        await tx.studentClubMembership.deleteMany({
+          where: data.clubIds.length
+            ? { studentId: student.id, clubId: { notIn: data.clubIds } }
+            : { studentId: student.id }
+        });
+
+        if (data.clubIds.length > 0) {
+          await tx.studentClubMembership.createMany({
+            data: data.clubIds.map((clubId) => ({
+              clubId,
+              studentId: student.id
+            })),
+            skipDuplicates: true
+          });
+        }
+
+        await tx.clubFacilitator.deleteMany({ where: { facilitatorId: userId } });
+      } else {
+        if (existingUser.studentProfile) {
+          await tx.studentClubMembership.deleteMany({
+            where: { studentId: existingUser.studentProfile.id }
+          });
+        }
+
+        await tx.clubFacilitator.deleteMany({
+          where: data.role === Role.FACILITATOR && data.facilitatorClubIds.length
+            ? { facilitatorId: userId, clubId: { notIn: data.facilitatorClubIds } }
+            : { facilitatorId: userId }
+        });
+
+        if (data.role === Role.FACILITATOR && data.facilitatorClubIds.length > 0) {
+          await tx.clubFacilitator.createMany({
+            data: data.facilitatorClubIds.map((clubId) => ({
+              clubId,
+              facilitatorId: userId
+            })),
+            skipDuplicates: true
+          });
+        }
+      }
+
+      return updatedUser;
+    });
+
+    response.json({
       user: {
         id: user.id,
         email: user.email,
