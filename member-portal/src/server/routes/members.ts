@@ -85,11 +85,16 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
         ...(status === "active" || user.role === Role.STUDENT ? { isActive: true } : {}),
         ...(status === "inactive" ? { isActive: false } : {}),
         ...(search ? {
-          OR: [
-            { firstName: { contains: search, mode: "insensitive" } },
-            { lastName: { contains: search, mode: "insensitive" } },
-            { email: { contains: search, mode: "insensitive" } }
-          ]
+          OR: user.role === Role.STUDENT
+            ? [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } }
+              ]
+            : [
+                { firstName: { contains: search, mode: "insensitive" } },
+                { lastName: { contains: search, mode: "insensitive" } },
+                { email: { contains: search, mode: "insensitive" } }
+              ]
         } : {})
       }
     }

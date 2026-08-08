@@ -1625,6 +1625,8 @@ function ManagerDocumentCard({
   onSave: (documentId: string, payload: Parameters<typeof updateBandDocument>[1]) => void;
   onStatusChange: (document: BandDocument) => void;
 }) {
+  const link = documentLink(document);
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -1692,10 +1694,10 @@ function ManagerDocumentCard({
             <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
             <div><dt>Status</dt><dd>{document.status === "ARCHIVED" ? "Archived" : "Active"}</dd></div>
           </dl>
-          {!document.fileUrl ? <p className="document-link-missing">Link not added yet</p> : null}
+          {!link ? <p className="document-link-missing">Link not added yet</p> : null}
           <div className="document-actions">
-            {document.fileUrl
-              ? <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
+            {link
+              ? <a href={link} target="_blank" rel="noreferrer">Open / Download</a>
               : <span className="document-disabled-action">Open / Download</span>}
             {canEdit ? <button type="button" onClick={onEdit}>Edit</button> : null}
             {canEdit ? (
@@ -1765,29 +1767,37 @@ function ResourceGroup({ title, documents, emptyText }: { title: string; documen
       {documents.length ? (
         <div className="document-card-grid compact">
           {documents.map((document) => (
-            <article key={document.id} className="document-card">
-              <div className="document-card-header">
-                <div>
-                  <span>{document.category}</span>
-                  <h3>{document.title}</h3>
-                </div>
-              </div>
-              <p>{document.description || "No description provided."}</p>
-              <dl className="document-meta">
-                <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
-                <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
-              </dl>
-              {!document.fileUrl ? <p className="document-link-missing">Resource link not added yet.</p> : null}
-              <div className="document-actions">
-                {document.fileUrl
-                  ? <a href={document.fileUrl} target="_blank" rel="noreferrer">Open / Download</a>
-                  : <span className="document-disabled-action">Coming soon</span>}
-              </div>
-            </article>
+            <ResourceCard key={document.id} document={document} />
           ))}
         </div>
       ) : <p>{emptyText}</p>}
     </DataPanel>
+  );
+}
+
+function ResourceCard({ document }: { document: BandDocument }) {
+  const link = documentLink(document);
+
+  return (
+    <article className="document-card">
+      <div className="document-card-header">
+        <div>
+          <span>{document.category}</span>
+          <h3>{document.title}</h3>
+        </div>
+      </div>
+      <p>{document.description || "No description provided."}</p>
+      <dl className="document-meta">
+        <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
+        <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
+      </dl>
+      {!link ? <p className="document-link-missing">Resource link not added yet.</p> : null}
+      <div className="document-actions">
+        {link
+          ? <a href={link} target="_blank" rel="noreferrer">Open / Download</a>
+          : <span className="document-disabled-action">Coming soon</span>}
+      </div>
+    </article>
   );
 }
 
@@ -3076,6 +3086,10 @@ function formatBandLadder(programLevel?: string | null) {
   }
 
   return "Program level not set";
+}
+
+function documentLink(document: { fileUrl?: string | null }) {
+  return document.fileUrl?.trim() || "";
 }
 
 function formatRole(role: Role) {

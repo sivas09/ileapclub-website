@@ -36,11 +36,15 @@ const categories = [
   "Other"
 ] as const;
 
+const optionalDocumentUrl = z.string().trim().refine((value) => !value || isHttpUrl(value), {
+  message: "Enter a valid http or https document link."
+});
+
 const documentSchema = z.object({
   title: z.string().trim().min(2),
   description: z.string().trim().optional(),
   fileName: z.string().trim().optional(),
-  fileUrl: z.string().trim().url().or(z.literal("")).optional(),
+  fileUrl: optionalDocumentUrl.optional(),
   programLevel: z.enum(["JUNIOR", "SENIOR"]),
   bandLevel: z.enum(bandLevels),
   clubId: z.string().nullable().optional(),
@@ -407,4 +411,14 @@ function getDocumentFileName(fileName: string | undefined, fileUrl: string | und
   }
 
   return title.trim();
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
