@@ -319,6 +319,7 @@ button {
 
 .admin-workspace,
 .meeting-workspace,
+.members-workspace,
 .feedback-report,
 .student-progress {
   width: min(1180px, 100%);
@@ -807,8 +808,85 @@ button {
 }
 
 .meeting-list-panel,
-.meeting-detail-panel {
+.meeting-detail-panel,
+.member-detail-panel {
   margin-top: 22px;
+}
+
+.member-filter-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.member-filter-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--portal-muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.member-filter-form input,
+.member-filter-form select {
+  min-height: 40px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--portal-ink);
+  background: #ffffff;
+}
+
+.members-table {
+  min-width: 1180px;
+}
+
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--portal-muted);
+  font-weight: 800;
+}
+
+.pagination-row div {
+  display: flex;
+  gap: 8px;
+}
+
+.pagination-row button,
+.link-button {
+  min-height: 34px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-weight: 900;
+}
+
+.link-button {
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: var(--portal-teal);
+  background: transparent;
+}
+
+.member-detail-panel {
+  display: grid;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid #d6e0eb;
 }
 
 .meeting-list-panel h3 {
@@ -1676,6 +1754,7 @@ body {
 .dashboard-grid,
 .admin-workspace,
 .meeting-workspace,
+.members-workspace,
 .feedback-report,
 .student-progress,
 .deferred-workspace {
@@ -1740,6 +1819,7 @@ body {
 .portal-card,
 .admin-workspace,
 .meeting-workspace,
+.members-workspace,
 .feedback-report,
 .student-progress,
 .deferred-workspace,
@@ -1757,6 +1837,7 @@ body {
 .portal-card::before,
 .admin-workspace::before,
 .meeting-workspace::before,
+.members-workspace::before,
 .feedback-report::before,
 .student-progress::before {
   display: block;
@@ -1770,6 +1851,7 @@ body {
 
 .admin-workspace,
 .meeting-workspace,
+.members-workspace,
 .feedback-report,
 .student-progress,
 .deferred-workspace {

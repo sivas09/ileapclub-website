@@ -182,10 +182,73 @@ export type StudentFeedbackEntry = {
 };
 
 export type StudentClubMember = {
+  id?: string;
   displayName: string;
   programLevel?: string | null;
   currentBandLevel: string;
   clubName: string;
+};
+
+export type MemberListEntry = {
+  id: string;
+  userId?: string;
+  displayName: string;
+  email?: string;
+  programLevel?: string | null;
+  currentBandLevel: string;
+  clubId?: string;
+  clubName: string;
+  centreId?: string;
+  centreName?: string;
+  rolesCompleted?: number;
+  averageScore?: number | null;
+  lastFeedbackDate?: string | null;
+  isActive?: boolean;
+};
+
+export type MemberDetail = {
+  id: string;
+  userId?: string;
+  displayName: string;
+  email?: string;
+  grade?: string;
+  programLevel?: string | null;
+  currentBandLevel: string;
+  isActive?: boolean;
+  clubs: Array<{ id?: string; name: string; centreName?: string; status?: string }>;
+  trackingSummary?: {
+    currentBand: string;
+    completedRequirements: number;
+    remainingRequirements: number;
+  };
+  requirements?: StudentRequirementStatus[];
+  roleHistory?: Array<{
+    id: string;
+    meetingDate: string;
+    meetingTitle: string;
+    clubName: string;
+    roleName: string;
+    attendanceStatus?: MeetingAttendance["status"] | null;
+  }>;
+  feedback?: Array<{
+    id: string;
+    meetingDate: string;
+    meetingTitle: string;
+    clubName: string;
+    score: number;
+    feedback?: string | null;
+    facilitatorName: string;
+    roleName: string;
+  }>;
+};
+
+export type MembersResponse = {
+  members: MemberListEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  centres: Centre[];
+  clubs: Club[];
 };
 
 export type BandRequirement = {
@@ -534,6 +597,31 @@ export async function getStudentProgress() {
 
 export async function getStudentClubMembers() {
   return request<{ members: StudentClubMember[] }>("/api/student/me/club-members");
+}
+
+export async function getMembers(params: {
+  centreId?: string;
+  clubId?: string;
+  search?: string;
+  programLevel?: string;
+  currentBandLevel?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+} = {}) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value)) {
+      query.set(key, String(value));
+    }
+  });
+
+  return request<MembersResponse>(`/api/members${query.toString() ? `?${query.toString()}` : ""}`);
+}
+
+export async function getMemberDetail(studentId: string) {
+  return request<{ member: MemberDetail }>(`/api/members/${studentId}`);
 }
 
 export async function fetchStudentProgressForManager(studentId: string) {
