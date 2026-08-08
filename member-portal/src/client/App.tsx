@@ -68,7 +68,7 @@ const upcomingWork = [
   "Meeting builder with agenda templates",
   "Student role self-claiming",
   "RTF agenda download",
-  "Attendance, scoring, and PTB requirements"
+  "Attendance, scoring, and Personal Tracking requirements"
 ];
 
 const programLevelOptions = [
@@ -1565,7 +1565,7 @@ function RequirementManagementPanel({
     <section className="requirement-manager" id="requirements">
       <div className="admin-heading">
         <div>
-          <p className="eyebrow">PTB requirements</p>
+          <p className="eyebrow">Personal Tracking</p>
           <h3>Update Student Band Progress</h3>
         </div>
         <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
@@ -1579,10 +1579,15 @@ function RequirementManagementPanel({
       {isLoading ? <p className="loading-state">Loading requirements...</p> : null}
       {progress ? (
         <>
+          <div className="student-context-card">
+            <strong>{progress.student.user.firstName} {progress.student.user.lastName}</strong>
+            <span>Program Level: {formatProgramLevel(progress.summary.programLevel)} - Current Band: {progress.summary.bandLevel} - Band Ladder: {formatBandLadder(progress.summary.programLevel)}</span>
+          </div>
+          {progress.summary.programLevelWarning ? <p className="admin-status is-error" role="alert">{progress.summary.programLevelWarning}</p> : null}
           <form className="student-placement-form" onSubmit={handleProfileUpdate}>
             <label>
               Program Level
-              <select name="programLevel" defaultValue={progress.summary.programLevel}>
+              <select name="programLevel" defaultValue={progress.summary.programLevel ?? "SENIOR"}>
                 {programLevelOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
@@ -1603,7 +1608,7 @@ function RequirementManagementPanel({
               <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
                 <div>
                   <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
-                  <span>{progress.summary.programLevel} ladder - {entry.requirement.description}</span>
+                  <span>{formatBandLadder(progress.summary.programLevel)} - {entry.requirement.description}</span>
                 </div>
                 <div className="requirement-controls">
                   <input
@@ -1886,16 +1891,18 @@ function StudentProgressDashboard() {
       {progress ? (
         <>
           <div className="progress-summary-grid">
-            <SummaryTile label="Program" valueText={progress.summary.programLevel === "JUNIOR" ? "Junior" : "Senior"} />
-            <SummaryTile label="Band Level" valueText={progress.summary.bandLevel} />
+            <SummaryTile label="Program Level" valueText={formatProgramLevel(progress.summary.programLevel)} />
+            <SummaryTile label="Current Band" valueText={progress.summary.bandLevel} />
+            <SummaryTile label="Band Ladder" valueText={formatBandLadder(progress.summary.programLevel)} />
             <SummaryTile label="Attendance" valueText={progress.summary.attendanceRate === null ? "N/A" : `${progress.summary.attendanceRate}%`} />
             <SummaryTile label="Roles Completed" value={progress.summary.rolesCompleted} />
             <SummaryTile label="Average Score" valueText={progress.summary.averageScore === null ? "N/A" : `${progress.summary.averageScore}`} />
           </div>
+          {progress.summary.programLevelWarning ? <p className="admin-status is-error" role="alert">{progress.summary.programLevelWarning}</p> : null}
 
           <div className="student-context-card">
             <strong>{progress.summary.clubName}</strong>
-            <span>{progress.summary.centreName}</span>
+            <span>{progress.summary.centreName} - {formatBandLadder(progress.summary.programLevel)}</span>
           </div>
 
           <DataPanel title="My Scores & Feedback">
@@ -1929,7 +1936,7 @@ function StudentProgressDashboard() {
             ) : <p>No facilitator feedback yet.</p>}
           </DataPanel>
 
-          <DataPanel title="Band/PTB Requirements">
+          <DataPanel title="Band Ladder Requirements">
             {progress.requirements.length ? (
               <ul className="requirement-list">
                 {progress.requirements.map((entry) => (
@@ -2030,7 +2037,27 @@ function dateInputValue(value: string) {
 }
 
 function formatProgramLevel(programLevel?: string | null) {
-  return programLevel === "JUNIOR" ? "Junior" : "Senior";
+  if (programLevel === "JUNIOR") {
+    return "Junior";
+  }
+
+  if (programLevel === "SENIOR") {
+    return "Senior";
+  }
+
+  return "Not set";
+}
+
+function formatBandLadder(programLevel?: string | null) {
+  if (programLevel === "JUNIOR") {
+    return "Junior 14-Band";
+  }
+
+  if (programLevel === "SENIOR") {
+    return "Senior 14-Band";
+  }
+
+  return "Program level not set";
 }
 
 function formatRole(role: Role) {

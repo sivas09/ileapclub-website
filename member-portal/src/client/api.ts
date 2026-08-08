@@ -142,9 +142,10 @@ export type StudentProgress = {
   requirements: StudentRequirementStatus[];
   summary: {
     bandLevel: string;
-    programLevel: string;
+    programLevel: string | null;
     clubName: string;
     centreName: string;
+    programLevelWarning?: string | null;
     attendanceRate: number | null;
     totalMeetingsMarked: number;
     rolesCompleted: number;

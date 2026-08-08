@@ -47,6 +47,10 @@ type StudentWithClubs = {
   }>;
 };
 
+type ProgramLevel = "JUNIOR" | "SENIOR";
+
+const programLevelWarning = "Program level not set. Please ask Admin or Facilitator to set Junior or Senior.";
+
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
   return (request: Request, response: Response, next: NextFunction) => {
     handler(request, response, next).catch(next);
@@ -133,6 +137,7 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
     })
     : [];
   const scorerById = new Map(scorers.map((scorer) => [scorer.id, scorer]));
+  const selectedProgramLevel = getStudentProgramLevel(student);
 
   response.json({
     student,
@@ -154,10 +159,11 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
         scoredAt: score.scoredAt
       };
     }),
-    requirements: await buildRequirementProgress(student.id, getStudentProgramLevel(student)),
+    requirements: await buildRequirementProgress(student.id, selectedProgramLevel),
     summary: {
       bandLevel: student.bandLevel,
-      programLevel: getStudentProgramLevel(student),
+      programLevel: selectedProgramLevel,
+      programLevelWarning: selectedProgramLevel ? null : programLevelWarning,
       clubName: formatClubNames(student.clubMemberships),
       centreName: formatCentreNames(student.clubMemberships),
       attendanceRate: totalAttendance ? Math.round((presentCount / totalAttendance) * 100) : null,
@@ -212,7 +218,9 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
     return;
   }
 
-  if (requirement.programLevel !== getStudentProgramLevel(student)) {
+  const selectedProgramLevel = getStudentProgramLevel(student);
+
+  if (!selectedProgramLevel || requirement.programLevel !== selectedProgramLevel) {
     response.status(400).json({ message: "Choose a requirement from this student's program ladder." });
     return;
   }
@@ -323,14 +331,16 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
       }
     }
   });
+  const selectedProgramLevel = getStudentProgramLevel(updatedStudent);
 
   response.json({
     student: updatedStudent,
     feedback: [],
-    requirements: await buildRequirementProgress(updatedStudent.id, getStudentProgramLevel(updatedStudent)),
+    requirements: await buildRequirementProgress(updatedStudent.id, selectedProgramLevel),
     summary: {
       bandLevel: updatedStudent.bandLevel,
-      programLevel: getStudentProgramLevel(updatedStudent),
+      programLevel: selectedProgramLevel,
+      programLevelWarning: selectedProgramLevel ? null : programLevelWarning,
       clubName: formatClubNames(updatedStudent.clubMemberships),
       centreName: formatCentreNames(updatedStudent.clubMemberships),
       attendanceRate: null,
@@ -375,13 +385,16 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
     return;
   }
 
+  const selectedProgramLevel = getStudentProgramLevel(student);
+
   response.json({
     student,
     feedback: [],
-    requirements: await buildRequirementProgress(student.id, getStudentProgramLevel(student)),
+    requirements: await buildRequirementProgress(student.id, selectedProgramLevel),
     summary: {
       bandLevel: student.bandLevel,
-      programLevel: getStudentProgramLevel(student),
+      programLevel: selectedProgramLevel,
+      programLevelWarning: selectedProgramLevel ? null : programLevelWarning,
       clubName: formatClubNames(student.clubMemberships),
       centreName: formatCentreNames(student.clubMemberships),
       attendanceRate: null,
@@ -393,7 +406,11 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   });
 }));
 
-async function buildRequirementProgress(studentId: string, programLevel: string) {
+async function buildRequirementProgress(studentId: string, programLevel: ProgramLevel | null) {
+  if (!programLevel) {
+    return [];
+  }
+
   const requirements = await prisma.bandRequirement.findMany({
     where: {
       programLevel,
@@ -427,7 +444,7 @@ async function buildRequirementProgress(studentId: string, programLevel: string)
   });
 }
 
-function getStudentProgramLevel(student: StudentWithClubs) {
+function getStudentProgramLevel(student: StudentWithClubs): ProgramLevel | null {
   if (student.programLevel === "JUNIOR" || student.programLevel === "SENIOR") {
     return student.programLevel;
   }
@@ -437,8 +454,18 @@ function getStudentProgramLevel(student: StudentWithClubs) {
   return inferProgramLevel(activeMembership?.club.program ?? "");
 }
 
-function inferProgramLevel(program: string) {
-  return program.toLowerCase().includes("junior") ? "JUNIOR" : "SENIOR";
+function inferProgramLevel(program: string): ProgramLevel | null {
+  const normalizedProgram = program.toLowerCase();
+
+  if (normalizedProgram.includes("junior")) {
+    return "JUNIOR";
+  }
+
+  if (normalizedProgram.includes("senior")) {
+    return "SENIOR";
+  }
+
+  return null;
 }
 
 async function canFacilitatorAccessStudent(facilitatorId: string, studentId: string) {
