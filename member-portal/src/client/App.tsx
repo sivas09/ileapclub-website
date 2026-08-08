@@ -110,7 +110,6 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
   STUDENT: [
     { href: "#overview", label: "Overview" },
     { href: "#meetings", label: "Meetings" },
-    { href: "#feedback", label: "Feedback" },
     { href: "#progress", label: "My Progress" }
   ]
 };
@@ -274,7 +273,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 
       {user.role === "ADMIN" ? <AdminWorkspace currentUser={user} /> : null}
       <MeetingWorkspace user={user} />
-      <FeedbackReportPanel />
+      {user.role !== "STUDENT" ? <FeedbackReportPanel /> : null}
       {user.role === "STUDENT" ? <StudentProgressDashboard /> : null}
       </div>
     </main>
@@ -1301,6 +1300,10 @@ function ScoreFeedback({
   return (
     <section className="meeting-mode-section" aria-label="Score feedback">
       <MeetingSummary meeting={meeting} />
+      <div className="feedback-context">
+        <strong>{meeting.title}</strong>
+        <span>{formatDate(meeting.meetingDate)} - {meeting.club.name}</span>
+      </div>
       {!assignedSlots.length ? <p className="loading-state">Assign students to roles before scoring feedback.</p> : null}
       <div className="score-feedback-list">
         {assignedSlots.map((slot) => (
@@ -1820,22 +1823,22 @@ function ScoreFeedbackRow({
     <article className="score-feedback-row">
       <div>
         <strong>{roleSlotName(slot)}</strong>
-        <span>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
+        <span>Assigned student: {slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
       </div>
       <label>
         Score
         <input type="number" min="0" max="100" value={score} placeholder="0-100" disabled={isSubmitting} onChange={(event) => setScore(event.currentTarget.value)} />
       </label>
       <label>
-        Feedback
-        <input
+        Feedback / Comment
+        <textarea
           value={feedback}
-          placeholder="Comment"
+          placeholder="Write facilitator feedback"
           disabled={isSubmitting}
           onChange={(event) => setFeedback(event.currentTarget.value)}
         />
       </label>
-      <button type="button" onClick={() => onScore(Number(score), feedback)} disabled={isSubmitting || !score}>Save Feedback</button>
+      <button type="button" onClick={() => onScore(Number(score), feedback)} disabled={isSubmitting || score === ""}>Save Feedback</button>
     </article>
   );
 }
@@ -1889,21 +1892,25 @@ function StudentProgressDashboard() {
                     <tr>
                       <th>Date</th>
                       <th>Meeting</th>
-                      <th>Role</th>
+                      <th>Club</th>
+                      <th>Role Performed</th>
                       <th>Score</th>
                       <th>Feedback</th>
                       <th>Facilitator</th>
+                      <th>Attendance</th>
                     </tr>
                   </thead>
                   <tbody>
                     {progress.feedback.map((entry) => (
                       <tr key={entry.id}>
                         <td>{formatDate(entry.meetingDate)}</td>
-                        <td>{entry.meetingTitle}<span>{entry.clubName}{entry.attendanceStatus ? ` - ${entry.attendanceStatus}` : ""}</span></td>
+                        <td>{entry.meetingTitle}</td>
+                        <td>{entry.clubName}</td>
                         <td>{entry.roleName}</td>
                         <td>{entry.score}/100</td>
                         <td>{entry.feedback || "No feedback entered yet."}</td>
                         <td>{entry.facilitatorName}</td>
+                        <td>{entry.attendanceStatus ?? "Not marked"}</td>
                       </tr>
                     ))}
                   </tbody>

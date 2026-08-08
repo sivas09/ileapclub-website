@@ -802,9 +802,16 @@ meetingsRouter.put("/:meetingId/slots/:slotId/score", asyncRoute(async (request,
     return;
   }
 
+  if (!(await isStudentInClub(slot.assignedStudentId, slot.meeting.clubId))) {
+    response.status(400).json({ message: "The assigned student is no longer active in this club." });
+    return;
+  }
+
   await prisma.meetingRoleScore.upsert({
     where: { roleSlotId: slot.id },
     update: {
+      studentId: slot.assignedStudentId,
+      meetingId,
       score: parsed.data.score,
       feedback: parsed.data.feedback || null,
       scoredByUserId: user.id,

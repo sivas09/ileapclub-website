@@ -983,12 +983,29 @@ button {
   align-items: center;
 }
 
+.feedback-context {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.feedback-context strong {
+  color: var(--portal-blue);
+}
+
+.feedback-context span {
+  color: var(--portal-muted);
+}
+
 .manager-role-row {
   grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(160px, 1fr) 80px auto auto;
 }
 
 .score-feedback-row {
-  grid-template-columns: minmax(190px, 0.8fr) 110px minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(190px, 0.8fr) 110px minmax(280px, 1.2fr) auto;
 }
 
 .manager-role-row label,
@@ -1003,13 +1020,20 @@ button {
 
 .manager-role-row input,
 .manager-role-row select,
-.score-feedback-row input {
+.score-feedback-row input,
+.score-feedback-row textarea {
   min-height: 40px;
   border: 1px solid #cbd7e6;
   border-radius: 8px;
   padding: 0 10px;
   color: var(--portal-ink);
   background: #ffffff;
+}
+
+.score-feedback-row textarea {
+  min-height: 82px;
+  padding: 10px;
+  resize: vertical;
 }
 
 .manager-role-row button.danger-action {

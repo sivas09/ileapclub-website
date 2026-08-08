@@ -67,7 +67,7 @@ reportsRouter.get("/facilitator-feedback", asyncRoute(async (request, response) 
         clubName: score.meeting.club.name,
         meetingTitle: score.meeting.title,
         meetingDate: score.meeting.meetingDate,
-        roleName: score.roleSlot.roleDefinition.name,
+        roleName: score.roleSlot.slotLabel || score.roleSlot.roleDefinition.name,
         score: score.score,
         feedback: score.feedback,
         evaluatorName: scorer ? `${scorer.firstName} ${scorer.lastName}` : "Not recorded",
@@ -105,25 +105,16 @@ async function feedbackVisibilityFilter(userId: string, role: Role) {
 }
 
 async function getFacilitatorClubIds(facilitatorId: string) {
-  const [clubAssignments, centreAssignments] = await Promise.all([
-    prisma.clubFacilitator.findMany({
-      where: { facilitatorId },
-      select: { clubId: true }
-    }),
-    prisma.centreFacilitator.findMany({
-      where: { facilitatorId },
-      select: {
-        centre: {
-          select: {
-            clubs: {
-              select: { id: true }
-            }
-          }
-        }
+  const clubAssignments = await prisma.clubFacilitator.findMany({
+    where: {
+      facilitatorId,
+      club: {
+        isActive: true,
+        centre: { isActive: true }
       }
-    })
-  ]);
-  const centreClubIds = centreAssignments.flatMap((assignment) => assignment.centre.clubs.map((club) => club.id));
+    },
+    select: { clubId: true }
+  });
 
-  return [...new Set([...clubAssignments.map((assignment) => assignment.clubId), ...centreClubIds])];
+  return clubAssignments.map((assignment) => assignment.clubId);
 }
