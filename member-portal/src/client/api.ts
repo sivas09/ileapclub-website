@@ -313,6 +313,13 @@ export async function createUser(payload: {
   });
 }
 
+export async function setUserActive(userId: string, isActive: boolean) {
+  return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}/active`, {
+    method: "PATCH",
+    body: JSON.stringify({ isActive })
+  });
+}
+
 export async function getMeetingsOverview() {
   return request<MeetingsOverview>("/api/meetings");
 }

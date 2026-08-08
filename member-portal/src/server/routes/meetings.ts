@@ -316,14 +316,23 @@ meetingsRouter.post("/:meetingId/slots", asyncRoute(async (request, response) =>
 
   const nextSortOrder = parsed.data.sortOrder ?? await getNextRoleSlotSortOrder(meetingId);
 
-  await prisma.meetingRoleSlot.create({
-    data: {
-      meetingId,
-      roleDefinitionId: roleDefinition.id,
-      slotLabel: parsed.data.slotLabel || roleDefinition.name,
-      sortOrder: nextSortOrder
+  try {
+    await prisma.meetingRoleSlot.create({
+      data: {
+        meetingId,
+        roleDefinitionId: roleDefinition.id,
+        slotLabel: parsed.data.slotLabel || roleDefinition.name,
+        sortOrder: nextSortOrder
+      }
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      response.status(409).json({ message: "Choose a role slot order that is not already used in this meeting." });
+      return;
     }
-  });
+
+    throw error;
+  }
 
   const updatedMeeting = await getMeeting(meetingId);
   response.status(201).json({ meeting: updatedMeeting });
@@ -464,14 +473,23 @@ meetingsRouter.patch("/:meetingId/slots/:slotId", asyncRoute(async (request, res
     return;
   }
 
-  await prisma.meetingRoleSlot.update({
-    where: { id: slot.id },
-    data: {
-      roleDefinitionId: roleDefinition?.id,
-      slotLabel: parsed.data.slotLabel || roleDefinition?.name || undefined,
-      sortOrder: parsed.data.sortOrder
+  try {
+    await prisma.meetingRoleSlot.update({
+      where: { id: slot.id },
+      data: {
+        roleDefinitionId: roleDefinition?.id,
+        slotLabel: parsed.data.slotLabel || roleDefinition?.name || undefined,
+        sortOrder: parsed.data.sortOrder
+      }
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      response.status(409).json({ message: "Choose a role slot order that is not already used in this meeting." });
+      return;
     }
-  });
+
+    throw error;
+  }
 
   const updatedMeeting = await getMeeting(meetingId);
   response.json({ meeting: updatedMeeting });
@@ -930,4 +948,8 @@ async function getStandardRoleDefinitions() {
 
     return role ? [role] : [];
   });
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }

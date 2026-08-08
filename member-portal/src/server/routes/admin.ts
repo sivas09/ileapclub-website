@@ -200,6 +200,23 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
 
   const data = parsed.data;
   const email = data.email.toLowerCase();
+  const requestedClubIds = [...new Set([...data.clubIds, ...data.facilitatorClubIds])];
+
+  if (requestedClubIds.length > 0) {
+    const activeClubCount = await prisma.club.count({
+      where: {
+        id: { in: requestedClubIds },
+        isActive: true,
+        centre: { isActive: true }
+      }
+    });
+
+    if (activeClubCount !== requestedClubIds.length) {
+      response.status(400).json({ message: "Assign users only to active clubs in active centres." });
+      return;
+    }
+  }
+
   const passwordHash = await bcrypt.hash(data.password, 12);
 
   try {
@@ -267,4 +284,32 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
 
     throw error;
   }
+}));
+
+adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) => {
+  const userId = String(request.params.userId);
+  const isActive = request.body?.isActive === true;
+
+  if (userId === request.user?.id && !isActive) {
+    response.status(400).json({ message: "You cannot deactivate your own admin account." });
+    return;
+  }
+
+  const user = await prisma.user.update({
+    where: {
+      id: userId,
+      role: { in: [Role.ADMIN, Role.FACILITATOR, Role.STUDENT] }
+    },
+    data: { isActive },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      isActive: true
+    }
+  });
+
+  response.json({ user });
 }));
