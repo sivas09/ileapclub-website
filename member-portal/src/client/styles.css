@@ -632,6 +632,221 @@ button {
   margin-top: 22px;
 }
 
+.meeting-list-panel,
+.meeting-detail-panel {
+  margin-top: 22px;
+}
+
+.meeting-list-panel h3 {
+  margin: 0 0 14px;
+  color: var(--portal-blue);
+}
+
+.meeting-table-wrap,
+.role-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.meeting-table,
+.role-assignment-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+}
+
+.meeting-table th,
+.meeting-table td,
+.role-assignment-table th,
+.role-assignment-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e0e8f1;
+  color: var(--portal-ink);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.meeting-table th,
+.role-assignment-table th {
+  color: var(--portal-blue);
+  background: #f7fafc;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.meeting-table tr.is-selected td {
+  background: #f0f8fb;
+}
+
+.meeting-row-actions,
+.meeting-mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meeting-row-actions button,
+.meeting-mode-tabs button,
+.manager-toolbar button,
+.booking-list button,
+.manager-role-row button,
+.score-feedback-row button {
+  min-height: 36px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.meeting-row-actions button:hover,
+.meeting-mode-tabs button:hover,
+.manager-toolbar button:hover,
+.booking-list button:hover,
+.manager-role-row button:hover,
+.score-feedback-row button:hover {
+  border-color: var(--portal-teal);
+  color: var(--portal-teal);
+}
+
+.meeting-mode-tabs {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d6e0eb;
+}
+
+.meeting-mode-tabs button.is-active {
+  color: #ffffff;
+  border-color: var(--portal-blue);
+  background: var(--portal-blue);
+}
+
+.meeting-mode-section {
+  display: grid;
+  gap: 16px;
+}
+
+.meeting-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.meeting-summary h3 {
+  margin: 4px 0 0;
+  color: var(--portal-blue);
+}
+
+.meeting-summary p:last-child {
+  margin: 8px 0 0;
+  color: var(--portal-muted);
+}
+
+.booking-list,
+.manager-role-list,
+.score-feedback-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.booking-list li,
+.manager-role-row,
+.score-feedback-row {
+  display: grid;
+  gap: 10px;
+  align-items: end;
+  padding: 14px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.booking-list li {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.booking-list li.is-open {
+  border-left: 4px solid var(--portal-orange);
+}
+
+.booking-list strong,
+.manager-role-row strong,
+.score-feedback-row strong {
+  color: var(--portal-ink);
+}
+
+.booking-list span,
+.manager-role-row span,
+.score-feedback-row span {
+  display: block;
+  margin-top: 4px;
+  color: var(--portal-muted);
+}
+
+.booking-list em {
+  color: var(--portal-muted);
+  font-style: normal;
+  font-weight: 900;
+}
+
+.manager-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.manager-role-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(160px, 1fr) 80px auto auto;
+}
+
+.score-feedback-row {
+  grid-template-columns: minmax(190px, 0.8fr) 110px minmax(220px, 1fr) auto;
+}
+
+.manager-role-row label,
+.score-feedback-row label {
+  display: grid;
+  gap: 5px;
+  color: var(--portal-muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.manager-role-row input,
+.manager-role-row select,
+.score-feedback-row input {
+  min-height: 40px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--portal-ink);
+  background: #ffffff;
+}
+
+.manager-role-row button.danger-action {
+  color: #9f1239;
+  background: #ffe4e6;
+}
+
+.meeting-form.compact {
+  margin-top: 0;
+}
+
 .meeting-card {
   padding: 20px;
   border: 1px solid #dbe4f0;
@@ -1020,9 +1235,19 @@ button {
   .role-management-controls,
   .slot-editor,
   .add-slot-editor,
+  .manager-role-row,
+  .score-feedback-row,
   .attendance-grid label,
   .requirement-list li,
   .requirement-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .meeting-summary {
+    flex-direction: column;
+  }
+
+  .booking-list li {
     grid-template-columns: 1fr;
   }
 }

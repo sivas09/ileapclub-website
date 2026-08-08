@@ -354,6 +354,20 @@ export async function createBulkMeetings(payload: {
   });
 }
 
+export async function updateMeetingDetails(meetingId: string, payload: {
+  clubId?: string;
+  title?: string;
+  templateType?: string;
+  meetingDate?: string;
+  startTime?: string;
+  location?: string;
+}) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function claimMeetingSlot(meetingId: string, slotId: string) {
   return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}/claim`, {
     method: "POST"

@@ -16,6 +16,8 @@ const createMeetingSchema = z.object({
   location: z.string().trim().optional()
 });
 
+const updateMeetingSchema = createMeetingSchema.partial();
+
 const bulkMeetingSchema = z.object({
   clubId: z.string().min(1),
   titlePrefix: z.string().trim().min(2),
@@ -245,6 +247,62 @@ meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
   });
 
   response.status(201).json({ meetings });
+}));
+
+meetingsRouter.patch("/:meetingId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can edit meetings." });
+    return;
+  }
+
+  const parsed = updateMeetingSchema.safeParse(request.body);
+
+  if (!parsed.success || Object.keys(parsed.data).length === 0) {
+    response.status(400).json({ message: "Enter meeting changes." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+
+  if (!meeting) {
+    response.status(404).json({ message: "Meeting not found." });
+    return;
+  }
+
+  if (!(await canManageClubId(user.id, user.role, meeting.clubId))) {
+    response.status(403).json({ message: "You cannot edit this meeting." });
+    return;
+  }
+
+  const targetClubId = parsed.data.clubId ?? meeting.clubId;
+
+  if (targetClubId !== meeting.clubId && !(await canManageClubId(user.id, user.role, targetClubId))) {
+    response.status(403).json({ message: "You cannot move this meeting to that club." });
+    return;
+  }
+
+  if (!(await isActiveClub(targetClubId))) {
+    response.status(400).json({ message: "Choose an active club before saving this meeting." });
+    return;
+  }
+
+  const updatedMeeting = await prisma.meeting.update({
+    where: { id: meeting.id },
+    data: {
+      clubId: targetClubId,
+      title: parsed.data.title,
+      templateType: parsed.data.templateType,
+      meetingDate: parsed.data.meetingDate ? new Date(`${parsed.data.meetingDate}T00:00:00.000Z`) : undefined,
+      startTime: parsed.data.startTime,
+      location: parsed.data.location === undefined ? undefined : parsed.data.location || null
+    },
+    include: meetingInclude
+  });
+
+  response.json({ meeting: updatedMeeting });
 }));
 
 meetingsRouter.get("/:meetingId/agenda.rtf", asyncRoute(async (request, response) => {

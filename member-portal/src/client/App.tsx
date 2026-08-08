@@ -22,9 +22,7 @@ import {
   getStoredToken,
   getStudentProgress,
   login,
-  markMeetingAttendance,
   Meeting,
-  MeetingAttendance,
   MeetingsOverview,
   PortalUser,
   Role,
@@ -36,6 +34,7 @@ import {
   storeToken,
   StudentProgress,
   toggleMeetingLock,
+  updateMeetingDetails,
   updateStudentRequirement
 } from "./api";
 
@@ -587,17 +586,41 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   );
 }
 
+type MeetingMode = "view" | "book" | "manage" | "score" | "edit";
+
+const meetingTemplates = [
+  "Junior Regular Meeting",
+  "Senior Regular Meeting",
+  "Debate Meeting",
+  "Town Hall Leadership Challenge",
+  "Competition Meeting",
+  "Special Event"
+];
+
 function MeetingWorkspace({ user }: { user: PortalUser }) {
   const [overview, setOverview] = useState<MeetingsOverview | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedMeetingId, setSelectedMeetingId] = useState("");
+  const [meetingMode, setMeetingMode] = useState<MeetingMode>("view");
   const canManageMeetings = user.role === "ADMIN" || user.role === "FACILITATOR";
+  const selectedMeeting = overview?.meetings.find((meeting) => meeting.id === selectedMeetingId) ?? overview?.meetings[0] ?? null;
+  const selectedMeetingStudents = selectedMeeting && overview
+    ? overview.students.filter((student) => isStudentInClub(student, selectedMeeting.clubId))
+    : [];
 
   async function refreshMeetings() {
     const data = await getMeetingsOverview();
     setOverview(data);
+    setSelectedMeetingId((currentMeetingId) => {
+      if (currentMeetingId && data.meetings.some((meeting) => meeting.id === currentMeetingId)) {
+        return currentMeetingId;
+      }
+
+      return data.meetings[0]?.id ?? "";
+    });
   }
 
   useEffect(() => {
@@ -673,6 +696,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
         ...current,
         meetings: current.meetings.map((meeting) => meeting.id === result.meeting.id ? result.meeting : meeting)
       } : current);
+      setSelectedMeetingId(result.meeting.id);
       setStatus(successMessage);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update meeting.");
@@ -725,12 +749,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             <label>
               Template
               <select name="templateType" required>
-                <option>Junior Regular Meeting</option>
-                <option>Senior Regular Meeting</option>
-                <option>Debate Meeting</option>
-                <option>Town Hall Leadership Challenge</option>
-                <option>Competition Meeting</option>
-                <option>Special Event</option>
+                {meetingTemplates.map((template) => <option key={template}>{template}</option>)}
               </select>
             </label>
             <label>Date<input name="meetingDate" type="date" required /></label>
@@ -759,12 +778,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             <label>
               Template
               <select name="templateType" required>
-                <option>Junior Regular Meeting</option>
-                <option>Senior Regular Meeting</option>
-                <option>Debate Meeting</option>
-                <option>Town Hall Leadership Challenge</option>
-                <option>Competition Meeting</option>
-                <option>Special Event</option>
+                {meetingTemplates.map((template) => <option key={template}>{template}</option>)}
               </select>
             </label>
             <label>
@@ -789,29 +803,71 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
         </form>
       ) : null}
 
-      <div className="meeting-list">
-        {isLoading ? <p>Loading meetings...</p> : null}
-        {!isLoading && !overview?.meetings.length ? <p>No meetings yet.</p> : null}
-        {overview?.meetings.map((meeting) => (
-          <MeetingCard
-            key={meeting.id}
-            meeting={meeting}
-            roleDefinitions={overview.roleDefinitions}
-            students={overview.students.filter((student) => isStudentInClub(student, meeting.clubId))}
-            user={user}
-            isSubmitting={isSubmitting}
-            onAddSlot={(roleDefinitionId, slotLabel) => updateMeeting(() => addMeetingRoleSlot(meeting.id, { roleDefinitionId, slotLabel }), "Role slot added.")}
-            onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(meeting.id, slotId), "Role claimed.")}
-            onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(meeting.id, slotId, studentId), "Role assignment updated.")}
-            onEditSlot={(slotId, payload) => updateMeeting(() => editMeetingRoleSlot(meeting.id, slotId, payload), "Role slot updated.")}
-            onAttendance={(studentId, status) => updateMeeting(() => markMeetingAttendance(meeting.id, { studentId, status }), "Attendance updated.")}
-            onScore={(slotId, score, feedback) => updateMeeting(() => scoreMeetingSlot(meeting.id, slotId, { score, feedback }), "Score saved.")}
-            onRemoveSlot={(slotId) => updateMeeting(() => removeMeetingRoleSlot(meeting.id, slotId), "Role slot removed.")}
-            onAgendaDownload={() => runDownload(() => downloadAgenda(meeting.id))}
-            onToggleLock={() => updateMeeting(() => toggleMeetingLock(meeting.id), meeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
-          />
-        ))}
-      </div>
+      <MeetingList
+        meetings={overview?.meetings ?? []}
+        user={user}
+        isLoading={isLoading}
+        isSubmitting={isSubmitting}
+        selectedMeetingId={selectedMeeting?.id ?? ""}
+        onSelect={(meeting, mode) => {
+          setSelectedMeetingId(meeting.id);
+          setMeetingMode(mode);
+          setStatus("");
+          setError("");
+        }}
+        onAgendaDownload={(meeting) => runDownload(() => downloadAgenda(meeting.id))}
+      />
+
+      {selectedMeeting ? (
+        <div className="meeting-detail-panel">
+          <div className="meeting-mode-tabs" aria-label="Meeting workflow">
+            <button type="button" className={meetingMode === "view" ? "is-active" : ""} onClick={() => setMeetingMode("view")}>View</button>
+            <button type="button" className={meetingMode === "book" ? "is-active" : ""} onClick={() => setMeetingMode("book")}>Book Roles</button>
+            {canManageMeetings ? <button type="button" className={meetingMode === "edit" ? "is-active" : ""} onClick={() => setMeetingMode("edit")}>Edit Meeting</button> : null}
+            {canManageMeetings ? <button type="button" className={meetingMode === "manage" ? "is-active" : ""} onClick={() => setMeetingMode("manage")}>Manage Roles</button> : null}
+            {canManageMeetings ? <button type="button" className={meetingMode === "score" ? "is-active" : ""} onClick={() => setMeetingMode("score")}>Score Feedback</button> : null}
+          </div>
+
+          {meetingMode === "view" ? <MeetingView meeting={selectedMeeting} /> : null}
+          {meetingMode === "book" ? (
+            <BookRoles
+              meeting={selectedMeeting}
+              user={user}
+              isSubmitting={isSubmitting}
+              onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(selectedMeeting.id, slotId), "Role claimed.")}
+            />
+          ) : null}
+          {canManageMeetings && meetingMode === "edit" && overview ? (
+            <EditMeeting
+              meeting={selectedMeeting}
+              clubs={overview.clubs}
+              isSubmitting={isSubmitting}
+              onSave={(payload) => updateMeeting(() => updateMeetingDetails(selectedMeeting.id, payload), "Meeting updated.")}
+            />
+          ) : null}
+          {canManageMeetings && meetingMode === "manage" && overview ? (
+            <ManageRoles
+              meeting={selectedMeeting}
+              roleDefinitions={overview.roleDefinitions}
+              students={selectedMeetingStudents}
+              isSubmitting={isSubmitting}
+              onAddSlot={(roleDefinitionId, slotLabel) => updateMeeting(() => addMeetingRoleSlot(selectedMeeting.id, { roleDefinitionId, slotLabel }), "Role slot added.")}
+              onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(selectedMeeting.id, slotId, studentId), "Role assignment updated.")}
+              onEditSlot={(slotId, payload) => updateMeeting(() => editMeetingRoleSlot(selectedMeeting.id, slotId, payload), "Role slot updated.")}
+              onRemoveSlot={(slotId) => updateMeeting(() => removeMeetingRoleSlot(selectedMeeting.id, slotId), "Role slot removed.")}
+              onToggleLock={() => updateMeeting(() => toggleMeetingLock(selectedMeeting.id), selectedMeeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
+            />
+          ) : null}
+          {canManageMeetings && meetingMode === "score" ? (
+            <ScoreFeedback
+              meeting={selectedMeeting}
+              isSubmitting={isSubmitting}
+              onScore={(slotId, score, feedback) => updateMeeting(() => scoreMeetingSlot(selectedMeeting.id, slotId, { score, feedback }), "Score saved.")}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       {canManageMeetings && overview?.students.length ? (
         <RequirementManagementPanel
           students={overview.students}
@@ -820,6 +876,308 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
       ) : null}
     </section>
   );
+}
+
+function MeetingList({
+  meetings,
+  user,
+  isLoading,
+  isSubmitting,
+  selectedMeetingId,
+  onSelect,
+  onAgendaDownload
+}: {
+  meetings: Meeting[];
+  user: PortalUser;
+  isLoading: boolean;
+  isSubmitting: boolean;
+  selectedMeetingId: string;
+  onSelect: (meeting: Meeting, mode: MeetingMode) => void;
+  onAgendaDownload: (meeting: Meeting) => void;
+}) {
+  const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
+
+  return (
+    <div className="meeting-list-panel">
+      <h3>Meeting List</h3>
+      {isLoading ? <p className="loading-state">Loading meetings...</p> : null}
+      {!isLoading && !meetings.length ? <p className="loading-state">No meetings yet.</p> : null}
+      {meetings.length ? (
+        <div className="meeting-table-wrap">
+          <table className="meeting-table">
+            <thead>
+              <tr>
+                <th>Meeting</th>
+                <th>Club</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {meetings.map((meeting) => (
+                <tr key={meeting.id} className={meeting.id === selectedMeetingId ? "is-selected" : ""}>
+                  <td>{meeting.title}</td>
+                  <td>{meeting.club.name}</td>
+                  <td>{formatDate(meeting.meetingDate)}</td>
+                  <td>{meeting.startTime}</td>
+                  <td>{meeting.location || "None"}</td>
+                  <td><StatusText isLocked={meeting.isRoleLocked} /></td>
+                  <td>
+                    <div className="meeting-row-actions">
+                      <button type="button" onClick={() => onSelect(meeting, "view")}>View</button>
+                      <button type="button" onClick={() => onSelect(meeting, "book")}>Book Roles</button>
+                      <button type="button" onClick={() => onAgendaDownload(meeting)} disabled={isSubmitting}>Download Agenda</button>
+                      {canManage ? <button type="button" onClick={() => onSelect(meeting, "edit")}>Edit Meeting</button> : null}
+                      {canManage ? <button type="button" onClick={() => onSelect(meeting, "manage")}>Manage Roles</button> : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MeetingView({ meeting }: { meeting: Meeting }) {
+  return (
+    <section className="meeting-mode-section" aria-label="Meeting view">
+      <MeetingSummary meeting={meeting} />
+      <RoleAssignmentTable meeting={meeting} />
+    </section>
+  );
+}
+
+function BookRoles({
+  meeting,
+  user,
+  isSubmitting,
+  onClaim
+}: {
+  meeting: Meeting;
+  user: PortalUser;
+  isSubmitting: boolean;
+  onClaim: (slotId: string) => void;
+}) {
+  const claimedCount = user.role === "STUDENT"
+    ? meeting.roleSlots.filter((slot) => slot.assignedStudent?.user.id === user.id).length
+    : 0;
+  const openSlots = meeting.roleSlots.filter((slot) => !slot.assignedStudentId);
+  const canBook = user.role === "STUDENT" && !meeting.isRoleLocked;
+
+  return (
+    <section className="meeting-mode-section" aria-label="Book roles">
+      <MeetingSummary meeting={meeting} />
+      <p className="field-note">You can claim up to 2 roles per meeting.</p>
+      {meeting.isRoleLocked ? <p className="admin-status is-error">Role booking is locked for this meeting.</p> : null}
+      {user.role !== "STUDENT" ? <p className="loading-state">Managers can review booking availability here. Use Manage Roles to assign students.</p> : null}
+      <ul className="booking-list">
+        {meeting.roleSlots.map((slot) => {
+          const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "";
+          const isOwnRole = slot.assignedStudent?.user.id === user.id;
+          const isAvailable = canBook && !slot.assignedStudentId && claimedCount < 2;
+
+          return (
+            <li key={slot.id} className={!slot.assignedStudentId ? "is-open" : ""}>
+              <div>
+                <strong>{roleSlotName(slot)}</strong>
+                <span>{assignedName ? `Assigned to ${assignedName}` : "Available"}</span>
+              </div>
+              {isOwnRole ? <em>Claimed</em> : null}
+              {!slot.assignedStudentId ? (
+                <button type="button" onClick={() => onClaim(slot.id)} disabled={!isAvailable || isSubmitting}>
+                  Claim
+                </button>
+              ) : null}
+              {slot.assignedStudentId && !isOwnRole ? <em>Not available</em> : null}
+            </li>
+          );
+        })}
+      </ul>
+      {!openSlots.length ? <p className="loading-state">No open roles are available for this meeting.</p> : null}
+      {user.role === "STUDENT" && claimedCount >= 2 ? <p className="admin-status is-success">You have claimed 2 roles for this meeting.</p> : null}
+    </section>
+  );
+}
+
+function ManageRoles({
+  meeting,
+  roleDefinitions,
+  students,
+  isSubmitting,
+  onAddSlot,
+  onAssign,
+  onEditSlot,
+  onRemoveSlot,
+  onToggleLock
+}: {
+  meeting: Meeting;
+  roleDefinitions: MeetingsOverview["roleDefinitions"];
+  students: MeetingsOverview["students"];
+  isSubmitting: boolean;
+  onAddSlot: (roleDefinitionId: string, slotLabel?: string) => void;
+  onAssign: (slotId: string, studentId: string | null) => void;
+  onEditSlot: (slotId: string, payload: { roleDefinitionId?: string; slotLabel?: string; sortOrder?: number }) => void;
+  onRemoveSlot: (slotId: string) => void;
+  onToggleLock: () => void;
+}) {
+  return (
+    <section className="meeting-mode-section" aria-label="Manage roles">
+      <MeetingSummary meeting={meeting} />
+      <div className="manager-toolbar">
+        <button type="button" onClick={onToggleLock} disabled={isSubmitting}>{meeting.isRoleLocked ? "Unlock Role Claims" : "Lock Role Claims"}</button>
+        <StatusText isLocked={meeting.isRoleLocked} />
+      </div>
+      <AddRoleSlotControls roleDefinitions={roleDefinitions} isSubmitting={isSubmitting} onAddSlot={onAddSlot} />
+      <div className="manager-role-list">
+        {meeting.roleSlots.map((slot) => (
+          <ManageRoleSlotRow
+            key={slot.id}
+            slot={slot}
+            roleDefinitions={roleDefinitions}
+            students={students}
+            isSubmitting={isSubmitting}
+            onAssign={(studentId) => onAssign(slot.id, studentId)}
+            onEditSlot={(payload) => onEditSlot(slot.id, payload)}
+            onRemoveSlot={() => onRemoveSlot(slot.id)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ScoreFeedback({
+  meeting,
+  isSubmitting,
+  onScore
+}: {
+  meeting: Meeting;
+  isSubmitting: boolean;
+  onScore: (slotId: string, score: number, feedback?: string) => void;
+}) {
+  const assignedSlots = meeting.roleSlots.filter((slot) => slot.assignedStudentId);
+
+  return (
+    <section className="meeting-mode-section" aria-label="Score feedback">
+      <MeetingSummary meeting={meeting} />
+      {!assignedSlots.length ? <p className="loading-state">Assign students to roles before scoring feedback.</p> : null}
+      <div className="score-feedback-list">
+        {assignedSlots.map((slot) => (
+          <ScoreFeedbackRow
+            key={slot.id}
+            slot={slot}
+            isSubmitting={isSubmitting}
+            onScore={(score, feedback) => onScore(slot.id, score, feedback)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EditMeeting({
+  meeting,
+  clubs,
+  isSubmitting,
+  onSave
+}: {
+  meeting: Meeting;
+  clubs: MeetingsOverview["clubs"];
+  isSubmitting: boolean;
+  onSave: (payload: { clubId: string; title: string; templateType: string; meetingDate: string; startTime: string; location: string }) => void;
+}) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+
+    onSave({
+      clubId: String(formData.get("clubId") || ""),
+      title: String(formData.get("title") || ""),
+      templateType: String(formData.get("templateType") || ""),
+      meetingDate: String(formData.get("meetingDate") || ""),
+      startTime: String(formData.get("startTime") || ""),
+      location: String(formData.get("location") || "")
+    });
+  }
+
+  return (
+    <section className="meeting-mode-section" aria-label="Edit meeting">
+      <MeetingSummary meeting={meeting} />
+      <form className="meeting-form compact" onSubmit={handleSubmit}>
+        <div className="form-two-column">
+          <label>
+            Club
+            <select name="clubId" defaultValue={meeting.clubId} required>
+              {clubs.map((club) => (
+                <option key={club.id} value={club.id}>{club.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>Title<input name="title" defaultValue={meeting.title} required /></label>
+          <label>
+            Template
+            <select name="templateType" defaultValue={meeting.templateType} required>
+              {meetingTemplates.map((template) => <option key={template}>{template}</option>)}
+            </select>
+          </label>
+          <label>Date<input name="meetingDate" type="date" defaultValue={dateInputValue(meeting.meetingDate)} required /></label>
+          <label>Time<input name="startTime" defaultValue={meeting.startTime} required /></label>
+          <label>Location or Link<input name="location" defaultValue={meeting.location ?? ""} /></label>
+        </div>
+        <button type="submit" disabled={isSubmitting}>Save Meeting</button>
+      </form>
+    </section>
+  );
+}
+
+function MeetingSummary({ meeting }: { meeting: Meeting }) {
+  return (
+    <div className="meeting-summary">
+      <div>
+        <p className="eyebrow">{meeting.templateType}</p>
+        <h3>{meeting.title}</h3>
+        <p>{meeting.club.name} - {formatDate(meeting.meetingDate)} - {meeting.startTime} - {meeting.location || "None"}</p>
+      </div>
+      <StatusText isLocked={meeting.isRoleLocked} />
+    </div>
+  );
+}
+
+function RoleAssignmentTable({ meeting }: { meeting: Meeting }) {
+  return (
+    <div className="role-table-wrap">
+      <table className="role-assignment-table">
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Assigned Member</th>
+            <th>Score</th>
+            <th>Feedback</th>
+          </tr>
+        </thead>
+        <tbody>
+          {meeting.roleSlots.map((slot) => (
+            <tr key={slot.id}>
+              <td>{roleSlotName(slot)}</td>
+              <td>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</td>
+              <td>{slot.score ? `${slot.score.score}/100` : "None"}</td>
+              <td>{slot.score?.feedback || "None"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function StatusText({ isLocked }: { isLocked: boolean }) {
+  return <strong className={isLocked ? "lock-pill locked" : "lock-pill"}>{isLocked ? "Locked" : "Open"}</strong>;
 }
 
 function RequirementManagementPanel({
@@ -979,123 +1337,6 @@ function FeedbackReportPanel() {
   );
 }
 
-function MeetingCard({
-  meeting,
-  roleDefinitions,
-  students,
-  user,
-  isSubmitting,
-  onAddSlot,
-  onClaim,
-  onAssign,
-  onEditSlot,
-  onAttendance,
-  onScore,
-  onRemoveSlot,
-  onAgendaDownload,
-  onToggleLock
-}: {
-  meeting: Meeting;
-  roleDefinitions: MeetingsOverview["roleDefinitions"];
-  students: MeetingsOverview["students"];
-  user: PortalUser;
-  isSubmitting: boolean;
-  onAddSlot: (roleDefinitionId: string, slotLabel?: string) => void;
-  onClaim: (slotId: string) => void;
-  onAssign: (slotId: string, studentId: string | null) => void;
-  onEditSlot: (slotId: string, payload: { roleDefinitionId?: string; slotLabel?: string; sortOrder?: number }) => void;
-  onAttendance: (studentId: string, status: MeetingAttendance["status"]) => void;
-  onScore: (slotId: string, score: number, feedback?: string) => void;
-  onRemoveSlot: (slotId: string) => void;
-  onAgendaDownload: () => void;
-  onToggleLock: () => void;
-}) {
-  const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
-  const canClaim = user.role === "STUDENT" && !meeting.isRoleLocked;
-  const openRoleCount = meeting.roleSlots.filter((slot) => !slot.assignedStudentId).length;
-
-  return (
-    <article className="meeting-card">
-      <div className="meeting-card-header">
-        <div>
-          <span>{meeting.templateType}</span>
-          <h3>{meeting.title}</h3>
-          <p>{meeting.club.name} - {formatDate(meeting.meetingDate)} - {meeting.startTime}{meeting.location ? ` - ${meeting.location}` : ""}</p>
-          {user.role === "STUDENT" ? <p className="open-role-summary">{openRoleCount} open role{openRoleCount === 1 ? "" : "s"} available to claim</p> : null}
-        </div>
-        <div className="meeting-actions">
-          <strong className={meeting.isRoleLocked ? "lock-pill locked" : "lock-pill"}>{meeting.isRoleLocked ? "Locked" : "Open"}</strong>
-          <button className="agenda-download" type="button" onClick={onAgendaDownload} disabled={isSubmitting}>Download Agenda</button>
-          {canManage ? <button type="button" onClick={onToggleLock} disabled={isSubmitting}>{meeting.isRoleLocked ? "Reopen Roles" : "Lock Roles"}</button> : null}
-        </div>
-      </div>
-      {canManage ? (
-        <AddRoleSlotControls
-          roleDefinitions={roleDefinitions}
-          isSubmitting={isSubmitting}
-          onAddSlot={onAddSlot}
-        />
-      ) : null}
-      <div className="role-slot-grid">
-        {meeting.roleSlots.map((slot) => {
-          const assignedName = slot.assignedStudent ? `${slot.assignedStudent.user.firstName} ${slot.assignedStudent.user.lastName}` : "Open";
-
-          return (
-            <div className={slot.assignedStudentId ? "role-slot" : "role-slot is-open"} key={slot.id}>
-              <div>
-                <strong>{slot.slotLabel || slot.roleDefinition.name}</strong>
-                <span>{assignedName}</span>
-              </div>
-              {canClaim && !slot.assignedStudentId ? (
-                <button type="button" onClick={() => onClaim(slot.id)} disabled={isSubmitting}>Claim Role</button>
-              ) : null}
-              {canManage ? (
-                <RoleManagementControls
-                  slot={slot}
-                  roleDefinitions={roleDefinitions}
-                  students={students}
-                  isSubmitting={isSubmitting}
-                  onEditSlot={(payload) => onEditSlot(slot.id, payload)}
-                  onAssign={(studentId) => onAssign(slot.id, studentId)}
-                  onScore={(score, feedback) => onScore(slot.id, score, feedback)}
-                  onRemoveSlot={() => onRemoveSlot(slot.id)}
-                />
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-      {canManage ? (
-        <div className="attendance-panel">
-          <h4>Attendance</h4>
-          <div className="attendance-grid">
-            {students.map((student) => {
-              const attendance = meeting.attendance.find((entry) => entry.studentId === student.id);
-
-              return (
-                <label key={student.id}>
-                  <span>{student.user.firstName} {student.user.lastName}</span>
-                  <select
-                    value={attendance?.status ?? ""}
-                    onChange={(event) => onAttendance(student.id, event.target.value as MeetingAttendance["status"])}
-                    disabled={isSubmitting}
-                  >
-                    <option value="">Not marked</option>
-                    <option value="PRESENT">Present</option>
-                    <option value="ABSENT">Absent</option>
-                    <option value="LATE">Late</option>
-                    <option value="EXCUSED">Excused</option>
-                  </select>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
 function AddRoleSlotControls({
   roleDefinitions,
   isSubmitting,
@@ -1142,14 +1383,13 @@ function AddRoleSlotControls({
   );
 }
 
-function RoleManagementControls({
+function ManageRoleSlotRow({
   slot,
   roleDefinitions,
   students,
   isSubmitting,
   onEditSlot,
   onAssign,
-  onScore,
   onRemoveSlot
 }: {
   slot: Meeting["roleSlots"][number];
@@ -1158,30 +1398,17 @@ function RoleManagementControls({
   isSubmitting: boolean;
   onEditSlot: (payload: { roleDefinitionId?: string; slotLabel?: string; sortOrder?: number }) => void;
   onAssign: (studentId: string | null) => void;
-  onScore: (score: number, feedback?: string) => void;
   onRemoveSlot: () => void;
 }) {
   const [roleDefinitionId, setRoleDefinitionId] = useState(slot.roleDefinition.id);
   const [slotLabel, setSlotLabel] = useState(slot.slotLabel || slot.roleDefinition.name);
   const [sortOrder, setSortOrder] = useState(String(slot.sortOrder));
-  const [score, setScore] = useState(String(slot.score?.score ?? ""));
-  const [feedback, setFeedback] = useState(slot.score?.feedback ?? "");
 
   useEffect(() => {
     setRoleDefinitionId(slot.roleDefinition.id);
     setSlotLabel(slot.slotLabel || slot.roleDefinition.name);
     setSortOrder(String(slot.sortOrder));
-    setScore(String(slot.score?.score ?? ""));
-    setFeedback(slot.score?.feedback ?? "");
-  }, [slot.id, slot.assignedStudentId, slot.roleDefinition.id, slot.roleDefinition.name, slot.score?.score, slot.score?.feedback, slot.slotLabel, slot.sortOrder]);
-
-  function handleSaveScore() {
-    if (!score) {
-      return;
-    }
-
-    onScore(Number(score), feedback);
-  }
+  }, [slot.id, slot.roleDefinition.id, slot.roleDefinition.name, slot.slotLabel, slot.sortOrder]);
 
   function handleSaveSlot() {
     onEditSlot({
@@ -1192,56 +1419,86 @@ function RoleManagementControls({
   }
 
   return (
-    <div className="role-management-controls">
-      <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(event.target.value || null)} disabled={isSubmitting}>
-        <option value="">Open</option>
-        {students.map((student) => (
-          <option key={student.id} value={student.id}>{student.user.firstName} {student.user.lastName}</option>
-        ))}
-      </select>
+    <article className="manager-role-row">
+      <div>
+        <strong>{roleSlotName(slot)}</strong>
+        <span>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
+      </div>
       <label>
-        Score
+        Assigned Member
+        <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(event.target.value || null)} disabled={isSubmitting}>
+          <option value="">None</option>
+          {students.map((student) => (
+            <option key={student.id} value={student.id}>{formatStudentName(student)}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Role
+        <select value={roleDefinitionId} onChange={(event) => setRoleDefinitionId(event.currentTarget.value)} disabled={isSubmitting}>
+          {roleDefinitions.map((roleDefinition) => (
+            <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Label
+        <input value={slotLabel} onChange={(event) => setSlotLabel(event.currentTarget.value)} disabled={isSubmitting} />
+      </label>
+      <label>
+        Order
         <input
           type="number"
-          min="0"
-          max="100"
-          value={score}
-          placeholder="0-100"
-          disabled={isSubmitting || !slot.assignedStudentId}
-          onChange={(event) => setScore(event.currentTarget.value)}
+          min="1"
+          value={sortOrder}
+          onChange={(event) => setSortOrder(event.currentTarget.value)}
+          disabled={isSubmitting}
         />
       </label>
-      <label className="feedback-input">
+      <button type="button" onClick={handleSaveSlot} disabled={isSubmitting || !roleDefinitionId || !sortOrder}>Update Slot</button>
+      <button type="button" className="danger-action" onClick={onRemoveSlot} disabled={isSubmitting || Boolean(slot.assignedStudentId || slot.score)}>Remove</button>
+    </article>
+  );
+}
+
+function ScoreFeedbackRow({
+  slot,
+  isSubmitting,
+  onScore
+}: {
+  slot: Meeting["roleSlots"][number];
+  isSubmitting: boolean;
+  onScore: (score: number, feedback?: string) => void;
+}) {
+  const [score, setScore] = useState(String(slot.score?.score ?? ""));
+  const [feedback, setFeedback] = useState(slot.score?.feedback ?? "");
+
+  useEffect(() => {
+    setScore(String(slot.score?.score ?? ""));
+    setFeedback(slot.score?.feedback ?? "");
+  }, [slot.id, slot.score?.score, slot.score?.feedback]);
+
+  return (
+    <article className="score-feedback-row">
+      <div>
+        <strong>{roleSlotName(slot)}</strong>
+        <span>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
+      </div>
+      <label>
+        Score
+        <input type="number" min="0" max="100" value={score} placeholder="0-100" disabled={isSubmitting} onChange={(event) => setScore(event.currentTarget.value)} />
+      </label>
+      <label>
         Feedback
         <input
           value={feedback}
           placeholder="Comment"
-          disabled={isSubmitting || !slot.assignedStudentId}
+          disabled={isSubmitting}
           onChange={(event) => setFeedback(event.currentTarget.value)}
         />
       </label>
-      <button type="button" onClick={handleSaveScore} disabled={isSubmitting || !slot.assignedStudentId || !score}>Save</button>
-      <div className="slot-editor">
-        <label>
-          Role
-          <select value={roleDefinitionId} onChange={(event) => setRoleDefinitionId(event.currentTarget.value)} disabled={isSubmitting}>
-            {roleDefinitions.map((roleDefinition) => (
-              <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Label
-          <input value={slotLabel} onChange={(event) => setSlotLabel(event.currentTarget.value)} disabled={isSubmitting} />
-        </label>
-        <label>
-          Order
-          <input type="number" min="1" value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value)} disabled={isSubmitting} />
-        </label>
-        <button type="button" onClick={handleSaveSlot} disabled={isSubmitting || !roleDefinitionId || !sortOrder}>Update Slot</button>
-        <button type="button" className="danger-action" onClick={onRemoveSlot} disabled={isSubmitting || Boolean(slot.assignedStudentId || slot.score)}>Remove</button>
-      </div>
-    </div>
+      <button type="button" onClick={() => onScore(Number(score), feedback)} disabled={isSubmitting || !score}>Save Feedback</button>
+    </article>
   );
 }
 
@@ -1365,6 +1622,18 @@ function DataPanel({ title, children }: { title: string; children: ReactNode }) 
 
 function StatusBadge({ isActive }: { isActive: boolean }) {
   return <em className={isActive ? "status-badge is-active" : "status-badge is-inactive"}>{isActive ? "Active" : "Archived"}</em>;
+}
+
+function roleSlotName(slot: Meeting["roleSlots"][number]) {
+  return slot.slotLabel || slot.roleDefinition.name;
+}
+
+function formatStudentName(student: { user: { firstName: string; lastName: string } }) {
+  return `${student.user.firstName} ${student.user.lastName}`;
+}
+
+function dateInputValue(value: string) {
+  return new Date(value).toISOString().slice(0, 10);
 }
 
 function formatRole(role: Role) {

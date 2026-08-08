@@ -23,9 +23,9 @@ type AgendaMeeting = Prisma.MeetingGetPayload<{
 export function buildAgendaRtf(meeting: AgendaMeeting) {
   const roleSlots = [...meeting.roleSlots].sort((left, right) => left.sortOrder - right.sortOrder);
   const assignmentRows = roleSlots.map((slot) => tableRow([
-    slot.roleDefinition.name,
+    roleSlotName(slot),
     assignedMemberName(slot),
-    rolePreparationNote(slot.roleDefinition.name),
+    rolePreparationNote(roleSlotName(slot)),
     slot.assignedStudentId ? "Assigned" : "Open for member sign-up"
   ])).join("");
   const agendaRows = agendaSectionsForTemplate(meeting.templateType)
@@ -58,7 +58,7 @@ export function buildAgendaRtf(meeting: AgendaMeeting) {
     "\\par",
     heading("Member Role Sign-Up", 28),
     tableHeader(["Role", "Assigned Member", "Preparation Notes", "Signup Status"]),
-    assignmentRows || tableRow(["No roles configured", "Open", "Add role slots before publishing the meeting agenda.", "Open"]),
+    assignmentRows || tableRow(["No roles configured", "None", "Add role slots before publishing the meeting agenda.", "Open"]),
     "\\par",
     heading("Facilitator Notes", 28),
     bullet("Open roles are available for eligible student members to claim until roles are locked."),
@@ -305,13 +305,17 @@ function agendaSectionsForTemplate(templateType: string) {
 function assignedMemberName(slot: AgendaRoleSlot) {
   return slot.assignedStudent
     ? `${slot.assignedStudent.user.firstName} ${slot.assignedStudent.user.lastName}`
-    : "Open";
+    : "None";
 }
 
 function assignedMemberForRole(roleSlots: AgendaRoleSlot[], requestedRole: string) {
-  const slot = roleSlots.find((candidate) => roleMatches(candidate.roleDefinition.name, requestedRole));
+  const slot = roleSlots.find((candidate) => roleMatches(roleSlotName(candidate), requestedRole));
 
-  return slot ? assignedMemberName(slot) : "Open";
+  return slot ? assignedMemberName(slot) : "None";
+}
+
+function roleSlotName(slot: AgendaRoleSlot) {
+  return slot.slotLabel || slot.roleDefinition.name;
 }
 
 function roleMatches(actualRole: string, requestedRole: string) {
