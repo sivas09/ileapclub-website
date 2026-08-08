@@ -12,6 +12,9 @@ import {
   createClub,
   createMeeting,
   createUser,
+  deleteDemoUser,
+  deleteSampleFeedback,
+  deleteSampleUsers,
   downloadAgenda,
   editMeetingRoleSlot,
   fetchStudentProgressForManager,
@@ -35,6 +38,7 @@ import {
   saveStudentMeetingFeedback,
   removeMeetingRoleSlot,
   removeClubFacilitator,
+  resetDemoMeetingData,
   setCentreActive,
   setClubActive,
   setUserActive,
@@ -412,6 +416,46 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
       setStatus(isActive ? "User reactivated." : "User deactivated.");
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update user.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteDemoUser(portalUser: AdminUser) {
+    if (!window.confirm("This permanently removes sample/test data only. Real member data will not be deleted. Continue?")) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await deleteDemoUser(portalUser.id);
+      await refreshOverview();
+      setStatus(formatCleanupSummary("Sample user deleted.", result));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete sample user.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function runDemoCleanup(action: () => Promise<unknown>, successMessage: string) {
+    if (!window.confirm("This permanently removes sample/test data only. Real member data will not be deleted. Continue?")) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await action();
+      await refreshOverview();
+      setStatus(formatCleanupSummary(successMessage, result));
+    } catch (cleanupError) {
+      setError(cleanupError instanceof Error ? cleanupError.message : "Unable to clean up demo data.");
     } finally {
       setIsSubmitting(false);
     }
@@ -803,6 +847,42 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         ) : <p className="loading-state">No facilitator club assignments yet.</p>}
       </section>
 
+      <section className="assignment-panel" aria-label="Demo and test data cleanup">
+        <div className="admin-heading">
+          <div>
+            <p className="eyebrow">Demo/Test Data Cleanup</p>
+            <h3>Remove Sample Data</h3>
+          </div>
+        </div>
+        <p className="field-note">These actions only target sample/test records such as users with example.com email addresses or Sample in the name. Real member data should be deactivated, not deleted.</p>
+        <div className="record-actions">
+          <button
+            type="button"
+            className="text-action danger-action"
+            onClick={() => runDemoCleanup(deleteSampleUsers, "Sample users deleted.")}
+            disabled={isSubmitting}
+          >
+            Delete Sample Users
+          </button>
+          <button
+            type="button"
+            className="text-action danger-action"
+            onClick={() => runDemoCleanup(deleteSampleFeedback, "Sample feedback deleted.")}
+            disabled={isSubmitting}
+          >
+            Delete Sample Feedback
+          </button>
+          <button
+            type="button"
+            className="text-action danger-action"
+            onClick={() => runDemoCleanup(resetDemoMeetingData, "Demo meeting data reset.")}
+            disabled={isSubmitting}
+          >
+            Reset Demo Meeting Data
+          </button>
+        </div>
+      </section>
+
       <div className="admin-table-grid">
         <DataPanel title="Centres">
           {isLoading ? <p>Loading...</p> : overview?.centres.length ? (
@@ -873,6 +953,16 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                       >
                         {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
                       </button>
+                      {isDemoUser(portalUser, currentUser.id) ? (
+                        <button
+                          type="button"
+                          className="text-action danger-action"
+                          onClick={() => handleDeleteDemoUser(portalUser)}
+                          disabled={isSubmitting}
+                        >
+                          Delete User
+                        </button>
+                      ) : null}
                     </div>
                     {editingUser?.id === portalUser.id ? renderEditUserForm(portalUser) : null}
                   </li>
@@ -2500,6 +2590,34 @@ function DataPanel({ title, children }: { title: string; children: ReactNode }) 
 
 function StatusBadge({ isActive }: { isActive: boolean }) {
   return <em className={isActive ? "status-badge is-active" : "status-badge is-inactive"}>{isActive ? "Active" : "Archived"}</em>;
+}
+
+function isDemoUser(user: { id: string; email: string; firstName: string; lastName: string; role: Role }, currentUserId: string) {
+  if (user.id === currentUserId || user.role === "ADMIN") {
+    return false;
+  }
+
+  const marker = `${user.email} ${user.firstName} ${user.lastName}`.toLowerCase();
+
+  return marker.includes("example.com") || marker.includes("sample");
+}
+
+function formatCleanupSummary(prefix: string, result: unknown) {
+  if (!result || typeof result !== "object") {
+    return prefix;
+  }
+
+  const entries = Object.entries(result)
+    .filter(([, value]) => typeof value === "number" || typeof value === "string")
+    .map(([key, value]) => `${formatSummaryKey(key)}: ${value}`);
+
+  return entries.length ? `${prefix} ${entries.join(", ")}.` : prefix;
+}
+
+function formatSummaryKey(value: string) {
+  return value
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function roleSlotName(slot: Meeting["roleSlots"][number]) {

@@ -291,6 +291,22 @@ export type AdminOverview = {
   students: Student[];
 };
 
+export type DemoCleanupSummary = {
+  deletedUsers?: number;
+  summaries?: Array<Record<string, unknown>>;
+  deletedUser?: string;
+  deletedRoleScores?: number;
+  deletedStudentFeedback?: number;
+  deletedAttendance?: number;
+  deletedRequirementProgress?: number;
+  deletedMemberships?: number;
+  deletedParentLinks?: number;
+  clearedRoleSlots?: number;
+  deletedClubAssignments?: number;
+  deletedCentreAssignments?: number;
+  demoMeetings?: number;
+};
+
 const tokenKey = "ileap_member_portal_token";
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
@@ -460,6 +476,30 @@ export async function setUserActive(userId: string, isActive: boolean) {
   return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}/active`, {
     method: "PATCH",
     body: JSON.stringify({ isActive })
+  });
+}
+
+export async function deleteDemoUser(userId: string) {
+  return request<DemoCleanupSummary>(`/api/admin/users/${userId}/demo`, {
+    method: "DELETE"
+  });
+}
+
+export async function deleteSampleUsers() {
+  return request<DemoCleanupSummary>("/api/admin/demo/delete-sample-users", {
+    method: "POST"
+  });
+}
+
+export async function deleteSampleFeedback() {
+  return request<DemoCleanupSummary>("/api/admin/demo/delete-sample-feedback", {
+    method: "POST"
+  });
+}
+
+export async function resetDemoMeetingData() {
+  return request<DemoCleanupSummary>("/api/admin/demo/reset-meeting-data", {
+    method: "POST"
   });
 }
 

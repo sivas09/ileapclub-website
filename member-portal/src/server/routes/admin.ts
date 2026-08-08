@@ -65,7 +65,14 @@ adminRouter.use(requireAuth, requireRole([Role.ADMIN]));
 
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
   return (request: Request, response: Response, next: NextFunction) => {
-    handler(request, response, next).catch(next);
+    handler(request, response, next).catch((error) => {
+      if (error instanceof AdminActionError) {
+        response.status(error.statusCode).json({ message: error.message });
+        return;
+      }
+
+      next(error);
+    });
   };
 }
 
@@ -570,3 +577,240 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
 
   response.json({ user });
 }));
+
+adminRouter.delete("/users/:userId/demo", asyncRoute(async (request, response) => {
+  const userId = String(request.params.userId);
+  const result = await deleteSampleUser(userId, request.user!.id);
+
+  response.json(result);
+}));
+
+adminRouter.post("/demo/delete-sample-users", asyncRoute(async (request, response) => {
+  const sampleUsers = await prisma.user.findMany({
+    where: {
+      id: { not: request.user!.id },
+      role: { in: [Role.STUDENT, Role.FACILITATOR] },
+      OR: sampleUserWhere()
+    },
+    select: { id: true }
+  });
+  const summaries = [];
+
+  for (const user of sampleUsers) {
+    summaries.push(await deleteSampleUser(user.id, request.user!.id));
+  }
+
+  response.json({
+    deletedUsers: summaries.length,
+    summaries
+  });
+}));
+
+adminRouter.post("/demo/delete-sample-feedback", asyncRoute(async (_request, response) => {
+  const summary = await deleteSampleFeedback();
+
+  response.json(summary);
+}));
+
+adminRouter.post("/demo/reset-meeting-data", asyncRoute(async (_request, response) => {
+  const sampleStudentIds = await getSampleStudentIds();
+  const demoMeetings = await prisma.meeting.findMany({
+    where: {
+      OR: [
+        { id: { startsWith: "seed-" } },
+        { title: { contains: "Sample", mode: "insensitive" } },
+        { title: { contains: "Demo", mode: "insensitive" } },
+        { roleSlots: { some: { assignedStudentId: { in: sampleStudentIds } } } }
+      ]
+    },
+    select: { id: true }
+  });
+  const demoMeetingIds = demoMeetings.map((meeting) => meeting.id);
+  const [roleScores, studentFeedback, attendance, roleSlots] = await prisma.$transaction([
+    prisma.meetingRoleScore.deleteMany({
+      where: {
+        studentId: { in: sampleStudentIds }
+      }
+    }),
+    prisma.studentMeetingFeedback.deleteMany({
+      where: {
+        studentId: { in: sampleStudentIds }
+      }
+    }),
+    prisma.meetingAttendance.deleteMany({
+      where: {
+        studentId: { in: sampleStudentIds }
+      }
+    }),
+    prisma.meetingRoleSlot.updateMany({
+      where: {
+        assignedStudentId: { in: sampleStudentIds }
+      },
+      data: {
+        assignedStudentId: null,
+        assignedByUserId: null,
+        assignedAt: null
+      }
+    })
+  ]);
+
+  response.json({
+    demoMeetings: demoMeetingIds.length,
+    deletedRoleScores: roleScores.count,
+    deletedStudentFeedback: studentFeedback.count,
+    deletedAttendance: attendance.count,
+    clearedRoleSlots: roleSlots.count
+  });
+}));
+
+async function deleteSampleUser(userId: string, currentUserId: string) {
+  if (userId === currentUserId) {
+    throw new AdminActionError(400, "You cannot delete your own account.");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { studentProfile: true }
+  });
+
+  if (!user) {
+    throw new AdminActionError(404, "User not found.");
+  }
+
+  if (!isSampleUser(user)) {
+    throw new AdminActionError(400, "Only sample/test students or facilitators can be deleted.");
+  }
+
+  if (user.role === Role.ADMIN) {
+    throw new AdminActionError(400, "Admin users cannot be hard-deleted.");
+  }
+
+  if (user.role === Role.STUDENT && user.studentProfile) {
+    const studentId = user.studentProfile.id;
+    const result = await prisma.$transaction(async (tx) => {
+      const roleScores = await tx.meetingRoleScore.deleteMany({ where: { studentId } });
+      const studentFeedback = await tx.studentMeetingFeedback.deleteMany({ where: { studentId } });
+      const attendance = await tx.meetingAttendance.deleteMany({ where: { studentId } });
+      const requirementProgress = await tx.studentRequirementProgress.deleteMany({ where: { studentId } });
+      const memberships = await tx.studentClubMembership.deleteMany({ where: { studentId } });
+      const parentLinks = await tx.studentParent.deleteMany({ where: { studentId } });
+      const clearedRoleSlots = await tx.meetingRoleSlot.updateMany({
+        where: { assignedStudentId: studentId },
+        data: {
+          assignedStudentId: null,
+          assignedByUserId: null,
+          assignedAt: null
+        }
+      });
+
+      await tx.student.delete({ where: { id: studentId } });
+      await tx.user.delete({ where: { id: user.id } });
+
+      return {
+        deletedUser: user.email,
+        deletedRoleScores: roleScores.count,
+        deletedStudentFeedback: studentFeedback.count,
+        deletedAttendance: attendance.count,
+        deletedRequirementProgress: requirementProgress.count,
+        deletedMemberships: memberships.count,
+        deletedParentLinks: parentLinks.count,
+        clearedRoleSlots: clearedRoleSlots.count
+      };
+    });
+
+    return result;
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const clubAssignments = await tx.clubFacilitator.deleteMany({ where: { facilitatorId: user.id } });
+    const centreAssignments = await tx.centreFacilitator.deleteMany({ where: { facilitatorId: user.id } });
+
+    await tx.user.delete({ where: { id: user.id } });
+
+    return {
+      deletedUser: user.email,
+      deletedClubAssignments: clubAssignments.count,
+      deletedCentreAssignments: centreAssignments.count
+    };
+  });
+
+  return result;
+}
+
+async function deleteSampleFeedback() {
+  const sampleStudentIds = await getSampleStudentIds();
+  const sampleUserIds = await getSampleUserIds();
+  const [roleScores, studentFeedback] = await prisma.$transaction([
+    prisma.meetingRoleScore.deleteMany({
+      where: {
+        OR: [
+          { studentId: { in: sampleStudentIds } },
+          { scoredByUserId: { in: sampleUserIds } }
+        ]
+      }
+    }),
+    prisma.studentMeetingFeedback.deleteMany({
+      where: {
+        OR: [
+          { studentId: { in: sampleStudentIds } },
+          { scoredByUserId: { in: sampleUserIds } }
+        ]
+      }
+    })
+  ]);
+
+  return {
+    deletedRoleScores: roleScores.count,
+    deletedStudentFeedback: studentFeedback.count
+  };
+}
+
+async function getSampleStudentIds() {
+  const students = await prisma.student.findMany({
+    where: {
+      user: {
+        role: Role.STUDENT,
+        OR: sampleUserWhere()
+      }
+    },
+    select: { id: true }
+  });
+
+  return students.map((student) => student.id);
+}
+
+async function getSampleUserIds() {
+  const users = await prisma.user.findMany({
+    where: {
+      role: { in: [Role.STUDENT, Role.FACILITATOR] },
+      OR: sampleUserWhere()
+    },
+    select: { id: true }
+  });
+
+  return users.map((user) => user.id);
+}
+
+function sampleUserWhere() {
+  return [
+    { email: { contains: "example.com", mode: "insensitive" as const } },
+    { firstName: { contains: "Sample", mode: "insensitive" as const } },
+    { lastName: { contains: "Sample", mode: "insensitive" as const } }
+  ];
+}
+
+function isSampleUser(user: { email: string; firstName: string; lastName: string; role: Role }) {
+  if (user.role !== Role.STUDENT && user.role !== Role.FACILITATOR) {
+    return false;
+  }
+
+  const marker = `${user.email} ${user.firstName} ${user.lastName}`.toLowerCase();
+
+  return marker.includes("example.com") || marker.includes("sample");
+}
+
+class AdminActionError extends Error {
+  constructor(public statusCode: number, message: string) {
+    super(message);
+  }
+}

@@ -1485,6 +1485,17 @@ button {
   color: var(--portal-teal);
 }
 
+.text-action.danger-action {
+  color: #9f1239;
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+.text-action.danger-action:hover {
+  color: #7f1d1d;
+  border-color: #fda4af;
+}
+
 @media (max-width: 860px) {
   .login-panel,
   .dashboard-hero,
