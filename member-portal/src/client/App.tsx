@@ -355,6 +355,9 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     setStatus("");
     setEditingUser(portalUser);
     setEditingUserRole(portalUser.role);
+    window.setTimeout(() => {
+      document.getElementById(`edit-user-${portalUser.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 0);
   }
 
   async function updateCentreStatus(centreId: string, isActive: boolean) {
@@ -482,6 +485,100 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function renderEditUserForm(portalUser: AdminUser) {
+    const isCurrentAdmin = portalUser.id === currentUser.id;
+
+    return (
+      <form id={`edit-user-${portalUser.id}`} key={portalUser.id} className="edit-user-panel" onSubmit={handleEditUserSubmit}>
+        <div className="admin-heading">
+          <div>
+            <p className="eyebrow">Edit user</p>
+            <h3>{portalUser.firstName} {portalUser.lastName}</h3>
+          </div>
+        </div>
+        <div className="form-two-column">
+          <label>First Name<input name="firstName" defaultValue={portalUser.firstName} required /></label>
+          <label>Last Name<input name="lastName" defaultValue={portalUser.lastName} required /></label>
+          <label>Email<input name="email" type="email" defaultValue={portalUser.email} required /></label>
+          <label>
+            Role
+            <select
+              name="role"
+              value={editingUserRole}
+              onChange={(event) => setEditingUserRole(event.target.value as Role)}
+              disabled={isCurrentAdmin}
+              required
+            >
+              <option value="STUDENT">Student</option>
+              <option value="FACILITATOR">Facilitator</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          </label>
+          <label>
+            Account Status
+            <select name="isActive" defaultValue={String(portalUser.isActive)} disabled={isCurrentAdmin}>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </label>
+          {isCurrentAdmin ? (
+            <>
+              <input type="hidden" name="role" value="ADMIN" />
+              <input type="hidden" name="isActive" value="true" />
+            </>
+          ) : null}
+          {editingUserRole === "STUDENT" ? (
+            <>
+              <label>Grade<input name="grade" defaultValue={portalUser.studentProfile?.grade ?? ""} placeholder="Grade 6" /></label>
+              <label>
+                Program Level
+                <select name="programLevel" defaultValue={portalUser.studentProfile?.programLevel ?? "SENIOR"}>
+                  {programLevelOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Current Band Level
+                <select name="bandLevel" defaultValue={portalUser.studentProfile?.bandLevel ?? "White"}>
+                  {bandLevelOptions.map((bandLevel) => (
+                    <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Clubs
+                <select
+                  name="clubIds"
+                  multiple
+                  defaultValue={portalUser.studentProfile?.clubMemberships?.map((membership) => membership.clubId) ?? []}
+                >
+                  {activeClubs.map((club) => (
+                    <option key={club.id} value={club.id}>{club.name}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
+          {editingUserRole === "FACILITATOR" ? (
+            <label>
+              Facilitator Clubs
+              <select name="facilitatorClubIds" multiple defaultValue={facilitatorClubIdsForUser(portalUser.id)}>
+                {activeClubs.map((club) => (
+                  <option key={club.id} value={club.id}>{club.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        <div className="edit-user-actions">
+          <button type="submit" disabled={isSubmitting}>Save</button>
+          <button type="button" className="text-action" onClick={() => setEditingUser(null)} disabled={isSubmitting}>Cancel</button>
+        </div>
+      </form>
+    );
   }
 
   return (
@@ -741,7 +838,7 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
             <>
               <ul className="record-list">
                 {overview.users.map((portalUser) => (
-                  <li key={portalUser.id}>
+                  <li key={portalUser.id} className={editingUser?.id === portalUser.id ? "is-editing-user" : undefined}>
                     <div>
                       <strong>{portalUser.firstName} {portalUser.lastName}</strong>
                       <StatusBadge isActive={portalUser.isActive} />
@@ -768,99 +865,10 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                         {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
                       </button>
                     </div>
+                    {editingUser?.id === portalUser.id ? renderEditUserForm(portalUser) : null}
                   </li>
                 ))}
               </ul>
-
-              {editingUser ? (
-                <form key={editingUser.id} className="edit-user-panel" onSubmit={handleEditUserSubmit}>
-                  <div className="admin-heading">
-                    <div>
-                      <p className="eyebrow">Edit user</p>
-                      <h3>{editingUser.firstName} {editingUser.lastName}</h3>
-                    </div>
-                  </div>
-                  <div className="form-two-column">
-                    <label>First Name<input name="firstName" defaultValue={editingUser.firstName} required /></label>
-                    <label>Last Name<input name="lastName" defaultValue={editingUser.lastName} required /></label>
-                    <label>Email<input name="email" type="email" defaultValue={editingUser.email} required /></label>
-                    <label>
-                      Role
-                      <select
-                        name="role"
-                        value={editingUserRole}
-                        onChange={(event) => setEditingUserRole(event.target.value as Role)}
-                        disabled={editingUser.id === currentUser.id}
-                        required
-                      >
-                        <option value="STUDENT">Student</option>
-                        <option value="FACILITATOR">Facilitator</option>
-                        <option value="ADMIN">Admin</option>
-                      </select>
-                    </label>
-                    <label>
-                      Account Status
-                      <select name="isActive" defaultValue={String(editingUser.isActive)} disabled={editingUser.id === currentUser.id}>
-                        <option value="true">Active</option>
-                        <option value="false">Inactive</option>
-                      </select>
-                    </label>
-                    {editingUser.id === currentUser.id ? (
-                      <>
-                        <input type="hidden" name="role" value="ADMIN" />
-                        <input type="hidden" name="isActive" value="true" />
-                      </>
-                    ) : null}
-                    {editingUserRole === "STUDENT" ? (
-                      <>
-                        <label>Grade<input name="grade" defaultValue={editingUser.studentProfile?.grade ?? ""} placeholder="Grade 6" /></label>
-                        <label>
-                          Program Level
-                          <select name="programLevel" defaultValue={editingUser.studentProfile?.programLevel ?? "SENIOR"}>
-                            {programLevelOptions.map((option) => (
-                              <option key={option.value} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Current Band Level
-                          <select name="bandLevel" defaultValue={editingUser.studentProfile?.bandLevel ?? "White"}>
-                            {bandLevelOptions.map((bandLevel) => (
-                              <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label>
-                          Clubs
-                          <select
-                            name="clubIds"
-                            multiple
-                            defaultValue={editingUser.studentProfile?.clubMemberships?.map((membership) => membership.clubId) ?? []}
-                          >
-                            {activeClubs.map((club) => (
-                              <option key={club.id} value={club.id}>{club.name}</option>
-                            ))}
-                          </select>
-                        </label>
-                      </>
-                    ) : null}
-                    {editingUserRole === "FACILITATOR" ? (
-                      <label>
-                        Facilitator Clubs
-                        <select name="facilitatorClubIds" multiple defaultValue={facilitatorClubIdsForUser(editingUser.id)}>
-                          {activeClubs.map((club) => (
-                            <option key={club.id} value={club.id}>{club.name}</option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                  </div>
-                  <div className="edit-user-actions">
-                    <button type="submit" disabled={isSubmitting}>Save</button>
-                    <button type="button" className="text-action" onClick={() => setEditingUser(null)} disabled={isSubmitting}>Cancel</button>
-                  </div>
-                </form>
-              ) : null}
             </>
           ) : <p>No users yet.</p>}
         </DataPanel>
