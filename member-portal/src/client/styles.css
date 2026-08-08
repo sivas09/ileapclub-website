@@ -508,6 +508,44 @@ button {
   gap: 10px;
 }
 
+.student-placement-form {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
+.student-placement-form label {
+  display: grid;
+  gap: 7px;
+  color: #243657;
+  font-weight: 800;
+}
+
+.student-placement-form select {
+  min-height: 42px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--portal-ink);
+  background: #ffffff;
+}
+
+.student-placement-form button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: #ffffff;
+  background: var(--portal-blue);
+  font-weight: 900;
+}
+
 .requirement-controls input {
   min-height: 40px;
   border: 1px solid #d4dcea;
@@ -1331,6 +1369,7 @@ button {
   .add-slot-editor,
   .manager-role-row,
   .score-feedback-row,
+  .student-placement-form,
   .attendance-grid label,
   .requirement-list li,
   .requirement-controls {

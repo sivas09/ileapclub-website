@@ -37,6 +37,7 @@ export type Club = {
 export type Student = {
   id: string;
   grade: string;
+  programLevel?: string | null;
   bandLevel: string;
   user: PortalUser;
   clubMemberships?: StudentClubMembership[];
@@ -198,6 +199,7 @@ export type AdminOverview = {
     studentProfile?: {
       id: string;
       grade: string;
+      programLevel?: string | null;
       bandLevel: string;
       clubMemberships?: StudentClubMembership[];
     } | null;
@@ -341,6 +343,8 @@ export async function createUser(payload: {
   lastName: string;
   role: Role;
   grade?: string;
+  programLevel?: string;
+  bandLevel?: string;
   clubIds?: string[];
   facilitatorClubIds?: string[];
 }) {
@@ -479,6 +483,16 @@ export async function getStudentProgress() {
 
 export async function fetchStudentProgressForManager(studentId: string) {
   return request<StudentProgress>(`/api/student/${studentId}/progress`);
+}
+
+export async function updateStudentProfile(studentId: string, payload: {
+  programLevel: string;
+  bandLevel: string;
+}) {
+  return request<StudentProgress>(`/api/student/${studentId}/profile`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function updateStudentRequirement(studentId: string, requirementId: string, payload: {

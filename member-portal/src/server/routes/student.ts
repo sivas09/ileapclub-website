@@ -15,7 +15,28 @@ const progressSchema = z.object({
   notes: z.string().trim().optional()
 });
 
+const profileSchema = z.object({
+  programLevel: z.enum(["JUNIOR", "SENIOR"]),
+  bandLevel: z.enum([
+    "White",
+    "Yellow",
+    "Orange I",
+    "Orange II",
+    "Green I",
+    "Green II",
+    "Blue I",
+    "Blue II",
+    "Red I",
+    "Red II",
+    "Brown I",
+    "Brown II",
+    "Black I",
+    "Black II"
+  ])
+});
+
 type StudentWithClubs = {
+  programLevel?: string | null;
   clubMemberships: Array<{
     status: string;
     club: {
@@ -245,6 +266,82 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
   response.json({ progress });
 }));
 
+studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can update student band placement." });
+    return;
+  }
+
+  const parsed = profileSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Choose a valid program level and current band level." });
+    return;
+  }
+
+  const studentId = String(request.params.studentId);
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: {
+      user: true,
+      clubMemberships: {
+        include: {
+          club: {
+            include: { centre: true }
+          }
+        }
+      }
+    }
+  });
+
+  if (!student) {
+    response.status(404).json({ message: "Student not found." });
+    return;
+  }
+
+  if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
+    response.status(403).json({ message: "You cannot update this student's band placement." });
+    return;
+  }
+
+  const updatedStudent = await prisma.student.update({
+    where: { id: student.id },
+    data: {
+      programLevel: parsed.data.programLevel,
+      bandLevel: parsed.data.bandLevel
+    },
+    include: {
+      user: true,
+      clubMemberships: {
+        include: {
+          club: {
+            include: { centre: true }
+          }
+        }
+      }
+    }
+  });
+
+  response.json({
+    student: updatedStudent,
+    feedback: [],
+    requirements: await buildRequirementProgress(updatedStudent.id, getStudentProgramLevel(updatedStudent)),
+    summary: {
+      bandLevel: updatedStudent.bandLevel,
+      programLevel: getStudentProgramLevel(updatedStudent),
+      clubName: formatClubNames(updatedStudent.clubMemberships),
+      centreName: formatCentreNames(updatedStudent.clubMemberships),
+      attendanceRate: null,
+      totalMeetingsMarked: 0,
+      rolesCompleted: 0,
+      scoredRoles: 0,
+      averageScore: null
+    }
+  });
+}));
+
 studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) => {
   const user = request.user!;
 
@@ -331,6 +428,10 @@ async function buildRequirementProgress(studentId: string, programLevel: string)
 }
 
 function getStudentProgramLevel(student: StudentWithClubs) {
+  if (student.programLevel === "JUNIOR" || student.programLevel === "SENIOR") {
+    return student.programLevel;
+  }
+
   const activeMembership = student.clubMemberships.find((membership) => membership.status === "ACTIVE") ?? student.clubMemberships[0];
 
   return inferProgramLevel(activeMembership?.club.program ?? "");

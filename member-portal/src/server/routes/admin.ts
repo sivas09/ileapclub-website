@@ -26,6 +26,8 @@ const userSchema = z.object({
   lastName: z.string().trim().min(1),
   role: z.enum([Role.ADMIN, Role.FACILITATOR, Role.STUDENT]),
   grade: z.string().trim().optional(),
+  programLevel: z.enum(["JUNIOR", "SENIOR"]).optional(),
+  bandLevel: z.string().trim().optional(),
   clubIds: z.array(z.string()).default([]),
   facilitatorClubIds: z.array(z.string()).default([])
 });
@@ -33,6 +35,23 @@ const userSchema = z.object({
 const facilitatorAssignmentSchema = z.object({
   facilitatorId: z.string().min(1)
 });
+
+const validBandLevels = new Set([
+  "White",
+  "Yellow",
+  "Orange I",
+  "Orange II",
+  "Green I",
+  "Green II",
+  "Blue I",
+  "Blue II",
+  "Red I",
+  "Red II",
+  "Brown I",
+  "Brown II",
+  "Black I",
+  "Black II"
+]);
 
 export const adminRouter = Router();
 
@@ -82,6 +101,7 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
           select: {
             id: true,
             grade: true,
+            programLevel: true,
             bandLevel: true,
             clubMemberships: {
               include: {
@@ -267,6 +287,11 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
   const email = data.email.toLowerCase();
   const requestedClubIds = [...new Set([...data.clubIds, ...data.facilitatorClubIds])];
 
+  if (data.role === Role.STUDENT && data.bandLevel && !validBandLevels.has(data.bandLevel)) {
+    response.status(400).json({ message: "Choose a valid current band level." });
+    return;
+  }
+
   if (requestedClubIds.length > 0) {
     const activeClubCount = await prisma.club.count({
       where: {
@@ -300,7 +325,9 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
         const student = await tx.student.create({
           data: {
             userId: createdUser.id,
-            grade: data.grade || "Not set"
+            grade: data.grade || "Not set",
+            programLevel: data.programLevel ?? null,
+            bandLevel: data.bandLevel || "White"
           }
         });
 

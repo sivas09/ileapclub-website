@@ -37,6 +37,7 @@ import {
   StudentProgress,
   toggleMeetingLock,
   updateMeetingDetails,
+  updateStudentProfile,
   updateStudentRequirement
 } from "./api";
 
@@ -67,6 +68,28 @@ const upcomingWork = [
   "Student role self-claiming",
   "RTF agenda download",
   "Attendance, scoring, and PTB requirements"
+];
+
+const programLevelOptions = [
+  { value: "JUNIOR", label: "Junior" },
+  { value: "SENIOR", label: "Senior" }
+];
+
+const bandLevelOptions = [
+  "White",
+  "Yellow",
+  "Orange I",
+  "Orange II",
+  "Green I",
+  "Green II",
+  "Blue I",
+  "Blue II",
+  "Red I",
+  "Red II",
+  "Brown I",
+  "Brown II",
+  "Black I",
+  "Black II"
 ];
 
 const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
@@ -498,6 +521,8 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                   password: String(formData.get("password") || ""),
                   role: String(formData.get("role") || "STUDENT") as Role,
                   grade: String(formData.get("grade") || ""),
+                  programLevel: String(formData.get("programLevel") || "SENIOR"),
+                  bandLevel: String(formData.get("bandLevel") || "White"),
                   clubIds: clubSelect ? Array.from(clubSelect.selectedOptions).map((option) => option.value) : [],
                   facilitatorClubIds: facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : []
                 });
@@ -523,6 +548,22 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
             {newUserRole === "STUDENT" ? (
               <>
                 <label>Grade<input name="grade" placeholder="Grade 6" /></label>
+                <label>
+                  Program Level
+                  <select name="programLevel" defaultValue="SENIOR">
+                    {programLevelOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Current Band Level
+                  <select name="bandLevel" defaultValue="White">
+                    {bandLevelOptions.map((bandLevel) => (
+                      <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
+                    ))}
+                  </select>
+                </label>
                 <label>
                   Clubs
                   <select name="clubIds" multiple>
@@ -646,7 +687,10 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                     <strong>{portalUser.firstName} {portalUser.lastName}</strong>
                     <StatusBadge isActive={portalUser.isActive} />
                   </div>
-                  <span>{formatRole(portalUser.role)} - {portalUser.email}</span>
+                  <span>
+                    {formatRole(portalUser.role)} - {portalUser.email}
+                    {portalUser.studentProfile ? ` - ${formatProgramLevel(portalUser.studentProfile.programLevel)} - ${portalUser.studentProfile.bandLevel}` : ""}
+                  </span>
                   <button
                     type="button"
                     className="text-action"
@@ -667,7 +711,7 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               {overview.students.map((student) => (
                 <li key={student.id}>
                   <strong>{student.user.firstName} {student.user.lastName}</strong>
-                  <span>{student.grade} - {formatStudentClubs(student)}</span>
+                  <span>{student.grade} - {formatProgramLevel(student.programLevel)} - {student.bandLevel} - {formatStudentClubs(student)}</span>
                 </li>
               ))}
             </ul>
@@ -1325,6 +1369,30 @@ function RequirementManagementPanel({
     }
   }
 
+  async function handleProfileUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedStudentId) {
+      return;
+    }
+
+    const formData = new FormData(event.currentTarget);
+    setError("");
+    setStatus("");
+
+    try {
+      const updatedProgress = await updateStudentProfile(selectedStudentId, {
+        programLevel: String(formData.get("programLevel") || "SENIOR"),
+        bandLevel: String(formData.get("bandLevel") || "White")
+      });
+      setProgress(updatedProgress);
+      setStatus("Student program and band level updated.");
+      onUpdated();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update student placement.");
+    }
+  }
+
   return (
     <section className="requirement-manager" id="requirements">
       <div className="admin-heading">
@@ -1342,27 +1410,48 @@ function RequirementManagementPanel({
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
       {isLoading ? <p className="loading-state">Loading requirements...</p> : null}
       {progress ? (
-        <ul className="requirement-list manager">
-          {progress.requirements.map((entry) => (
-            <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
-              <div>
-                <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
-                <span>{progress.summary.programLevel} ladder - {entry.requirement.description}</span>
-              </div>
-              <div className="requirement-controls">
-                <input
-                  key={`${entry.requirement.id}-${entry.currentCount}-${entry.isCompleted}`}
-                  type="number"
-                  min="0"
-                  max={entry.requirement.targetCount}
-                  defaultValue={entry.currentCount}
-                  onBlur={(event) => handleRequirementUpdate(entry.requirement.id, Number(event.currentTarget.value), Number(event.currentTarget.value) >= entry.requirement.targetCount)}
-                />
-                <button type="button" onClick={() => handleRequirementUpdate(entry.requirement.id, entry.requirement.targetCount, true)}>Complete</button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <form className="student-placement-form" onSubmit={handleProfileUpdate}>
+            <label>
+              Program Level
+              <select name="programLevel" defaultValue={progress.summary.programLevel}>
+                {programLevelOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Current Band Level
+              <select name="bandLevel" defaultValue={progress.summary.bandLevel}>
+                {bandLevelOptions.map((bandLevel) => (
+                  <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">Update Student</button>
+          </form>
+          <ul className="requirement-list manager">
+            {progress.requirements.map((entry) => (
+              <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
+                <div>
+                  <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
+                  <span>{progress.summary.programLevel} ladder - {entry.requirement.description}</span>
+                </div>
+                <div className="requirement-controls">
+                  <input
+                    key={`${entry.requirement.id}-${entry.currentCount}-${entry.isCompleted}`}
+                    type="number"
+                    min="0"
+                    max={entry.requirement.targetCount}
+                    defaultValue={entry.currentCount}
+                    onBlur={(event) => handleRequirementUpdate(entry.requirement.id, Number(event.currentTarget.value), Number(event.currentTarget.value) >= entry.requirement.targetCount)}
+                  />
+                  <button type="button" onClick={() => handleRequirementUpdate(entry.requirement.id, entry.requirement.targetCount, true)}>Complete</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
     </section>
   );
@@ -1770,6 +1859,10 @@ function formatStudentName(student: { user: { firstName: string; lastName: strin
 
 function dateInputValue(value: string) {
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function formatProgramLevel(programLevel?: string | null) {
+  return programLevel === "JUNIOR" ? "Junior" : "Senior";
 }
 
 function formatRole(role: Role) {
