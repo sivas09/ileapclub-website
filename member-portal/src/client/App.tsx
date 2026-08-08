@@ -331,7 +331,6 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [newUserRole, setNewUserRole] = useState<Role>("STUDENT");
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [editingUserRole, setEditingUserRole] = useState<Role>("STUDENT");
@@ -1419,6 +1418,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
 
   async function refreshDocuments(nextFilters = filters) {
     const data = await getBandDocuments(nextFilters);
