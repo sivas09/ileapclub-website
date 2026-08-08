@@ -141,6 +141,7 @@ export type StudentProgress = {
   requirements: StudentRequirementStatus[];
   summary: {
     bandLevel: string;
+    programLevel: string;
     clubName: string;
     centreName: string;
     attendanceRate: number | null;
@@ -167,7 +168,9 @@ export type StudentFeedbackEntry = {
 
 export type BandRequirement = {
   id: string;
+  programLevel: string;
   bandLevel: string;
+  bandOrder: number;
   name: string;
   description: string;
   requirementType: string;
@@ -181,6 +184,10 @@ export type StudentRequirementStatus = {
   isCompleted: boolean;
   completedAt?: string | null;
   notes?: string | null;
+  facilitatorSignedOffAt?: string | null;
+  facilitatorSignedOffByUserId?: string | null;
+  adminOverrideAt?: string | null;
+  adminOverrideByUserId?: string | null;
 };
 
 export type AdminOverview = {

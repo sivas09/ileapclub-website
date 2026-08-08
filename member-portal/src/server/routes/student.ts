@@ -15,6 +15,17 @@ const progressSchema = z.object({
   notes: z.string().trim().optional()
 });
 
+type StudentWithClubs = {
+  clubMemberships: Array<{
+    status: string;
+    club: {
+      program: string;
+      name: string;
+      centre: { name: string };
+    };
+  }>;
+};
+
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
   return (request: Request, response: Response, next: NextFunction) => {
     handler(request, response, next).catch(next);
@@ -122,9 +133,10 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
         scoredAt: score.scoredAt
       };
     }),
-    requirements: await buildRequirementProgress(student.id, student.bandLevel),
+    requirements: await buildRequirementProgress(student.id, getStudentProgramLevel(student)),
     summary: {
       bandLevel: student.bandLevel,
+      programLevel: getStudentProgramLevel(student),
       clubName: formatClubNames(student.clubMemberships),
       centreName: formatCentreNames(student.clubMemberships),
       attendanceRate: totalAttendance ? Math.round((presentCount / totalAttendance) * 100) : null,
@@ -154,7 +166,18 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
   const studentId = String(request.params.studentId);
   const requirementId = String(request.params.requirementId);
   const [student, requirement] = await Promise.all([
-    prisma.student.findUnique({ where: { id: studentId } }),
+    prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        clubMemberships: {
+          include: {
+            club: {
+              include: { centre: true }
+            }
+          }
+        }
+      }
+    }),
     prisma.bandRequirement.findUnique({ where: { id: requirementId } })
   ]);
 
@@ -168,7 +191,24 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
     return;
   }
 
+  if (requirement.programLevel !== getStudentProgramLevel(student)) {
+    response.status(400).json({ message: "Choose a requirement from this student's program ladder." });
+    return;
+  }
+
   const isCompleted = parsed.data.isCompleted ?? parsed.data.currentCount >= requirement.targetCount;
+  const signOffData = isCompleted && user.role === Role.FACILITATOR
+    ? {
+      facilitatorSignedOffByUserId: user.id,
+      facilitatorSignedOffAt: new Date()
+    }
+    : {};
+  const adminOverrideData = user.role === Role.ADMIN
+    ? {
+      adminOverrideByUserId: user.id,
+      adminOverrideAt: new Date()
+    }
+    : {};
 
   const progress = await prisma.studentRequirementProgress.upsert({
     where: {
@@ -182,7 +222,9 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
       isCompleted,
       completedAt: isCompleted ? new Date() : null,
       notes: parsed.data.notes || null,
-      updatedByUserId: user.id
+      updatedByUserId: user.id,
+      ...signOffData,
+      ...adminOverrideData
     },
     create: {
       studentId,
@@ -191,7 +233,9 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
       isCompleted,
       completedAt: isCompleted ? new Date() : null,
       notes: parsed.data.notes || null,
-      updatedByUserId: user.id
+      updatedByUserId: user.id,
+      ...signOffData,
+      ...adminOverrideData
     },
     include: {
       requirement: true
@@ -236,9 +280,11 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
 
   response.json({
     student,
-    requirements: await buildRequirementProgress(student.id, student.bandLevel),
+    feedback: [],
+    requirements: await buildRequirementProgress(student.id, getStudentProgramLevel(student)),
     summary: {
       bandLevel: student.bandLevel,
+      programLevel: getStudentProgramLevel(student),
       clubName: formatClubNames(student.clubMemberships),
       centreName: formatCentreNames(student.clubMemberships),
       attendanceRate: null,
@@ -250,16 +296,13 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   });
 }));
 
-async function buildRequirementProgress(studentId: string, bandLevel: string) {
+async function buildRequirementProgress(studentId: string, programLevel: string) {
   const requirements = await prisma.bandRequirement.findMany({
     where: {
+      programLevel,
       isActive: true,
-      OR: [
-        { bandLevel },
-        { bandLevel: "White" }
-      ]
     },
-    orderBy: [{ bandLevel: "asc" }, { sortOrder: "asc" }]
+    orderBy: [{ bandOrder: "asc" }, { sortOrder: "asc" }]
   });
 
   const progress = await prisma.studentRequirementProgress.findMany({
@@ -278,9 +321,23 @@ async function buildRequirementProgress(studentId: string, bandLevel: string) {
       currentCount: entry?.currentCount ?? 0,
       isCompleted: entry?.isCompleted ?? false,
       completedAt: entry?.completedAt ?? null,
-      notes: entry?.notes ?? null
+      notes: entry?.notes ?? null,
+      facilitatorSignedOffAt: entry?.facilitatorSignedOffAt ?? null,
+      facilitatorSignedOffByUserId: entry?.facilitatorSignedOffByUserId ?? null,
+      adminOverrideAt: entry?.adminOverrideAt ?? null,
+      adminOverrideByUserId: entry?.adminOverrideByUserId ?? null
     };
   });
+}
+
+function getStudentProgramLevel(student: StudentWithClubs) {
+  const activeMembership = student.clubMemberships.find((membership) => membership.status === "ACTIVE") ?? student.clubMemberships[0];
+
+  return inferProgramLevel(activeMembership?.club.program ?? "");
+}
+
+function inferProgramLevel(program: string) {
+  return program.toLowerCase().includes("junior") ? "JUNIOR" : "SENIOR";
 }
 
 async function canFacilitatorAccessStudent(facilitatorId: string, studentId: string) {

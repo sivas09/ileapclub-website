@@ -1346,8 +1346,8 @@ function RequirementManagementPanel({
           {progress.requirements.map((entry) => (
             <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
               <div>
-                <strong>{entry.requirement.bandLevel}: {entry.requirement.name}</strong>
-                <span>{entry.requirement.description}</span>
+                <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
+                <span>{progress.summary.programLevel} ladder - {entry.requirement.description}</span>
               </div>
               <div className="requirement-controls">
                 <input
@@ -1629,6 +1629,7 @@ function StudentProgressDashboard() {
       {progress ? (
         <>
           <div className="progress-summary-grid">
+            <SummaryTile label="Program" valueText={progress.summary.programLevel === "JUNIOR" ? "Junior" : "Senior"} />
             <SummaryTile label="Band Level" valueText={progress.summary.bandLevel} />
             <SummaryTile label="Attendance" valueText={progress.summary.attendanceRate === null ? "N/A" : `${progress.summary.attendanceRate}%`} />
             <SummaryTile label="Roles Completed" value={progress.summary.rolesCompleted} />
@@ -1677,8 +1678,12 @@ function StudentProgressDashboard() {
                 {progress.requirements.map((entry) => (
                   <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
                     <div>
-                      <strong>{entry.requirement.bandLevel}: {entry.requirement.name}</strong>
-                      <span>{entry.requirement.description}</span>
+                      <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
+                      <span>
+                        {entry.requirement.description}
+                        {entry.facilitatorSignedOffAt ? ` - facilitator signed off ${formatDate(entry.facilitatorSignedOffAt)}` : ""}
+                        {entry.adminOverrideAt ? ` - admin override ${formatDate(entry.adminOverrideAt)}` : ""}
+                      </span>
                     </div>
                     <em>{entry.currentCount}/{entry.requirement.targetCount}</em>
                   </li>
