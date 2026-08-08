@@ -387,9 +387,9 @@ export async function getMeetingsOverview() {
 export async function createMeeting(payload: {
   clubId: string;
   title: string;
-  templateType: string;
+  templateType?: string;
   meetingDate: string;
-  startTime: string;
+  startTime?: string;
   location?: string;
 }) {
   return request<{ meeting: Meeting }>("/api/meetings", {

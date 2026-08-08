@@ -8,7 +8,6 @@ import {
   backfillPreviousBandRequirements,
   claimMeetingSlot,
   clearToken,
-  createBulkMeetings,
   createCentre,
   createClub,
   createMeeting,
@@ -961,35 +960,6 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
     }
   }
 
-  async function handleBulkMeetingGeneration(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setStatus("");
-    setIsSubmitting(true);
-
-    try {
-      const form = event.currentTarget;
-      const formData = new FormData(form);
-      const result = await createBulkMeetings({
-        clubId: String(formData.get("clubId") || ""),
-        titlePrefix: String(formData.get("titlePrefix") || ""),
-        templateType: String(formData.get("templateType") || ""),
-        startDate: String(formData.get("startDate") || ""),
-        endDate: String(formData.get("endDate") || ""),
-        dayOfWeek: Number(formData.get("dayOfWeek") || 0),
-        startTime: String(formData.get("startTime") || ""),
-        location: String(formData.get("location") || "")
-      });
-      form.reset();
-      await refreshMeetings();
-      setStatus(`${result.meetings.length} meetings generated.`);
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Unable to generate meetings.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
   async function updateMeeting(action: () => Promise<{ meeting: Meeting }>, successMessage: string) {
     setError("");
     setStatus("");
@@ -1029,7 +999,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
       <div className="admin-heading">
         <div>
           <p className="eyebrow">Meetings</p>
-          <h2>Meeting Builder and Role Claims</h2>
+          <h2>Meetings</h2>
         </div>
         <button type="button" onClick={() => refreshMeetings()} disabled={isLoading}>Refresh</button>
       </div>
@@ -1051,60 +1021,19 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
               </select>
             </label>
             <label>Title<input name="title" placeholder="Senior Regular Meeting" required /></label>
+            <label>Date<input name="meetingDate" type="date" required /></label>
             <label>
               Template
-              <select name="templateType" required>
+              <select name="templateType" defaultValue="">
+                <option value="">Regular Meeting</option>
                 {meetingTemplates.map((template) => <option key={template}>{template}</option>)}
               </select>
             </label>
-            <label>Date<input name="meetingDate" type="date" required /></label>
-            <label>Start Time<input name="startTime" placeholder="10:00 AM" required /></label>
+            <label>Start Time<input name="startTime" placeholder="Optional" /></label>
             <label>Location or Link<input name="location" placeholder="Ottawa Centre or online link" /></label>
             <p className="wide-field field-note">All standard iLEAP role slots are added automatically when the meeting is created.</p>
           </div>
           <button type="submit" disabled={isSubmitting || !overview?.clubs.length}>Create Meeting</button>
-        </form>
-      ) : null}
-
-      {canManageMeetings ? (
-        <form className="meeting-form" onSubmit={handleBulkMeetingGeneration}>
-          <h3>Generate Term Meetings</h3>
-          <div className="form-two-column">
-            <label>
-              Club
-              <select name="clubId" required>
-                <option value="">Select club</option>
-                {overview?.clubs.map((club) => (
-                  <option key={club.id} value={club.id}>{club.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>Title Prefix<input name="titlePrefix" placeholder="Senior Regular Meeting" required /></label>
-            <label>
-              Template
-              <select name="templateType" required>
-                {meetingTemplates.map((template) => <option key={template}>{template}</option>)}
-              </select>
-            </label>
-            <label>
-              Day of Week
-              <select name="dayOfWeek" required>
-                <option value="0">Sunday</option>
-                <option value="1">Monday</option>
-                <option value="2">Tuesday</option>
-                <option value="3">Wednesday</option>
-                <option value="4">Thursday</option>
-                <option value="5">Friday</option>
-                <option value="6">Saturday</option>
-              </select>
-            </label>
-            <label>Start Date<input name="startDate" type="date" required /></label>
-            <label>End Date<input name="endDate" type="date" required /></label>
-            <label>Start Time<input name="startTime" placeholder="10:00 AM" required /></label>
-            <label>Location or Link<input name="location" placeholder="Ottawa Centre or online link" /></label>
-            <p className="wide-field field-note">Each generated meeting includes all standard iLEAP role slots automatically.</p>
-          </div>
-          <button type="submit" disabled={isSubmitting || !overview?.clubs.length}>Generate Meetings</button>
         </form>
       ) : null}
 
@@ -1204,7 +1133,7 @@ function MeetingList({
 
   return (
     <div className="meeting-list-panel">
-      <h3>Meeting List</h3>
+      <h3>{canManage ? "Meetings" : "My Club Meetings"}</h3>
       {isLoading ? <p className="loading-state">Loading meetings...</p> : null}
       {!isLoading && !meetings.length ? <p className="loading-state">No meetings yet.</p> : null}
       {meetings.length ? (
@@ -1227,7 +1156,7 @@ function MeetingList({
                   <td>{meeting.title}</td>
                   <td>{meeting.club.name}</td>
                   <td>{formatDate(meeting.meetingDate)}</td>
-                  <td>{meeting.startTime}</td>
+                  <td>{meeting.startTime || "Optional"}</td>
                   <td>{meeting.location || "None"}</td>
                   <td><StatusText isLocked={meeting.isRoleLocked} /></td>
                   <td>
@@ -1237,6 +1166,7 @@ function MeetingList({
                       <button type="button" onClick={() => onAgendaDownload(meeting)} disabled={isSubmitting}>Download Agenda</button>
                       {canManage ? <button type="button" onClick={() => onSelect(meeting, "edit")}>Edit Meeting</button> : null}
                       {canManage ? <button type="button" onClick={() => onSelect(meeting, "manage")}>Manage Roles</button> : null}
+                      {canManage ? <button type="button" onClick={() => onSelect(meeting, "score")}>Score Feedback</button> : null}
                     </div>
                   </td>
                 </tr>
@@ -1395,7 +1325,7 @@ function EditMeeting({
   meeting: Meeting;
   clubs: MeetingsOverview["clubs"];
   isSubmitting: boolean;
-  onSave: (payload: { clubId: string; title: string; templateType: string; meetingDate: string; startTime: string; location: string }) => void;
+  onSave: (payload: { clubId: string; title: string; templateType?: string; meetingDate: string; startTime?: string; location: string }) => void;
 }) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1427,12 +1357,13 @@ function EditMeeting({
           <label>Title<input name="title" defaultValue={meeting.title} required /></label>
           <label>
             Template
-            <select name="templateType" defaultValue={meeting.templateType} required>
+            <select name="templateType" defaultValue={meeting.templateType}>
+              <option value="">Regular Meeting</option>
               {meetingTemplates.map((template) => <option key={template}>{template}</option>)}
             </select>
           </label>
           <label>Date<input name="meetingDate" type="date" defaultValue={dateInputValue(meeting.meetingDate)} required /></label>
-          <label>Time<input name="startTime" defaultValue={meeting.startTime} required /></label>
+          <label>Time<input name="startTime" defaultValue={meeting.startTime} /></label>
           <label>Location or Link<input name="location" defaultValue={meeting.location ?? ""} /></label>
         </div>
         <button type="submit" disabled={isSubmitting}>Save Meeting</button>
@@ -1447,7 +1378,7 @@ function MeetingSummary({ meeting }: { meeting: Meeting }) {
       <div>
         <p className="eyebrow">{meeting.templateType}</p>
         <h3>{meeting.title}</h3>
-        <p>{meeting.club.name} - {formatDate(meeting.meetingDate)} - {meeting.startTime} - {meeting.location || "None"}</p>
+        <p>{meeting.club.name} - {formatDate(meeting.meetingDate)}{meeting.startTime ? ` - ${meeting.startTime}` : ""}{meeting.location ? ` - ${meeting.location}` : ""}</p>
       </div>
       <StatusText isLocked={meeting.isRoleLocked} />
     </div>

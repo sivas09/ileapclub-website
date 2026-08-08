@@ -10,9 +10,9 @@ import { standardIleapRoleNames } from "../services/standardRoles.js";
 const createMeetingSchema = z.object({
   clubId: z.string().min(1),
   title: z.string().trim().min(2),
-  templateType: z.string().trim().min(2),
+  templateType: z.string().trim().optional(),
   meetingDate: z.string().min(10),
-  startTime: z.string().trim().min(1),
+  startTime: z.string().trim().optional(),
   location: z.string().trim().optional()
 });
 
@@ -66,7 +66,13 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
 
   const [meetings, roleDefinitions, clubs, students] = await Promise.all([
     prisma.meeting.findMany({
-      where: clubFilter ? { clubId: { in: clubFilter } } : {},
+      where: {
+        club: {
+          isActive: true,
+          centre: { isActive: true }
+        },
+        ...(clubFilter ? { clubId: { in: clubFilter } } : {})
+      },
       orderBy: [{ meetingDate: "asc" }, { startTime: "asc" }],
       include: meetingInclude
     }),
@@ -77,13 +83,25 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
     prisma.club.findMany({
       where: {
         isActive: true,
+        centre: { isActive: true },
         ...(clubFilter ? { id: { in: clubFilter } } : {})
       },
       orderBy: { name: "asc" },
       include: { centre: true }
     }),
     prisma.student.findMany({
-      where: clubFilter ? { clubMemberships: { some: { clubId: { in: clubFilter }, status: "ACTIVE" } } } : {},
+      where: clubFilter ? {
+        clubMemberships: {
+          some: {
+            clubId: { in: clubFilter },
+            status: "ACTIVE",
+            club: {
+              isActive: true,
+              centre: { isActive: true }
+            }
+          }
+        }
+      } : {},
       orderBy: [{ user: { lastName: "asc" } }, { user: { firstName: "asc" } }],
       include: {
         user: true,
@@ -146,9 +164,9 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
       data: {
         clubId: data.clubId,
         title: data.title,
-        templateType: data.templateType,
+        templateType: data.templateType || "Regular Meeting",
         meetingDate: new Date(`${data.meetingDate}T00:00:00.000Z`),
-        startTime: data.startTime,
+        startTime: data.startTime || "",
         location: data.location || null
       }
     });
@@ -299,9 +317,9 @@ meetingsRouter.patch("/:meetingId", asyncRoute(async (request, response) => {
     data: {
       clubId: targetClubId,
       title: parsed.data.title,
-      templateType: parsed.data.templateType,
+      templateType: parsed.data.templateType === undefined ? undefined : parsed.data.templateType || "Regular Meeting",
       meetingDate: parsed.data.meetingDate ? new Date(`${parsed.data.meetingDate}T00:00:00.000Z`) : undefined,
-      startTime: parsed.data.startTime,
+      startTime: parsed.data.startTime === undefined ? undefined : parsed.data.startTime || "",
       location: parsed.data.location === undefined ? undefined : parsed.data.location || null
     },
     include: meetingInclude
@@ -876,34 +894,29 @@ async function getVisibleClubFilter(userId: string, role: Role) {
   }
 
   if (role === Role.FACILITATOR) {
-    const [clubAssignments, centreAssignments] = await Promise.all([
-      prisma.clubFacilitator.findMany({
-        where: { facilitatorId: userId },
-        select: { clubId: true }
-      }),
-      prisma.centreFacilitator.findMany({
-        where: { facilitatorId: userId },
-        select: {
-          centre: {
-            select: {
-              clubs: {
-                select: { id: true }
-              }
-            }
-          }
+    const clubAssignments = await prisma.clubFacilitator.findMany({
+      where: {
+        facilitatorId: userId,
+        club: {
+          isActive: true,
+          centre: { isActive: true }
         }
-      })
-    ]);
-    const centreClubIds = centreAssignments.flatMap((assignment) => assignment.centre.clubs.map((club) => club.id));
+      },
+      select: { clubId: true }
+    });
 
-    return [...new Set([...clubAssignments.map((assignment) => assignment.clubId), ...centreClubIds])];
+    return clubAssignments.map((assignment) => assignment.clubId);
   }
 
   if (role === Role.STUDENT) {
     const memberships = await prisma.studentClubMembership.findMany({
       where: {
         student: { userId },
-        status: "ACTIVE"
+        status: "ACTIVE",
+        club: {
+          isActive: true,
+          centre: { isActive: true }
+        }
       },
       select: { clubId: true }
     });
@@ -922,28 +935,18 @@ async function canManageClubId(userId: string, role: Role, clubId: string) {
     return false;
   }
 
-  const [clubAssignment, centreAssignment] = await Promise.all([
-    prisma.clubFacilitator.findUnique({
-      where: {
-        clubId_facilitatorId: {
-          clubId,
-          facilitatorId: userId
-        }
+  const clubAssignment = await prisma.clubFacilitator.findFirst({
+    where: {
+      clubId,
+      facilitatorId: userId,
+      club: {
+        isActive: true,
+        centre: { isActive: true }
       }
-    }),
-    prisma.centreFacilitator.findFirst({
-      where: {
-        facilitatorId: userId,
-        centre: {
-          clubs: {
-            some: { id: clubId }
-          }
-        }
-      }
-    })
-  ]);
+    }
+  });
 
-  return Boolean(clubAssignment || centreAssignment);
+  return Boolean(clubAssignment);
 }
 
 async function isStudentInClub(studentId: string, clubId: string) {
@@ -953,10 +956,15 @@ async function isStudentInClub(studentId: string, clubId: string) {
         studentId,
         clubId
       }
+    },
+    include: {
+      club: {
+        include: { centre: true }
+      }
     }
   });
 
-  return membership?.status === "ACTIVE";
+  return membership?.status === "ACTIVE" && membership.club.isActive && membership.club.centre.isActive;
 }
 
 async function isActiveClub(clubId: string) {
@@ -983,15 +991,9 @@ async function canViewMeeting(userId: string, role: Role, clubId: string) {
   }
 
   if (role === Role.STUDENT) {
-    const membership = await prisma.studentClubMembership.findFirst({
-      where: {
-        student: { userId },
-        clubId,
-        status: "ACTIVE"
-      }
-    });
+    const student = await prisma.student.findUnique({ where: { userId } });
 
-    return Boolean(membership);
+    return student ? isStudentInClub(student.id, clubId) : false;
   }
 
   return false;
