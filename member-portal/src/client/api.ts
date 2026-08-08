@@ -135,6 +135,7 @@ export type StudentProgress = {
       roleSlot: MeetingRoleSlot;
     }>;
   };
+  feedback: StudentFeedbackEntry[];
   requirements: StudentRequirementStatus[];
   summary: {
     bandLevel: string;
@@ -146,6 +147,20 @@ export type StudentProgress = {
     scoredRoles: number;
     averageScore: number | null;
   };
+};
+
+export type StudentFeedbackEntry = {
+  id: string;
+  meetingDate: string;
+  meetingTitle: string;
+  clubName: string;
+  roleName: string;
+  score: number;
+  feedback?: string | null;
+  facilitatorName: string;
+  facilitatorRole?: Role | null;
+  attendanceStatus?: MeetingAttendance["status"] | null;
+  scoredAt: string;
 };
 
 export type BandRequirement = {

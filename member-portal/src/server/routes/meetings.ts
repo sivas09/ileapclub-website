@@ -98,7 +98,12 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
     })
   ]);
 
-  response.json({ meetings, roleDefinitions, clubs, students });
+  response.json({
+    meetings: sanitizeMeetingsForUser(meetings, user.id, user.role),
+    roleDefinitions,
+    clubs,
+    students
+  });
 }));
 
 meetingsRouter.post("/", asyncRoute(async (request, response) => {
@@ -830,6 +835,29 @@ async function getMeeting(meetingId: string) {
     where: { id: meetingId },
     include: meetingInclude
   });
+}
+
+function sanitizeMeetingsForUser<T extends Array<Prisma.MeetingGetPayload<{ include: typeof meetingInclude }>>>(
+  meetings: T,
+  userId: string,
+  role: Role
+) {
+  if (role !== Role.STUDENT) {
+    return meetings;
+  }
+
+  return meetings.map((meeting) => ({
+    ...meeting,
+    roleSlots: meeting.roleSlots.map((slot) => ({
+      ...slot,
+      score: slot.assignedStudent?.user.id === userId ? slot.score : null
+    })),
+    roleScores: meeting.roleScores.filter((score) => {
+      const slot = meeting.roleSlots.find((candidate) => candidate.id === score.roleSlotId);
+
+      return slot?.assignedStudent?.user.id === userId;
+    })
+  }));
 }
 
 async function getNextRoleSlotSortOrder(meetingId: string) {

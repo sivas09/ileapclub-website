@@ -828,7 +828,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             {canManageMeetings ? <button type="button" className={meetingMode === "score" ? "is-active" : ""} onClick={() => setMeetingMode("score")}>Score Feedback</button> : null}
           </div>
 
-          {meetingMode === "view" ? <MeetingView meeting={selectedMeeting} /> : null}
+          {meetingMode === "view" ? <MeetingView meeting={selectedMeeting} user={user} /> : null}
           {meetingMode === "book" ? (
             <BookRoles
               meeting={selectedMeeting}
@@ -944,11 +944,11 @@ function MeetingList({
   );
 }
 
-function MeetingView({ meeting }: { meeting: Meeting }) {
+function MeetingView({ meeting, user }: { meeting: Meeting; user: PortalUser }) {
   return (
     <section className="meeting-mode-section" aria-label="Meeting view">
       <MeetingSummary meeting={meeting} />
-      <RoleAssignmentTable meeting={meeting} />
+      <RoleAssignmentTable meeting={meeting} user={user} />
     </section>
   );
 }
@@ -1149,7 +1149,7 @@ function MeetingSummary({ meeting }: { meeting: Meeting }) {
   );
 }
 
-function RoleAssignmentTable({ meeting }: { meeting: Meeting }) {
+function RoleAssignmentTable({ meeting, user }: { meeting: Meeting; user: PortalUser }) {
   return (
     <div className="role-table-wrap">
       <table className="role-assignment-table">
@@ -1163,16 +1163,24 @@ function RoleAssignmentTable({ meeting }: { meeting: Meeting }) {
         </thead>
         <tbody>
           {meeting.roleSlots.map((slot) => (
-            <tr key={slot.id}>
-              <td>{roleSlotName(slot)}</td>
-              <td>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</td>
-              <td>{slot.score ? `${slot.score.score}/100` : "None"}</td>
-              <td>{slot.score?.feedback || "None"}</td>
-            </tr>
+            <RoleAssignmentRow key={slot.id} slot={slot} user={user} />
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function RoleAssignmentRow({ slot, user }: { slot: Meeting["roleSlots"][number]; user: PortalUser }) {
+  const canSeeScore = user.role !== "STUDENT" || slot.assignedStudent?.user.id === user.id;
+
+  return (
+    <tr>
+      <td>{roleSlotName(slot)}</td>
+      <td>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</td>
+      <td>{canSeeScore && slot.score ? `${slot.score.score}/100` : "None"}</td>
+      <td>{canSeeScore ? slot.score?.feedback || "None" : "None"}</td>
+    </tr>
   );
 }
 
@@ -1539,6 +1547,37 @@ function StudentProgressDashboard() {
             <strong>{progress.summary.clubName}</strong>
             <span>{progress.summary.centreName}</span>
           </div>
+
+          <DataPanel title="My Scores & Feedback">
+            {progress.feedback.length ? (
+              <div className="student-feedback-table-wrap">
+                <table className="student-feedback-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Meeting</th>
+                      <th>Role</th>
+                      <th>Score</th>
+                      <th>Feedback</th>
+                      <th>Facilitator</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {progress.feedback.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{formatDate(entry.meetingDate)}</td>
+                        <td>{entry.meetingTitle}<span>{entry.clubName}{entry.attendanceStatus ? ` - ${entry.attendanceStatus}` : ""}</span></td>
+                        <td>{entry.roleName}</td>
+                        <td>{entry.score}/100</td>
+                        <td>{entry.feedback || "No feedback entered yet."}</td>
+                        <td>{entry.facilitatorName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p>No facilitator feedback yet.</p>}
+          </DataPanel>
 
           <DataPanel title="Band/PTB Requirements">
             {progress.requirements.length ? (

@@ -62,7 +62,11 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
       roleScores: {
         orderBy: { scoredAt: "desc" },
         include: {
-          meeting: true,
+          meeting: {
+            include: {
+              club: true
+            }
+          },
           roleSlot: {
             include: {
               roleDefinition: true
@@ -89,9 +93,35 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
   const averageScore = scoredRoles
     ? Math.round(student.roleScores.reduce((sum, entry) => sum + entry.score, 0) / scoredRoles)
     : null;
+  const scorerIds = [...new Set(student.roleScores.map((score) => score.scoredByUserId).filter(Boolean))] as string[];
+  const scorers = scorerIds.length
+    ? await prisma.user.findMany({
+      where: { id: { in: scorerIds } },
+      select: { id: true, firstName: true, lastName: true, role: true }
+    })
+    : [];
+  const scorerById = new Map(scorers.map((scorer) => [scorer.id, scorer]));
 
   response.json({
     student,
+    feedback: student.roleScores.map((score) => {
+      const scorer = score.scoredByUserId ? scorerById.get(score.scoredByUserId) : null;
+      const attendance = student.attendance.find((entry) => entry.meetingId === score.meetingId);
+
+      return {
+        id: score.id,
+        meetingDate: score.meeting.meetingDate,
+        meetingTitle: score.meeting.title,
+        clubName: score.meeting.club.name,
+        roleName: score.roleSlot.slotLabel || score.roleSlot.roleDefinition.name,
+        score: score.score,
+        feedback: score.feedback,
+        facilitatorName: scorer ? `${scorer.firstName} ${scorer.lastName}` : "Not recorded",
+        facilitatorRole: scorer?.role ?? null,
+        attendanceStatus: attendance?.status ?? null,
+        scoredAt: score.scoredAt
+      };
+    }),
     requirements: await buildRequirementProgress(student.id, student.bandLevel),
     summary: {
       bandLevel: student.bandLevel,
