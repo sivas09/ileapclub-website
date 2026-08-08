@@ -5,9 +5,11 @@ import {
   addMeetingRoleSlot,
   assignClubFacilitator,
   assignMeetingSlot,
+  BandDocument,
   backfillPreviousBandRequirements,
   claimMeetingSlot,
   clearToken,
+  createBandDocument,
   createCentre,
   createClub,
   createMeeting,
@@ -20,6 +22,7 @@ import {
   fetchStudentProgressForManager,
   FeedbackReportEntry,
   getAdminOverview,
+  getBandDocuments,
   getCurrentUser,
   getFeedbackReport,
   getMemberDetail,
@@ -45,6 +48,7 @@ import {
   storeToken,
   StudentProgress,
   toggleMeetingLock,
+  updateBandDocument,
   updateMeetingDetails,
   updateStudentProfile,
   updateStudentRequirement,
@@ -102,11 +106,22 @@ const bandLevelOptions = [
   "Black II"
 ];
 
+const documentCategoryOptions = [
+  "Speech Guide",
+  "Presentation Guide",
+  "Worksheet",
+  "Rubric",
+  "Sample",
+  "Training Material",
+  "Other"
+];
+
 const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
   ADMIN: [
     { href: "#overview", label: "Overview" },
     { href: "#admin", label: "Setup" },
     { href: "#members", label: "Members" },
+    { href: "#documents", label: "Documents" },
     { href: "#meetings", label: "Meetings" },
     { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
@@ -114,6 +129,7 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
   FACILITATOR: [
     { href: "#overview", label: "Overview" },
     { href: "#members", label: "Members" },
+    { href: "#documents", label: "Documents" },
     { href: "#meetings", label: "Meetings" },
     { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
@@ -122,6 +138,7 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
     { href: "#overview", label: "Overview" },
     { href: "#meetings", label: "Meetings" },
     { href: "#club-members", label: "My Club" },
+    { href: "#resources", label: "Resources" },
     { href: "#progress", label: "My Progress" }
   ]
 };
@@ -285,6 +302,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 
       {user.role === "ADMIN" ? <AdminWorkspace currentUser={user} /> : null}
       {user.role !== "STUDENT" ? <MembersWorkspace user={user} /> : null}
+      <DocumentsWorkspace user={user} />
       <MeetingWorkspace user={user} />
       {user.role !== "STUDENT" ? <FeedbackReportPanel /> : null}
       {user.role === "STUDENT" ? <StudentClubMembersPanel /> : null}
@@ -1366,6 +1384,407 @@ function MemberDetailPanel({
         </DataPanel>
       </div>
     </section>
+  );
+}
+
+type DocumentFilters = {
+  programLevel: string;
+  bandLevel: string;
+  clubId: string;
+  category: string;
+  search: string;
+  status: string;
+};
+
+function DocumentsWorkspace({ user }: { user: PortalUser }) {
+  const isStudent = user.role === "STUDENT";
+
+  return isStudent ? <StudentResourcesPanel /> : <ManagerDocumentsPanel user={user} />;
+}
+
+function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
+  const [documents, setDocuments] = useState<BandDocument[]>([]);
+  const [clubs, setClubs] = useState<AdminOverview["clubs"]>([]);
+  const [filters, setFilters] = useState<DocumentFilters>({
+    programLevel: "",
+    bandLevel: "",
+    clubId: "",
+    category: "",
+    search: "",
+    status: "ACTIVE"
+  });
+  const [editingDocument, setEditingDocument] = useState<BandDocument | null>(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function refreshDocuments(nextFilters = filters) {
+    const data = await getBandDocuments(nextFilters);
+    setDocuments(data.documents);
+    setClubs(data.clubs);
+  }
+
+  useEffect(() => {
+    refreshDocuments()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load documents."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  function updateFilter(key: keyof DocumentFilters, value: string) {
+    const nextFilters = { ...filters, [key]: value };
+    setFilters(nextFilters);
+    setError("");
+    refreshDocuments(nextFilters).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to filter documents."));
+  }
+
+  async function handleCreateDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await createBandDocument({
+        title: String(formData.get("title") || ""),
+        description: String(formData.get("description") || ""),
+        fileName: String(formData.get("fileName") || ""),
+        fileUrl: String(formData.get("fileUrl") || ""),
+        programLevel: String(formData.get("programLevel") || "SENIOR"),
+        bandLevel: String(formData.get("bandLevel") || "White"),
+        clubId: String(formData.get("clubId") || "") || null,
+        category: String(formData.get("category") || "Other")
+      });
+      form.reset();
+      await refreshDocuments();
+      setStatus("Document added.");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to add document.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleSaveDocument(documentId: string, payload: Parameters<typeof updateBandDocument>[1]) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await updateBandDocument(documentId, payload);
+      await refreshDocuments();
+      setEditingDocument(null);
+      setStatus("Document updated.");
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update document.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleStatusChange(document: BandDocument) {
+    const nextStatus = document.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED";
+    await handleSaveDocument(document.id, { status: nextStatus });
+  }
+
+  return (
+    <section className="documents-workspace" id="documents" aria-label="Band document resources">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Learning resources</p>
+          <h2>Documents</h2>
+        </div>
+        <button type="button" onClick={() => refreshDocuments()} disabled={isLoading}>Refresh</button>
+      </div>
+
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      <form className="document-filter-form" onSubmit={(event) => event.preventDefault()}>
+        <label>
+          Program
+          <select value={filters.programLevel} onChange={(event) => updateFilter("programLevel", event.currentTarget.value)}>
+            <option value="">All programs</option>
+            {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Band
+          <select value={filters.bandLevel} onChange={(event) => updateFilter("bandLevel", event.currentTarget.value)}>
+            <option value="">All bands</option>
+            {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
+          </select>
+        </label>
+        <label>
+          Club
+          <select value={filters.clubId} onChange={(event) => updateFilter("clubId", event.currentTarget.value)}>
+            <option value="">All visible clubs</option>
+            {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
+          </select>
+        </label>
+        <label>
+          Category
+          <select value={filters.category} onChange={(event) => updateFilter("category", event.currentTarget.value)}>
+            <option value="">All categories</option>
+            {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
+        </label>
+        {user.role === "ADMIN" ? (
+          <label>
+            Status
+            <select value={filters.status} onChange={(event) => updateFilter("status", event.currentTarget.value)}>
+              <option value="ACTIVE">Active</option>
+              <option value="ARCHIVED">Archived</option>
+              <option value="">All statuses</option>
+            </select>
+          </label>
+        ) : null}
+        <label>
+          Search
+          <input value={filters.search} placeholder="Title" onChange={(event) => updateFilter("search", event.currentTarget.value)} />
+        </label>
+      </form>
+
+      <form className="document-form" onSubmit={handleCreateDocument}>
+        <h3>Add Document Link</h3>
+        <label>Title<input name="title" required /></label>
+        <label>Description<textarea name="description" rows={3} /></label>
+        <label>File Name<input name="fileName" placeholder="worksheet.pdf" required /></label>
+        <label>File URL<input name="fileUrl" type="url" placeholder="https://..." required /></label>
+        <label>
+          Program Level
+          <select name="programLevel" defaultValue="SENIOR">
+            {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Band Level
+          <select name="bandLevel" defaultValue="White">
+            {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
+          </select>
+        </label>
+        <label>
+          Club
+          <select name="clubId" defaultValue="" required={user.role === "FACILITATOR"}>
+            <option value="">{user.role === "ADMIN" ? "All clubs" : "Choose assigned club"}</option>
+            {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
+          </select>
+        </label>
+        <label>
+          Category
+          <select name="category" defaultValue="Other">
+            {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
+        </label>
+        <button type="submit" disabled={isSubmitting}>Add Document</button>
+      </form>
+
+      {isLoading ? <p className="loading-state">Loading documents...</p> : null}
+      {!isLoading && !documents.length ? <p className="loading-state">No documents found.</p> : null}
+
+      <div className="document-card-grid">
+        {documents.map((document) => (
+          <ManagerDocumentCard
+            key={document.id}
+            document={document}
+            clubs={clubs}
+            canArchive={user.role === "ADMIN"}
+            isEditing={editingDocument?.id === document.id}
+            isSubmitting={isSubmitting}
+            onEdit={() => setEditingDocument(document)}
+            onCancelEdit={() => setEditingDocument(null)}
+            onSave={handleSaveDocument}
+            onStatusChange={handleStatusChange}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ManagerDocumentCard({
+  document,
+  clubs,
+  canArchive,
+  isEditing,
+  isSubmitting,
+  onEdit,
+  onCancelEdit,
+  onSave,
+  onStatusChange
+}: {
+  document: BandDocument;
+  clubs: AdminOverview["clubs"];
+  canArchive: boolean;
+  isEditing: boolean;
+  isSubmitting: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSave: (documentId: string, payload: Parameters<typeof updateBandDocument>[1]) => void;
+  onStatusChange: (document: BandDocument) => void;
+}) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+
+    onSave(document.id, {
+      title: String(formData.get("title") || ""),
+      description: String(formData.get("description") || ""),
+      fileName: String(formData.get("fileName") || ""),
+      fileUrl: String(formData.get("fileUrl") || ""),
+      programLevel: String(formData.get("programLevel") || "SENIOR"),
+      bandLevel: String(formData.get("bandLevel") || "White"),
+      clubId: String(formData.get("clubId") || "") || null,
+      category: String(formData.get("category") || "Other")
+    });
+  }
+
+  return (
+    <article className={`document-card ${document.status === "ARCHIVED" ? "is-archived" : ""}`}>
+      {isEditing ? (
+        <form className="document-edit-form" onSubmit={handleSubmit}>
+          <label>Title<input name="title" defaultValue={document.title} required /></label>
+          <label>Description<textarea name="description" defaultValue={document.description ?? ""} rows={3} /></label>
+          <label>File Name<input name="fileName" defaultValue={document.fileName} required /></label>
+          <label>File URL<input name="fileUrl" type="url" defaultValue={document.fileUrl} required /></label>
+          <label>
+            Program
+            <select name="programLevel" defaultValue={document.programLevel}>
+              {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          <label>
+            Band
+            <select name="bandLevel" defaultValue={document.bandLevel}>
+              {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
+            </select>
+          </label>
+          <label>
+            Club
+            <select name="clubId" defaultValue={document.clubId ?? ""}>
+              <option value="">All clubs</option>
+              {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Category
+            <select name="category" defaultValue={document.category}>
+              {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </label>
+          <div className="document-actions">
+            <button type="submit" disabled={isSubmitting}>Save</button>
+            <button type="button" onClick={onCancelEdit} disabled={isSubmitting}>Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <div className="document-card-header">
+            <div>
+              <span>{document.category}</span>
+              <h3>{document.title}</h3>
+            </div>
+            <em>{document.status === "ARCHIVED" ? "Archived" : "Active"}</em>
+          </div>
+          <p>{document.description || "No description provided."}</p>
+          <dl className="document-meta">
+            <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
+            <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
+            <div><dt>Club</dt><dd>{document.clubName}</dd></div>
+            <div><dt>Uploaded By</dt><dd>{document.uploadedBy}</dd></div>
+          </dl>
+          <div className="document-actions">
+            <a href={document.fileUrl} target="_blank" rel="noreferrer">Open</a>
+            <button type="button" onClick={onEdit}>Edit</button>
+            {canArchive ? (
+              <button type="button" onClick={() => onStatusChange(document)} disabled={isSubmitting}>
+                {document.status === "ARCHIVED" ? "Restore" : "Archive"}
+              </button>
+            ) : null}
+          </div>
+        </>
+      )}
+    </article>
+  );
+}
+
+function StudentResourcesPanel() {
+  const [documents, setDocuments] = useState<BandDocument[]>([]);
+  const [studentContext, setStudentContext] = useState<Awaited<ReturnType<typeof getBandDocuments>>["studentContext"]>(null);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    getBandDocuments()
+      .then((result) => {
+        setDocuments(result.documents);
+        setStudentContext(result.studentContext ?? null);
+      })
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load resources."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const currentBandResources = documents.filter((document) => document.bandLevel === studentContext?.currentBandLevel);
+  const previousBandResources = documents.filter((document) => document.bandLevel !== studentContext?.currentBandLevel);
+
+  return (
+    <section className="documents-workspace" id="resources" aria-label="Student band resources">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Learning resources</p>
+          <h2>My Band Resources</h2>
+        </div>
+      </div>
+
+      {isLoading ? <p className="loading-state">Loading resources...</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      {studentContext ? (
+        <div className="progress-summary-grid">
+          <SummaryTile label="Program Level" valueText={formatProgramLevel(studentContext.programLevel)} />
+          <SummaryTile label="Current Band" valueText={studentContext.currentBandLevel} />
+          <SummaryTile label="Band Ladder" valueText={formatBandLadder(studentContext.programLevel)} />
+        </div>
+      ) : null}
+
+      {!isLoading && !studentContext?.programLevel ? (
+        <p className="admin-status is-error" role="alert">Program level not set. Please ask Admin or Facilitator to set Junior or Senior.</p>
+      ) : null}
+
+      <ResourceGroup title="Current Band Resources" documents={currentBandResources} emptyText="No resources for your current band yet." />
+      <ResourceGroup title="Previous Band Resources" documents={previousBandResources} emptyText="No previous band resources available yet." />
+    </section>
+  );
+}
+
+function ResourceGroup({ title, documents, emptyText }: { title: string; documents: BandDocument[]; emptyText: string }) {
+  return (
+    <DataPanel title={title}>
+      {documents.length ? (
+        <div className="document-card-grid compact">
+          {documents.map((document) => (
+            <article key={document.id} className="document-card">
+              <div className="document-card-header">
+                <div>
+                  <span>{document.category}</span>
+                  <h3>{document.title}</h3>
+                </div>
+              </div>
+              <p>{document.description || "No description provided."}</p>
+              <dl className="document-meta">
+                <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
+                <div><dt>Club</dt><dd>{document.clubName}</dd></div>
+              </dl>
+              <div className="document-actions">
+                <a href={document.fileUrl} target="_blank" rel="noreferrer">Open</a>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : <p>{emptyText}</p>}
+    </DataPanel>
   );
 }
 

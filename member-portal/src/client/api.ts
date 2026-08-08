@@ -242,6 +242,34 @@ export type MemberDetail = {
   }>;
 };
 
+export type BandDocument = {
+  id: string;
+  title: string;
+  description?: string | null;
+  fileName: string;
+  fileUrl: string;
+  programLevel: string;
+  bandLevel: string;
+  bandOrder: number;
+  clubId?: string | null;
+  clubName: string;
+  category: string;
+  uploadedBy: string;
+  createdAt: string;
+  status: "ACTIVE" | "ARCHIVED" | string;
+};
+
+export type DocumentsResponse = {
+  documents: BandDocument[];
+  clubs: Club[];
+  studentContext?: {
+    programLevel: string | null;
+    currentBandLevel: string;
+    currentBandOrder: number;
+    clubIds: string[];
+  } | null;
+};
+
 export type MembersResponse = {
   members: MemberListEntry[];
   total: number;
@@ -658,6 +686,59 @@ export async function getMembers(params: {
   });
 
   return request<MembersResponse>(`/api/members${query.toString() ? `?${query.toString()}` : ""}`);
+}
+
+export async function getBandDocuments(params: {
+  programLevel?: string;
+  bandLevel?: string;
+  clubId?: string;
+  category?: string;
+  search?: string;
+  status?: string;
+} = {}) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value)) {
+      query.set(key, String(value));
+    }
+  });
+
+  return request<DocumentsResponse>(`/api/documents${query.toString() ? `?${query.toString()}` : ""}`);
+}
+
+export async function createBandDocument(payload: {
+  title: string;
+  description?: string;
+  fileName: string;
+  fileUrl: string;
+  programLevel: string;
+  bandLevel: string;
+  clubId?: string | null;
+  category: string;
+  status?: string;
+}) {
+  return request<{ document: BandDocument }>("/api/documents", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateBandDocument(documentId: string, payload: Partial<{
+  title: string;
+  description: string;
+  fileName: string;
+  fileUrl: string;
+  programLevel: string;
+  bandLevel: string;
+  clubId: string | null;
+  category: string;
+  status: string;
+}>) {
+  return request<{ document: BandDocument }>(`/api/documents/${documentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function getMemberDetail(studentId: string) {

@@ -29,6 +29,7 @@ model User {
   studentProfile  Student?
   facilitator     ClubFacilitator[]
   centreFacilitator CentreFacilitator[]
+  uploadedBandDocuments BandDocument[] @relation("BandDocumentUploadedBy")
 }
 
 model Centre {
@@ -58,6 +59,7 @@ model Club {
   studentMemberships StudentClubMembership[]
   facilitators ClubFacilitator[]
   meetings     Meeting[]
+  bandDocuments BandDocument[]
 }
 
 model Student {
@@ -284,4 +286,29 @@ model StudentRequirementProgress {
 
   @@unique([studentId, requirementId])
   @@index([studentId])
+}
+
+model BandDocument {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  fileName     String
+  fileUrl      String
+  programLevel String
+  bandLevel    String
+  bandOrder    Int
+  clubId       String?
+  category     String
+  uploadedById String
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  club       Club? @relation(fields: [clubId], references: [id])
+  uploadedBy User  @relation("BandDocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([programLevel, bandOrder])
+  @@index([clubId])
+  @@index([status])
+  @@index([category])
 }

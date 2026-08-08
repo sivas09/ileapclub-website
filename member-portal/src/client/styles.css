@@ -320,6 +320,7 @@ button {
 .admin-workspace,
 .meeting-workspace,
 .members-workspace,
+.documents-workspace,
 .feedback-report,
 .student-progress {
   width: min(1180px, 100%);
@@ -813,7 +814,8 @@ button {
   margin-top: 22px;
 }
 
-.member-filter-form {
+.member-filter-form,
+.document-filter-form {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
@@ -824,7 +826,8 @@ button {
   background: #f7fafc;
 }
 
-.member-filter-form label {
+.member-filter-form label,
+.document-filter-form label {
   display: grid;
   gap: 6px;
   color: var(--portal-muted);
@@ -834,13 +837,173 @@ button {
 }
 
 .member-filter-form input,
-.member-filter-form select {
+.member-filter-form select,
+.document-filter-form input,
+.document-filter-form select {
   min-height: 40px;
   border: 1px solid #cbd7e6;
   border-radius: 8px;
   padding: 0 10px;
   color: var(--portal-ink);
   background: #ffffff;
+}
+
+.document-form,
+.document-edit-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: var(--portal-bg-soft);
+}
+
+.document-form h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--portal-blue);
+}
+
+.document-form label,
+.document-edit-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--portal-muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.document-form input,
+.document-form select,
+.document-form textarea,
+.document-edit-form input,
+.document-edit-form select,
+.document-edit-form textarea {
+  min-height: 40px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--portal-ink);
+  background: #ffffff;
+  font: inherit;
+}
+
+.document-form textarea,
+.document-edit-form textarea {
+  resize: vertical;
+}
+
+.document-form button,
+.document-actions button,
+.document-actions a {
+  min-height: 38px;
+  border: 1px solid var(--portal-blue);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #ffffff;
+  background: var(--portal-blue);
+  font-size: 0.84rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.document-actions button,
+.document-actions a {
+  display: inline-flex;
+  align-items: center;
+  color: var(--portal-blue);
+  background: #ffffff;
+}
+
+.document-actions button:hover,
+.document-actions a:hover {
+  border-color: var(--portal-teal);
+  color: var(--portal-teal);
+}
+
+.document-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.document-card-grid.compact {
+  margin-top: 0;
+}
+
+.document-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.document-card.is-archived {
+  opacity: 0.72;
+}
+
+.document-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.document-card-header span,
+.document-card-header em {
+  color: var(--portal-teal);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.document-card-header h3 {
+  margin: 4px 0 0;
+  color: var(--portal-blue);
+  font-size: 1.08rem;
+}
+
+.document-card p {
+  margin: 0;
+  color: var(--portal-muted);
+  line-height: 1.55;
+}
+
+.document-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.document-meta div {
+  min-width: 0;
+}
+
+.document-meta dt {
+  color: var(--portal-muted);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.document-meta dd {
+  margin: 3px 0 0;
+  color: var(--portal-ink);
+  font-weight: 800;
+}
+
+.document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .members-table {
@@ -1766,6 +1929,7 @@ body {
 .admin-workspace,
 .meeting-workspace,
 .members-workspace,
+.documents-workspace,
 .feedback-report,
 .student-progress,
 .deferred-workspace {
@@ -1831,6 +1995,7 @@ body {
 .admin-workspace,
 .meeting-workspace,
 .members-workspace,
+.documents-workspace,
 .feedback-report,
 .student-progress,
 .deferred-workspace,
@@ -1849,6 +2014,7 @@ body {
 .admin-workspace::before,
 .meeting-workspace::before,
 .members-workspace::before,
+.documents-workspace::before,
 .feedback-report::before,
 .student-progress::before {
   display: block;
@@ -1863,6 +2029,7 @@ body {
 .admin-workspace,
 .meeting-workspace,
 .members-workspace,
+.documents-workspace,
 .feedback-report,
 .student-progress,
 .deferred-workspace {

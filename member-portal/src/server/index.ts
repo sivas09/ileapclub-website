@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
+import { documentsRouter } from "./routes/documents.js";
 import { meetingsRouter } from "./routes/meetings.js";
 import { membersRouter } from "./routes/members.js";
 import { reportsRouter } from "./routes/reports.js";
@@ -40,6 +41,7 @@ app.get("/api/health", (_request, response) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/documents", documentsRouter);
 app.use("/api/meetings", meetingsRouter);
 app.use("/api/members", membersRouter);
 app.use("/api/reports", reportsRouter);
