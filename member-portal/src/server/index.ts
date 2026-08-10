@@ -10,6 +10,7 @@ import { documentsRouter } from "./routes/documents.js";
 import { meetingsRouter } from "./routes/meetings.js";
 import { membersRouter } from "./routes/members.js";
 import { reportsRouter } from "./routes/reports.js";
+import { resourcesRouter } from "./routes/resources.js";
 import { studentRouter } from "./routes/student.js";
 
 const app = express();
@@ -45,6 +46,7 @@ app.use("/api/documents", documentsRouter);
 app.use("/api/meetings", meetingsRouter);
 app.use("/api/members", membersRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/resources", resourcesRouter);
 app.use("/api/student", studentRouter);
 
 app.use(express.static(clientDistPath));

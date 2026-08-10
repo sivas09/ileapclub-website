@@ -30,6 +30,8 @@ model User {
   facilitator     ClubFacilitator[]
   centreFacilitator CentreFacilitator[]
   uploadedBandDocuments BandDocument[] @relation("BandDocumentUploadedBy")
+  createdResourceLinks ResourceLink[] @relation("ResourceLinkCreatedBy")
+  updatedResourceLinks ResourceLink[] @relation("ResourceLinkUpdatedBy")
 }
 
 model Centre {
@@ -259,10 +261,40 @@ model BandRequirement {
   updatedAt   DateTime @updatedAt
 
   progress StudentRequirementProgress[]
+  resourceLinks ResourceLink[]
 
   @@unique([programLevel, bandLevel, name])
   @@index([programLevel])
   @@index([bandLevel])
+}
+
+model ResourceLink {
+  id            String   @id @default(cuid())
+  title         String
+  explanation   String
+  youtubeUrl    String?
+  documentUrl   String?
+  programLevel  String?
+  bandLevel     String?
+  bandOrder     Int?
+  roleKey       String?
+  requirementId String?
+  category      String
+  status        String   @default("ACTIVE")
+  createdById   String
+  updatedById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  requirement BandRequirement? @relation(fields: [requirementId], references: [id])
+  createdBy   User             @relation("ResourceLinkCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?            @relation("ResourceLinkUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([status])
+  @@index([roleKey])
+  @@index([programLevel, bandOrder])
+  @@index([requirementId])
+  @@index([category])
 }
 
 model StudentRequirementProgress {

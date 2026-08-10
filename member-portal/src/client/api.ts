@@ -259,6 +259,27 @@ export type BandDocument = {
   status: "ACTIVE" | "ARCHIVED" | string;
 };
 
+export type ResourceCategory = "Role Guide" | "Speech Guide" | "Presentation Guide" | "Video" | "Sample" | "Other";
+
+export type ResourceLink = {
+  id: string;
+  title: string;
+  explanation: string;
+  youtubeUrl?: string | null;
+  documentUrl?: string | null;
+  programLevel?: string | null;
+  bandLevel?: string | null;
+  bandOrder?: number | null;
+  roleKey?: string | null;
+  requirementId?: string | null;
+  requirementName?: string | null;
+  category: ResourceCategory | string;
+  status: "ACTIVE" | "ARCHIVED" | string;
+  createdAt: string;
+  createdBy: string;
+  updatedBy?: string | null;
+};
+
 export type DocumentsResponse = {
   documents: BandDocument[];
   clubs: Club[];
@@ -267,6 +288,17 @@ export type DocumentsResponse = {
     currentBandLevel: string;
     currentBandOrder: number;
     clubIds: string[];
+  } | null;
+};
+
+export type ResourcesResponse = {
+  resources: ResourceLink[];
+  studentContext?: {
+    programLevel: string | null;
+    currentBandLevel: string;
+    currentBandOrder: number | null;
+    roleKeys: string[];
+    requirementIds: string[];
   } | null;
 };
 
@@ -736,6 +768,60 @@ export async function updateBandDocument(documentId: string, payload: Partial<{
   status: string;
 }>) {
   return request<{ document: BandDocument }>(`/api/documents/${documentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getResourceLinks(params: {
+  roleKey?: string;
+  requirementId?: string;
+  category?: string;
+  search?: string;
+  status?: string;
+} = {}) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value)) {
+      query.set(key, String(value));
+    }
+  });
+
+  return request<ResourcesResponse>(`/api/resources${query.toString() ? `?${query.toString()}` : ""}`);
+}
+
+export async function createResourceLink(payload: {
+  title: string;
+  explanation: string;
+  youtubeUrl?: string;
+  documentUrl?: string;
+  programLevel?: string | null;
+  bandLevel?: string | null;
+  roleKey?: string | null;
+  requirementId?: string | null;
+  category: string;
+  status?: string;
+}) {
+  return request<{ resource: ResourceLink }>("/api/resources", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateResourceLink(resourceId: string, payload: Partial<{
+  title: string;
+  explanation: string;
+  youtubeUrl: string;
+  documentUrl: string;
+  programLevel: string | null;
+  bandLevel: string | null;
+  roleKey: string | null;
+  requirementId: string | null;
+  category: string;
+  status: string;
+}>) {
+  return request<{ resource: ResourceLink }>(`/api/resources/${resourceId}`, {
     method: "PATCH",
     body: JSON.stringify(payload)
   });

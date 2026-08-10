@@ -1061,6 +1061,118 @@ button {
   gap: 8px;
 }
 
+.help-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.help-label > span {
+  min-width: 0;
+}
+
+.help-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  place-items: center;
+  border: 1px solid #cbd7e6;
+  border-radius: 50%;
+  padding: 0;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.help-icon:hover,
+.help-icon:focus-visible {
+  color: #ffffff;
+  border-color: var(--portal-teal);
+  background: var(--portal-teal);
+}
+
+.resource-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.resource-chip {
+  min-height: 36px;
+  border: 1px solid #cbd7e6;
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.resource-chip:hover,
+.resource-chip:focus-visible {
+  border-color: var(--portal-teal);
+  color: var(--portal-teal);
+}
+
+.resource-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.44);
+}
+
+.resource-panel {
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100vh - 36px));
+  overflow: auto;
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 30px 80px rgba(4, 19, 48, 0.28);
+}
+
+.resource-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.resource-panel-header h3 {
+  margin: 6px 0 0;
+  color: var(--portal-blue);
+  font-size: 1.35rem;
+}
+
+.resource-panel-header button {
+  min-height: 36px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-weight: 900;
+}
+
+.resource-panel p {
+  margin: 0;
+  color: var(--portal-muted);
+  line-height: 1.6;
+}
+
 .members-table {
   min-width: 1180px;
 }

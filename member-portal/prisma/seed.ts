@@ -486,10 +486,100 @@ async function main() {
     }
   }
 
+  await seedResourceLinks(admin.id);
+
   console.log("Seeded demo portal data.");
   console.log(`Admin: ${admin.email} / ${seedPassword}`);
   console.log(`Facilitator: ${facilitator.email} / ${seedPassword}`);
   console.log(`Student: ${studentUser.email} / ${seedPassword}`);
+}
+
+async function seedResourceLinks(adminId: string) {
+  const requirementResources = [
+    "Induction Speech",
+    "Structured Speech",
+    "Special Event Speech",
+    "Graduation Speech"
+  ];
+  const roleResources = [
+    ["iChair", "Role Guide", "Lead the meeting flow, introduce speakers, manage transitions, and close the session."],
+    ["iGrammarian", "Role Guide", "Introduce the phrase or idiom of the day, listen for language use, and share a short report."],
+    ["iTimer", "Role Guide", "Track each speaker's time, signal timing, and give the timer report."],
+    ["iFiller Counter", "Role Guide", "Listen for filler words and repeated phrases, then share a concise count and observation."],
+    ["Prepared Speech 1", "Speech Guide", "Prepare and deliver a planned speech with a clear opening, body, and conclusion."]
+  ] as const;
+
+  for (const [roleKey, category, explanation] of roleResources) {
+    await upsertSeedResource({
+      title: `${roleKey} Guide`,
+      explanation,
+      roleKey,
+      category,
+      createdById: adminId
+    });
+  }
+
+  const requirements = await prisma.bandRequirement.findMany({
+    where: {
+      name: { in: requirementResources },
+      isActive: true
+    }
+  });
+
+  for (const requirement of requirements) {
+    await upsertSeedResource({
+      title: `${requirement.name} Guide`,
+      explanation: requirement.description,
+      programLevel: requirement.programLevel,
+      bandLevel: requirement.bandLevel,
+      bandOrder: requirement.bandOrder,
+      requirementId: requirement.id,
+      category: requirement.requirementType === "Presentation" ? "Presentation Guide" : "Speech Guide",
+      createdById: adminId
+    });
+  }
+}
+
+async function upsertSeedResource(data: {
+  title: string;
+  explanation: string;
+  roleKey?: string;
+  programLevel?: string;
+  bandLevel?: string;
+  bandOrder?: number;
+  requirementId?: string;
+  category: string;
+  createdById: string;
+}) {
+  const existing = await prisma.resourceLink.findFirst({
+    where: {
+      title: data.title,
+      roleKey: data.roleKey ?? null,
+      requirementId: data.requirementId ?? null
+    }
+  });
+
+  if (existing) {
+    await prisma.resourceLink.update({
+      where: { id: existing.id },
+      data: {
+        explanation: data.explanation,
+        programLevel: data.programLevel ?? null,
+        bandLevel: data.bandLevel ?? null,
+        bandOrder: data.bandOrder ?? null,
+        category: data.category,
+        status: "ACTIVE"
+      }
+    });
+    return;
+  }
+
+  await prisma.resourceLink.create({
+    data: {
+      ...data,
+      status: "ACTIVE"
+    }
+  });
 }
 
 main()

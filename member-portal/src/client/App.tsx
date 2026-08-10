@@ -13,6 +13,7 @@ import {
   createCentre,
   createClub,
   createMeeting,
+  createResourceLink,
   createUser,
   deleteDemoUser,
   deleteSampleFeedback,
@@ -28,6 +29,7 @@ import {
   getMemberDetail,
   getMembers,
   getMeetingsOverview,
+  getResourceLinks,
   getStoredToken,
   getStudentProgress,
   login,
@@ -42,6 +44,7 @@ import {
   removeMeetingRoleSlot,
   removeClubFacilitator,
   resetDemoMeetingData,
+  ResourceLink,
   setCentreActive,
   setClubActive,
   setUserActive,
@@ -50,6 +53,7 @@ import {
   toggleMeetingLock,
   updateBandDocument,
   updateMeetingDetails,
+  updateResourceLink,
   updateStudentProfile,
   updateStudentRequirement,
   updateUser
@@ -113,6 +117,15 @@ const documentCategoryOptions = [
   "Rubric",
   "Sample",
   "Training Material",
+  "Other"
+];
+
+const resourceCategoryOptions = [
+  "Role Guide",
+  "Speech Guide",
+  "Presentation Guide",
+  "Video",
+  "Sample",
   "Other"
 ];
 
@@ -1399,7 +1412,12 @@ type DocumentFilters = {
 function DocumentsWorkspace({ user }: { user: PortalUser }) {
   const isStudent = user.role === "STUDENT";
 
-  return isStudent ? <StudentResourcesPanel /> : <ManagerDocumentsPanel user={user} />;
+  return isStudent ? <StudentResourcesPanel /> : (
+    <>
+      <ManagerDocumentsPanel user={user} />
+      <ManagerResourceLinksPanel user={user} />
+    </>
+  );
 }
 
 function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
@@ -1714,15 +1732,18 @@ function ManagerDocumentCard({
 
 function StudentResourcesPanel() {
   const [documents, setDocuments] = useState<BandDocument[]>([]);
+  const [resources, setResources] = useState<ResourceLink[]>([]);
+  const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
   const [studentContext, setStudentContext] = useState<Awaited<ReturnType<typeof getBandDocuments>>["studentContext"]>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    getBandDocuments()
-      .then((result) => {
-        setDocuments(result.documents);
-        setStudentContext(result.studentContext ?? null);
+    Promise.all([getBandDocuments(), getResourceLinks()])
+      .then(([documentResult, resourceResult]) => {
+        setDocuments(documentResult.documents);
+        setResources(resourceResult.resources);
+        setStudentContext(documentResult.studentContext ?? null);
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load resources."))
       .finally(() => setIsLoading(false));
@@ -1757,7 +1778,37 @@ function StudentResourcesPanel() {
 
       <ResourceGroup title="Current Band Resources" documents={currentBandResources} emptyText="No resources for your current band yet." />
       <ResourceGroup title="Previous Band Resources" documents={previousBandResources} emptyText="No previous band resources available yet." />
+      <ResourceHelpGroup resources={resources} onSelectResource={setSelectedResource} />
+      <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
+  );
+}
+
+function ResourceHelpGroup({
+  resources,
+  onSelectResource
+}: {
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
+}) {
+  return (
+    <DataPanel title="Role & Requirement Help">
+      {resources.length ? (
+        <div className="resource-chip-list">
+          {resources.map((resource) => (
+            <button
+              key={resource.id}
+              type="button"
+              className="resource-chip"
+              title={resource.explanation}
+              onClick={() => onSelectResource(resource)}
+            >
+              {resource.title}
+            </button>
+          ))}
+        </div>
+      ) : <p>No help links available yet.</p>}
+    </DataPanel>
   );
 }
 
@@ -1801,6 +1852,276 @@ function ResourceCard({ document }: { document: BandDocument }) {
   );
 }
 
+type ResourceFilters = {
+  category: string;
+  search: string;
+  status: string;
+};
+
+function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
+  const [resources, setResources] = useState<ResourceLink[]>([]);
+  const [filters, setFilters] = useState<ResourceFilters>({ category: "", search: "", status: "ACTIVE" });
+  const [editingResource, setEditingResource] = useState<ResourceLink | null>(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const canEdit = user.role === "ADMIN";
+
+  async function refreshResources(nextFilters = filters) {
+    const data = await getResourceLinks(nextFilters);
+    setResources(data.resources);
+  }
+
+  useEffect(() => {
+    refreshResources()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load resource links."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  function updateFilter(key: keyof ResourceFilters, value: string) {
+    const nextFilters = { ...filters, [key]: value };
+    setFilters(nextFilters);
+    setError("");
+    refreshResources(nextFilters).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to filter resource links."));
+  }
+
+  async function handleCreateResource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const payload = resourcePayloadFromForm(event.currentTarget);
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await createResourceLink(payload);
+      event.currentTarget.reset();
+      await refreshResources();
+      setIsAddFormOpen(false);
+      setStatus("Resource link added.");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to add resource link.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleSaveResource(resourceId: string, payload: Parameters<typeof updateResourceLink>[1]) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await updateResourceLink(resourceId, payload);
+      await refreshResources();
+      setEditingResource(null);
+      setStatus("Resource link updated.");
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update resource link.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="documents-workspace" id="resource-links" aria-label="Role and band resource help links">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Inline help</p>
+          <h2>Resource Help Links</h2>
+        </div>
+        <button type="button" onClick={() => refreshResources()} disabled={isLoading}>Refresh</button>
+      </div>
+
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      <form className="document-filter-form" onSubmit={(event) => event.preventDefault()}>
+        <label>
+          Category
+          <select value={filters.category} onChange={(event) => updateFilter("category", event.currentTarget.value)}>
+            <option value="">All categories</option>
+            {resourceCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
+        </label>
+        {user.role === "ADMIN" ? (
+          <label>
+            Status
+            <select value={filters.status} onChange={(event) => updateFilter("status", event.currentTarget.value)}>
+              <option value="ACTIVE">Active</option>
+              <option value="ARCHIVED">Archived</option>
+              <option value="">All statuses</option>
+            </select>
+          </label>
+        ) : null}
+        <label>
+          Search
+          <input value={filters.search} placeholder="Title" onChange={(event) => updateFilter("search", event.currentTarget.value)} />
+        </label>
+      </form>
+
+      {canEdit ? (
+        <div className="document-add-toggle">
+          <button type="button" onClick={() => setIsAddFormOpen((isOpen) => !isOpen)}>
+            {isAddFormOpen ? "Cancel New Resource" : "Add Resource Link"}
+          </button>
+        </div>
+      ) : null}
+
+      {canEdit && isAddFormOpen ? <ResourceLinkForm isSubmitting={isSubmitting} onSubmit={handleCreateResource} /> : null}
+      {isLoading ? <p className="loading-state">Loading resource links...</p> : null}
+      {!isLoading && !resources.length ? <p className="loading-state">No resource links found.</p> : null}
+
+      <div className="document-card-grid">
+        {resources.map((resource) => (
+          <ResourceLinkCard
+            key={resource.id}
+            resource={resource}
+            canEdit={canEdit}
+            isEditing={editingResource?.id === resource.id}
+            isSubmitting={isSubmitting}
+            onEdit={() => setEditingResource(resource)}
+            onCancelEdit={() => setEditingResource(null)}
+            onSave={handleSaveResource}
+            onStatusChange={(targetResource) => handleSaveResource(targetResource.id, {
+              status: targetResource.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED"
+            })}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ResourceLinkCard({
+  resource,
+  canEdit,
+  isEditing,
+  isSubmitting,
+  onEdit,
+  onCancelEdit,
+  onSave,
+  onStatusChange
+}: {
+  resource: ResourceLink;
+  canEdit: boolean;
+  isEditing: boolean;
+  isSubmitting: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  onSave: (resourceId: string, payload: Parameters<typeof updateResourceLink>[1]) => void;
+  onStatusChange: (resource: ResourceLink) => void;
+}) {
+  if (isEditing) {
+    return (
+      <article className="document-card">
+        <ResourceLinkForm
+          resource={resource}
+          isSubmitting={isSubmitting}
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSave(resource.id, resourcePayloadFromForm(event.currentTarget));
+          }}
+          onCancel={onCancelEdit}
+        />
+      </article>
+    );
+  }
+
+  return (
+    <article className={`document-card ${resource.status === "ARCHIVED" ? "is-archived" : ""}`}>
+      <div className="document-card-header">
+        <div>
+          <span>{resource.category}</span>
+          <h3>{resource.title}</h3>
+        </div>
+        <em>{resource.status === "ARCHIVED" ? "Archived" : "Active"}</em>
+      </div>
+      <p>{resource.explanation}</p>
+      <dl className="document-meta">
+        <div><dt>Role</dt><dd>{resource.roleKey || "Any"}</dd></div>
+        <div><dt>Program</dt><dd>{formatProgramLevel(resource.programLevel)}</dd></div>
+        <div><dt>Band</dt><dd>{resource.bandLevel || "Any"}</dd></div>
+        <div><dt>Requirement</dt><dd>{resource.requirementName || resource.requirementId || "Any"}</dd></div>
+      </dl>
+      <ResourceActions resource={resource} />
+      {canEdit ? (
+        <div className="document-actions">
+          <button type="button" onClick={onEdit}>Edit</button>
+          <button type="button" onClick={() => onStatusChange(resource)} disabled={isSubmitting}>
+            {resource.status === "ARCHIVED" ? "Restore" : "Archive"}
+          </button>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function ResourceLinkForm({
+  resource,
+  isSubmitting,
+  onSubmit,
+  onCancel
+}: {
+  resource?: ResourceLink;
+  isSubmitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel?: () => void;
+}) {
+  return (
+    <form className="document-form resource-link-form" onSubmit={onSubmit}>
+      <h3>{resource ? "Edit Resource Link" : "Add Resource Link"}</h3>
+      <label>Title<input name="title" defaultValue={resource?.title ?? ""} required /></label>
+      <label>
+        Category
+        <select name="category" defaultValue={resource?.category ?? "Role Guide"}>
+          {resourceCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+        </select>
+      </label>
+      <label>Role Key <span>Optional</span><input name="roleKey" defaultValue={resource?.roleKey ?? ""} placeholder="iChair" /></label>
+      <label>
+        Program <span>Optional</span>
+        <select name="programLevel" defaultValue={resource?.programLevel ?? ""}>
+          <option value="">Any program</option>
+          {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+      <label>
+        Band <span>Optional</span>
+        <select name="bandLevel" defaultValue={resource?.bandLevel ?? ""}>
+          <option value="">Any band</option>
+          {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
+        </select>
+      </label>
+      <label>Requirement ID <span>Optional</span><input name="requirementId" defaultValue={resource?.requirementId ?? ""} /></label>
+      <label className="document-link-field">YouTube URL <span>Optional</span><input name="youtubeUrl" type="url" defaultValue={resource?.youtubeUrl ?? ""} /></label>
+      <label className="document-link-field">Document URL <span>Optional</span><input name="documentUrl" type="url" defaultValue={resource?.documentUrl ?? ""} /></label>
+      <label className="document-link-field">Short Explanation<textarea name="explanation" defaultValue={resource?.explanation ?? ""} rows={3} required /></label>
+      <div className="document-actions">
+        <button type="submit" disabled={isSubmitting}>{resource ? "Save Resource" : "Add Resource"}</button>
+        {onCancel ? <button type="button" onClick={onCancel} disabled={isSubmitting}>Cancel</button> : null}
+      </div>
+    </form>
+  );
+}
+
+function resourcePayloadFromForm(form: HTMLFormElement) {
+  const formData = new FormData(form);
+
+  return {
+    title: String(formData.get("title") || ""),
+    explanation: String(formData.get("explanation") || ""),
+    youtubeUrl: String(formData.get("youtubeUrl") || ""),
+    documentUrl: String(formData.get("documentUrl") || ""),
+    programLevel: String(formData.get("programLevel") || "") || null,
+    bandLevel: String(formData.get("bandLevel") || "") || null,
+    roleKey: String(formData.get("roleKey") || "") || null,
+    requirementId: String(formData.get("requirementId") || "") || null,
+    category: String(formData.get("category") || "Other")
+  };
+}
+
 type MeetingMode = "view" | "book" | "manage" | "score" | "edit";
 
 const meetingTemplates = [
@@ -1814,6 +2135,8 @@ const meetingTemplates = [
 
 function MeetingWorkspace({ user }: { user: PortalUser }) {
   const [overview, setOverview] = useState<MeetingsOverview | null>(null);
+  const [resources, setResources] = useState<ResourceLink[]>([]);
+  const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -1827,8 +2150,12 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
     : [];
 
   async function refreshMeetings() {
-    const data = await getMeetingsOverview();
+    const [data, resourceData] = await Promise.all([
+      getMeetingsOverview(),
+      getResourceLinks()
+    ]);
     setOverview(data);
+    setResources(resourceData.resources);
     setSelectedMeetingId((currentMeetingId) => {
       if (currentMeetingId && data.meetings.some((meeting) => meeting.id === currentMeetingId)) {
         return currentMeetingId;
@@ -1973,11 +2300,13 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
             {canManageMeetings ? <button type="button" className={meetingMode === "score" ? "is-active" : ""} onClick={() => setMeetingMode("score")}>Score Feedback</button> : null}
           </div>
 
-          {meetingMode === "view" ? <MeetingView meeting={selectedMeeting} user={user} /> : null}
+          {meetingMode === "view" ? <MeetingView meeting={selectedMeeting} user={user} resources={resources} onSelectResource={setSelectedResource} /> : null}
           {meetingMode === "book" ? (
             <BookRoles
               meeting={selectedMeeting}
               user={user}
+              resources={resources}
+              onSelectResource={setSelectedResource}
               isSubmitting={isSubmitting}
               onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(selectedMeeting.id, slotId), "Role claimed.")}
             />
@@ -2020,9 +2349,12 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
       {canManageMeetings && overview?.students.length ? (
         <RequirementManagementPanel
           students={overview.students}
+          resources={resources}
+          onSelectResource={setSelectedResource}
           onUpdated={() => refreshMeetings()}
         />
       ) : null}
+      <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
   );
 }
@@ -2094,11 +2426,21 @@ function MeetingList({
   );
 }
 
-function MeetingView({ meeting, user }: { meeting: Meeting; user: PortalUser }) {
+function MeetingView({
+  meeting,
+  user,
+  resources,
+  onSelectResource
+}: {
+  meeting: Meeting;
+  user: PortalUser;
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
+}) {
   return (
     <section className="meeting-mode-section" aria-label="Meeting view">
       <MeetingSummary meeting={meeting} />
-      <RoleAssignmentTable meeting={meeting} user={user} />
+      <RoleAssignmentTable meeting={meeting} user={user} resources={resources} onSelectResource={onSelectResource} />
     </section>
   );
 }
@@ -2106,11 +2448,15 @@ function MeetingView({ meeting, user }: { meeting: Meeting; user: PortalUser }) 
 function BookRoles({
   meeting,
   user,
+  resources,
+  onSelectResource,
   isSubmitting,
   onClaim
 }: {
   meeting: Meeting;
   user: PortalUser;
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
   isSubmitting: boolean;
   onClaim: (slotId: string) => void;
 }) {
@@ -2135,7 +2481,13 @@ function BookRoles({
           return (
             <li key={slot.id} className={!slot.assignedStudentId ? "is-open" : ""}>
               <div>
-                <strong>{roleSlotName(slot)}</strong>
+                <strong>
+                  <HelpLabel
+                    label={roleSlotName(slot)}
+                    resources={resourcesForRole(resources, slot)}
+                    onSelectResource={onSelectResource}
+                  />
+                </strong>
                 <span>{assignedName ? `Assigned to ${assignedName}` : "Available"}</span>
               </div>
               {isOwnRole ? <em>Claimed</em> : null}
@@ -2308,7 +2660,17 @@ function MeetingSummary({ meeting }: { meeting: Meeting }) {
   );
 }
 
-function RoleAssignmentTable({ meeting, user }: { meeting: Meeting; user: PortalUser }) {
+function RoleAssignmentTable({
+  meeting,
+  user,
+  resources,
+  onSelectResource
+}: {
+  meeting: Meeting;
+  user: PortalUser;
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
+}) {
   return (
     <div className="role-table-wrap">
       <table className="role-assignment-table">
@@ -2322,7 +2684,7 @@ function RoleAssignmentTable({ meeting, user }: { meeting: Meeting; user: Portal
         </thead>
         <tbody>
           {meeting.roleSlots.map((slot) => (
-            <RoleAssignmentRow key={slot.id} slot={slot} user={user} />
+            <RoleAssignmentRow key={slot.id} slot={slot} user={user} resources={resources} onSelectResource={onSelectResource} />
           ))}
         </tbody>
       </table>
@@ -2330,12 +2692,28 @@ function RoleAssignmentTable({ meeting, user }: { meeting: Meeting; user: Portal
   );
 }
 
-function RoleAssignmentRow({ slot, user }: { slot: Meeting["roleSlots"][number]; user: PortalUser }) {
+function RoleAssignmentRow({
+  slot,
+  user,
+  resources,
+  onSelectResource
+}: {
+  slot: Meeting["roleSlots"][number];
+  user: PortalUser;
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
+}) {
   const canSeeScore = user.role !== "STUDENT" || slot.assignedStudent?.user.id === user.id;
 
   return (
     <tr>
-      <td>{roleSlotName(slot)}</td>
+      <td>
+        <HelpLabel
+          label={roleSlotName(slot)}
+          resources={resourcesForRole(resources, slot)}
+          onSelectResource={onSelectResource}
+        />
+      </td>
       <td>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</td>
       <td>{canSeeScore && slot.score ? `${slot.score.score}/100` : "None"}</td>
       <td>{canSeeScore ? slot.score?.feedback || "None" : "None"}</td>
@@ -2349,9 +2727,13 @@ function StatusText({ isLocked }: { isLocked: boolean }) {
 
 function RequirementManagementPanel({
   students,
+  resources,
+  onSelectResource,
   onUpdated
 }: {
   students: MeetingsOverview["students"];
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
   onUpdated: () => void;
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState(students[0]?.id ?? "");
@@ -2494,7 +2876,14 @@ function RequirementManagementPanel({
             {progress.requirements.map((entry) => (
               <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
                 <div>
-                  <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
+                  <strong>
+                    {entry.requirement.bandLevel}: {entry.requirement.requirementType} -{" "}
+                    <HelpLabel
+                      label={entry.requirement.name}
+                      resources={resourcesForRequirement(resources, entry.requirement.id, entry.requirement.name)}
+                      onSelectResource={onSelectResource}
+                    />
+                  </strong>
                   <span>{formatBandLadder(progress.summary.programLevel)} - {entry.requirement.description}</span>
                 </div>
                 <div className="requirement-controls">
@@ -2862,12 +3251,17 @@ function StudentClubMembersPanel() {
 
 function StudentProgressDashboard() {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
+  const [resources, setResources] = useState<ResourceLink[]>([]);
+  const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    getStudentProgress()
-      .then(setProgress)
+    Promise.all([getStudentProgress(), getResourceLinks()])
+      .then(([progressResult, resourceResult]) => {
+        setProgress(progressResult);
+        setResources(resourceResult.resources);
+      })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load progress."))
       .finally(() => setIsLoading(false));
   }, []);
@@ -2942,7 +3336,14 @@ function StudentProgressDashboard() {
                 {progress.requirements.map((entry) => (
                   <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
                     <div>
-                      <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
+                      <strong>
+                        {entry.requirement.bandLevel}: {entry.requirement.requirementType} -{" "}
+                        <HelpLabel
+                          label={entry.requirement.name}
+                          resources={resourcesForRequirement(resources, entry.requirement.id, entry.requirement.name)}
+                          onSelectResource={setSelectedResource}
+                        />
+                      </strong>
                       <span>
                         {entry.requirement.description}
                         {entry.facilitatorSignedOffAt ? ` - facilitator signed off ${formatDate(entry.facilitatorSignedOffAt)}` : ""}
@@ -2962,7 +3363,13 @@ function StudentProgressDashboard() {
                 <ul className="record-list">
                   {progress.student.roleSlots.slice(0, 8).map((slot) => (
                     <li key={slot.id}>
-                      <strong>{slot.roleDefinition.name}</strong>
+                      <strong>
+                        <HelpLabel
+                          label={slot.roleDefinition.name}
+                          resources={resourcesForRoleName(resources, slot.roleDefinition.name)}
+                          onSelectResource={setSelectedResource}
+                        />
+                      </strong>
                       <span>{slot.meeting.title} - {formatDate(slot.meeting.meetingDate)} - score: {slot.score?.score ?? "Not scored"}</span>
                     </li>
                   ))}
@@ -2975,7 +3382,13 @@ function StudentProgressDashboard() {
                 <ul className="record-list">
                   {progress.student.roleScores.slice(0, 8).map((score) => (
                     <li key={score.id}>
-                      <strong>{score.roleSlot.roleDefinition.name}: {score.score}/100</strong>
+                      <strong>
+                        <HelpLabel
+                          label={`${score.roleSlot.roleDefinition.name}: ${score.score}/100`}
+                          resources={resourcesForRoleName(resources, score.roleSlot.roleDefinition.name)}
+                          onSelectResource={setSelectedResource}
+                        />
+                      </strong>
                       <span>{score.meeting.title} - {score.feedback || "No feedback entered yet."}</span>
                     </li>
                   ))}
@@ -2998,7 +3411,79 @@ function StudentProgressDashboard() {
           </div>
         </>
       ) : null}
+      <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
+  );
+}
+
+function HelpLabel({
+  label,
+  resources,
+  onSelectResource
+}: {
+  label: string;
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
+}) {
+  const firstResource = resources[0];
+
+  return (
+    <span className="help-label">
+      <span>{label}</span>
+      {firstResource ? (
+        <button
+          type="button"
+          className="help-icon"
+          title={firstResource.explanation}
+          aria-label={`Open help for ${label}`}
+          onClick={() => onSelectResource(firstResource)}
+        >
+          i
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+function ResourcePanel({ resource, onClose }: { resource: ResourceLink | null; onClose: () => void }) {
+  if (!resource) {
+    return null;
+  }
+
+  return (
+    <div className="resource-panel-backdrop" role="presentation" onClick={onClose}>
+      <section className="resource-panel" role="dialog" aria-modal="true" aria-labelledby="resource-panel-title" onClick={(event) => event.stopPropagation()}>
+        <div className="resource-panel-header">
+          <div>
+            <p className="eyebrow">{resource.category}</p>
+            <h3 id="resource-panel-title">{resource.title}</h3>
+          </div>
+          <button type="button" aria-label="Close help panel" onClick={onClose}>Close</button>
+        </div>
+        <p>{resource.explanation}</p>
+        <dl className="document-meta">
+          <div><dt>Role</dt><dd>{resource.roleKey || "Any"}</dd></div>
+          <div><dt>Program</dt><dd>{formatProgramLevel(resource.programLevel)}</dd></div>
+          <div><dt>Band</dt><dd>{resource.bandLevel || "Any"}</dd></div>
+          <div><dt>Requirement</dt><dd>{resource.requirementName || "Any"}</dd></div>
+        </dl>
+        <ResourceActions resource={resource} />
+      </section>
+    </div>
+  );
+}
+
+function ResourceActions({ resource }: { resource: ResourceLink }) {
+  return (
+    <div className="document-actions">
+      {resource.youtubeUrl
+        ? <a href={resource.youtubeUrl} target="_blank" rel="noreferrer">Open YouTube</a>
+        : null}
+      {resource.documentUrl
+        ? <a href={resource.documentUrl} target="_blank" rel="noreferrer">Open Document</a>
+        : null}
+      {!resource.youtubeUrl && !resource.documentUrl ? <span className="document-disabled-action">Links not added yet</span> : null}
+    </div>
   );
 }
 
@@ -3054,6 +3539,49 @@ function formatSummaryKey(value: string) {
 
 function roleSlotName(slot: Meeting["roleSlots"][number]) {
   return slot.slotLabel || slot.roleDefinition.name;
+}
+
+function resourcesForRole(resources: ResourceLink[], slot: Meeting["roleSlots"][number]) {
+  return resourcesForRoleName(resources, roleSlotName(slot), slot.roleDefinition.name);
+}
+
+function resourcesForRoleName(resources: ResourceLink[], roleName: string, definitionName = roleName) {
+  const normalizedRoleName = normalizeResourceKey(roleName);
+  const normalizedDefinitionName = normalizeResourceKey(definitionName);
+
+  return resources.filter((resource) => {
+    if (!resource.roleKey) {
+      return false;
+    }
+
+    const resourceKey = normalizeResourceKey(resource.roleKey);
+
+    return normalizedRoleName === resourceKey
+      || normalizedDefinitionName === resourceKey
+      || normalizedRoleName.startsWith(`${resourceKey} `)
+      || normalizedDefinitionName.startsWith(`${resourceKey} `);
+  });
+}
+
+function resourcesForRequirement(resources: ResourceLink[], requirementId: string, requirementName: string) {
+  const normalizedRequirementName = normalizeResourceKey(requirementName);
+
+  return resources.filter((resource) => {
+    if (resource.requirementId === requirementId) {
+      return true;
+    }
+
+    if (!resource.requirementName && !resource.title) {
+      return false;
+    }
+
+    return normalizeResourceKey(resource.requirementName ?? resource.title).includes(normalizedRequirementName)
+      || normalizedRequirementName.includes(normalizeResourceKey(resource.requirementName ?? resource.title));
+  });
+}
+
+function normalizeResourceKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatStudentName(student: { user: { firstName: string; lastName: string } }) {
