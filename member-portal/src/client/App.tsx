@@ -2324,6 +2324,8 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
               meeting={selectedMeeting}
               roleDefinitions={overview.roleDefinitions}
               students={selectedMeetingStudents}
+              resources={resources}
+              onSelectResource={setSelectedResource}
               isSubmitting={isSubmitting}
               onAddSlot={(roleDefinitionId, slotLabel) => updateMeeting(() => addMeetingRoleSlot(selectedMeeting.id, { roleDefinitionId, slotLabel }), "Role slot added.")}
               onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(selectedMeeting.id, slotId, studentId), "Role assignment updated.")}
@@ -2511,6 +2513,8 @@ function ManageRoles({
   meeting,
   roleDefinitions,
   students,
+  resources,
+  onSelectResource,
   isSubmitting,
   onAddSlot,
   onAssign,
@@ -2521,6 +2525,8 @@ function ManageRoles({
   meeting: Meeting;
   roleDefinitions: MeetingsOverview["roleDefinitions"];
   students: MeetingsOverview["students"];
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
   isSubmitting: boolean;
   onAddSlot: (roleDefinitionId: string, slotLabel?: string) => void;
   onAssign: (slotId: string, studentId: string | null) => void;
@@ -2543,6 +2549,8 @@ function ManageRoles({
             slot={slot}
             roleDefinitions={roleDefinitions}
             students={students}
+            resources={resources}
+            onSelectResource={onSelectResource}
             isSubmitting={isSubmitting}
             onAssign={(studentId) => onAssign(slot.id, studentId)}
             onEditSlot={(payload) => onEditSlot(slot.id, payload)}
@@ -3037,6 +3045,8 @@ function ManageRoleSlotRow({
   slot,
   roleDefinitions,
   students,
+  resources,
+  onSelectResource,
   isSubmitting,
   onEditSlot,
   onAssign,
@@ -3045,6 +3055,8 @@ function ManageRoleSlotRow({
   slot: Meeting["roleSlots"][number];
   roleDefinitions: MeetingsOverview["roleDefinitions"];
   students: MeetingsOverview["students"];
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
   isSubmitting: boolean;
   onEditSlot: (payload: { roleDefinitionId?: string; slotLabel?: string; sortOrder?: number }) => void;
   onAssign: (studentId: string | null) => void;
@@ -3071,7 +3083,13 @@ function ManageRoleSlotRow({
   return (
     <article className="manager-role-row">
       <div>
-        <strong>{roleSlotName(slot)}</strong>
+        <strong>
+          <HelpLabel
+            label={roleSlotName(slot)}
+            resources={resourcesForRole(resources, slot)}
+            onSelectResource={onSelectResource}
+          />
+        </strong>
         <span>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
       </div>
       <label>
@@ -3581,7 +3599,12 @@ function resourcesForRequirement(resources: ResourceLink[], requirementId: strin
 }
 
 function normalizeResourceKey(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/\s+\d+$/g, "")
+    .replace(/\s+/g, " ");
 }
 
 function formatStudentName(student: { user: { firstName: string; lastName: string } }) {

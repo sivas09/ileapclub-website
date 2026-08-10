@@ -43,3 +43,47 @@ export const standardIleapRoleDefinitions = [
 ] as const;
 
 export const standardIleapRoleNames = standardIleapRoleDefinitions.map(([name]) => name);
+
+export const standardRoleResourceKeys = [
+  "iChair",
+  "iGrammarian",
+  "iFiller Counter",
+  "iFinesMaster",
+  "iTimer",
+  "Prepared Speech",
+  "Prepared Speech Evaluator",
+  "Prepared Presentation",
+  "Prepared Presentation Evaluator",
+  "iThink on My Feet Master",
+  "iThink on My Feet Participant",
+  "iThink on My Feet Evaluator",
+  "iStory and Joke Master",
+  "iStory and Joke Speaker",
+  "iStory and Joke Evaluator",
+  "Case Study Lead",
+  "iChair Report",
+  "iGrammarian Report",
+  "iFiller Counter Report",
+  "iFinesMaster Report",
+  "iTimer Report"
+] as const;
+
+export function roleResourceKey(roleName: string) {
+  const normalizedRoleName = normalizeRoleKey(roleName);
+  const exactKey = standardRoleResourceKeys.find((key) => normalizeRoleKey(key) === normalizedRoleName);
+
+  if (exactKey) {
+    return exactKey;
+  }
+
+  return standardRoleResourceKeys.find((key) => normalizedRoleName.startsWith(`${normalizeRoleKey(key)} `)) ?? roleName;
+}
+
+function normalizeRoleKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .replace(/\s+\d+$/g, "")
+    .replace(/\s+/g, " ");
+}

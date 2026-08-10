@@ -298,6 +298,7 @@ export type ResourcesResponse = {
     currentBandLevel: string;
     currentBandOrder: number | null;
     roleKeys: string[];
+    roleResourceKeys: string[];
     requirementIds: string[];
   } | null;
 };

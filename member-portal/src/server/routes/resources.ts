@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { roleResourceKey } from "../services/standardRoles.js";
 
 export const resourcesRouter = Router();
 
@@ -88,6 +89,7 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
       {
         OR: [
           studentContext.roleKeys.length ? { roleKey: { in: studentContext.roleKeys } } : {},
+          studentContext.roleResourceKeys.length ? { roleKey: { in: studentContext.roleResourceKeys } } : {},
           studentContext.requirementIds.length ? { requirementId: { in: studentContext.requirementIds } } : {},
           studentContext.programLevel && studentContext.currentBandOrder
             ? {
@@ -99,7 +101,7 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
       }
     ];
 
-    if (!studentContext.roleKeys.length && !studentContext.requirementIds.length && (!studentContext.programLevel || !studentContext.currentBandOrder)) {
+    if (!studentContext.roleKeys.length && !studentContext.roleResourceKeys.length && !studentContext.requirementIds.length && (!studentContext.programLevel || !studentContext.currentBandOrder)) {
       response.json({ resources: [], studentContext });
       return;
     }
@@ -253,6 +255,24 @@ async function getStudentResourceContext(userId: string) {
 
   const programLevel = getStudentProgramLevel(student);
   const currentBandOrder = getBandOrder(student.bandLevel);
+  const clubIds = student.clubMemberships.map((membership) => membership.clubId);
+  const visibleMeetingRoleSlots = clubIds.length
+    ? await prisma.meetingRoleSlot.findMany({
+      where: {
+        meeting: {
+          clubId: { in: clubIds },
+          club: { isActive: true, centre: { isActive: true } }
+        },
+        roleDefinition: { isActive: true }
+      },
+      include: { roleDefinition: true }
+    })
+    : [];
+  const visibleRoleNames = [
+    ...student.roleSlots.map((slot) => slot.roleDefinition.name),
+    ...visibleMeetingRoleSlots.map((slot) => slot.roleDefinition.name),
+    ...visibleMeetingRoleSlots.map((slot) => slot.slotLabel).filter(Boolean)
+  ];
   const currentAndPreviousRequirements = programLevel && currentBandOrder
     ? await prisma.bandRequirement.findMany({
       where: {
@@ -268,7 +288,8 @@ async function getStudentResourceContext(userId: string) {
     programLevel,
     currentBandLevel: student.bandLevel,
     currentBandOrder,
-    roleKeys: [...new Set(student.roleSlots.map((slot) => slot.roleDefinition.name))],
+    roleKeys: [...new Set(visibleRoleNames)],
+    roleResourceKeys: [...new Set(visibleRoleNames.map(roleResourceKey))],
     requirementIds: [...new Set([
       ...student.requirementProgress.map((entry) => entry.requirementId),
       ...currentAndPreviousRequirements.map((requirement) => requirement.id)

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient, Role } from "@prisma/client";
-import { standardIleapRoleDefinitions } from "../src/server/services/standardRoles.js";
+import { standardIleapRoleDefinitions, standardRoleResourceKeys } from "../src/server/services/standardRoles.js";
 
 const prisma = new PrismaClient();
 const seedAdminEmail = process.env.SEED_ADMIN_EMAIL || "admin@ileapclub.com";
@@ -504,12 +504,32 @@ async function seedResourceLinks(adminId: string) {
   const roleResources = [
     ["iChair", "Role Guide", "Lead the meeting flow, introduce speakers, manage transitions, and close the session."],
     ["iGrammarian", "Role Guide", "Introduce the phrase or idiom of the day, listen for language use, and share a short report."],
-    ["iTimer", "Role Guide", "Track each speaker's time, signal timing, and give the timer report."],
     ["iFiller Counter", "Role Guide", "Listen for filler words and repeated phrases, then share a concise count and observation."],
-    ["Prepared Speech 1", "Speech Guide", "Prepare and deliver a planned speech with a clear opening, body, and conclusion."]
+    ["iFinesMaster", "Role Guide", "Lead the fines, quiz, or participation challenge with clear instructions and a short report."],
+    ["iTimer", "Role Guide", "Track each speaker's time, signal timing, and give the timer report."],
+    ["Prepared Speech", "Speech Guide", "Prepare and deliver a planned speech with a clear opening, body, and conclusion."],
+    ["Prepared Speech Evaluator", "Role Guide", "Evaluate a prepared speech with balanced feedback on structure, content, and delivery."],
+    ["Prepared Presentation", "Presentation Guide", "Prepare and deliver a visual or demonstration-style presentation that supports the message."],
+    ["Prepared Presentation Evaluator", "Role Guide", "Evaluate a prepared presentation, including clarity, visuals, organization, and delivery."],
+    ["iThink on My Feet Master", "Role Guide", "Lead the impromptu speaking segment with clear prompts and smooth transitions."],
+    ["iThink on My Feet Participant", "Role Guide", "Respond to an impromptu prompt with a short, organized answer."],
+    ["iThink on My Feet Evaluator", "Role Guide", "Evaluate an impromptu response with concise observations and one improvement point."],
+    ["iStory and Joke Master", "Role Guide", "Lead the story and joke segment and keep the tone respectful, lively, and on time."],
+    ["iStory and Joke Speaker", "Role Guide", "Share a short story or joke with expression, pacing, and a clear ending."],
+    ["iStory and Joke Evaluator", "Role Guide", "Evaluate story or joke delivery, clarity, expression, and audience connection."],
+    ["Case Study Lead", "Role Guide", "Guide the case study discussion, invite participation, and summarize the key learning."],
+    ["iChair Report", "Role Guide", "Present a concise chair report on meeting flow, participation, and highlights."],
+    ["iGrammarian Report", "Role Guide", "Report on phrase usage, strong word choices, and language observations."],
+    ["iFiller Counter Report", "Role Guide", "Report filler-word counts and patterns in a constructive way."],
+    ["iFinesMaster Report", "Role Guide", "Summarize fines, quiz results, or participation challenge outcomes."],
+    ["iTimer Report", "Role Guide", "Report speaker timings clearly and note whether each speaker met the target time."]
   ] as const;
 
   for (const [roleKey, category, explanation] of roleResources) {
+    if (!standardRoleResourceKeys.includes(roleKey)) {
+      throw new Error(`Seed resource role key is not registered in standardRoles.ts: ${roleKey}`);
+    }
+
     await upsertSeedResource({
       title: `${roleKey} Guide`,
       explanation,
