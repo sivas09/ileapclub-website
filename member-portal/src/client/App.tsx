@@ -270,7 +270,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
           <span className="portal-brand-logo">
             <img src={ileapClubLogoUrl} alt="" aria-hidden="true" />
           </span>
-          <div>
+          <div className="portal-brand-text">
             <strong>iLEAP Club</strong>
             <small>Members</small>
           </div>
