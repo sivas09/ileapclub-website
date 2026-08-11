@@ -213,7 +213,7 @@ async function normalizeResourcePayload(data: Partial<z.infer<typeof resourceSch
     programLevel: requirement?.programLevel ?? nullableString(data.programLevel),
     bandLevel: requirement?.bandLevel ?? nullableString(data.bandLevel),
     bandOrder: requirement?.bandOrder ?? (data.bandLevel ? getBandOrder(data.bandLevel) : data.bandLevel === null ? null : undefined),
-    roleKey: nullableString(data.roleKey),
+    roleKey: normalizeRoleKeyInput(data.roleKey),
     requirementId: nullableString(data.requirementId),
     category: data.category,
     status: data.status
@@ -348,6 +348,12 @@ function nullableString(value: string | null | undefined) {
   }
 
   return value?.trim() || null;
+}
+
+function normalizeRoleKeyInput(value: string | null | undefined) {
+  const roleKey = nullableString(value);
+
+  return roleKey ? roleResourceKey(roleKey) : roleKey;
 }
 
 function stringQuery(value: unknown) {

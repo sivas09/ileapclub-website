@@ -1992,8 +1992,7 @@ body {
   text-transform: uppercase;
 }
 
-.login-mark,
-.portal-brand > span {
+.login-mark {
   display: grid;
   width: 48px;
   height: 48px;
@@ -2102,6 +2101,7 @@ body {
   display: grid;
   flex: 0 0 110px;
   width: 110px;
+  max-width: 42vw;
   height: 45px;
   min-height: 45px;
   place-items: center;
@@ -2118,6 +2118,7 @@ body {
   max-width: 92px;
   max-height: 31px;
   height: auto;
+  aspect-ratio: auto;
   object-fit: contain;
 }
 
