@@ -227,7 +227,9 @@ function LoginScreen({
       <section className="login-panel">
         <div className="login-brand">
           <div className="login-logo-lockup">
-            <img src={ileapClubLogoUrl} alt="iLEAP Club" />
+            <div className="login-logo-card">
+              <img src={ileapClubLogoUrl} alt="iLEAP Club" />
+            </div>
             <span>member.ileapclub.com</span>
           </div>
           <h1>iLEAP Club Member Portal</h1>
