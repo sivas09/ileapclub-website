@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import ileapClubLogoUrl from "../../../assets/images/ileap-club-logo.jpg";
 import {
   AdminOverview,
   addMeetingRoleSlot,
@@ -225,10 +226,13 @@ function LoginScreen({
     <main className="login-page">
       <section className="login-panel">
         <div className="login-brand">
-          <div className="login-mark">iL</div>
-          <span>member.ileapclub.com</span>
-          <h1>Member Portal</h1>
-          <p>One workspace for club setup, meetings, role assignments, attendance, scoring, and student progress.</p>
+          <div className="login-logo-lockup">
+            <img src={ileapClubLogoUrl} alt="iLEAP Club" />
+            <span>member.ileapclub.com</span>
+          </div>
+          <h1>iLEAP Club Member Portal</h1>
+          <p className="login-tagline">Public Speaking • Leadership • Confidence</p>
+          <p>Track meetings, role sign-ups, feedback, band progress, and learning resources in one place.</p>
         </div>
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="login-form-heading">
