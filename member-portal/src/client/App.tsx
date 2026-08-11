@@ -267,7 +267,9 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
     <main className="portal-shell">
       <aside className="portal-sidebar" aria-label="Portal navigation">
         <a className="portal-brand" href="#overview" aria-label="iLEAP Club member portal overview">
-          <span>iL</span>
+          <span className="portal-brand-logo">
+            <img src={ileapClubLogoUrl} alt="" aria-hidden="true" />
+          </span>
           <div>
             <strong>iLEAP Club</strong>
             <small>Members</small>
