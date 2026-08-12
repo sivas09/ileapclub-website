@@ -193,6 +193,8 @@ export type MemberListEntry = {
   id: string;
   userId?: string;
   displayName: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   programLevel?: string | null;
   currentBandLevel: string;
@@ -210,6 +212,8 @@ export type MemberDetail = {
   id: string;
   userId?: string;
   displayName: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   grade?: string;
   programLevel?: string | null;
@@ -830,6 +834,58 @@ export async function updateResourceLink(resourceId: string, payload: Partial<{
 
 export async function getMemberDetail(studentId: string) {
   return request<{ member: MemberDetail }>(`/api/members/${studentId}`);
+}
+
+export async function createMember(payload: {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  grade?: string;
+  programLevel?: string;
+  bandLevel?: string;
+  clubIds: string[];
+}) {
+  return request<{ user: PortalUser & { isActive: boolean } }>("/api/members", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateMember(studentId: string, payload: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  grade?: string;
+  programLevel?: string;
+  bandLevel?: string;
+  clubIds: string[];
+  isActive?: boolean;
+}) {
+  return request<{ user: PortalUser & { isActive: boolean } }>(`/api/members/${studentId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function setMemberActive(studentId: string, isActive: boolean) {
+  return request<{ user: PortalUser & { isActive: boolean }; updatedMemberships: number }>(`/api/members/${studentId}/active`, {
+    method: "PATCH",
+    body: JSON.stringify({ isActive })
+  });
+}
+
+export async function permanentlyDeleteMember(studentId: string) {
+  return request<{
+    deletedMember: {
+      id: string;
+      userId: string;
+      displayName: string;
+      email: string;
+    };
+  }>(`/api/members/${studentId}`, {
+    method: "DELETE"
+  });
 }
 
 export async function fetchStudentProgressForManager(studentId: string) {

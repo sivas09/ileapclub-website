@@ -14,6 +14,7 @@ import {
   createCentre,
   createClub,
   createMeeting,
+  createMember,
   createResourceLink,
   createUser,
   deleteDemoUser,
@@ -39,6 +40,7 @@ import {
   MemberListEntry,
   MembersResponse,
   MeetingsOverview,
+  permanentlyDeleteMember,
   PortalUser,
   Role,
   saveStudentMeetingFeedback,
@@ -48,11 +50,13 @@ import {
   ResourceLink,
   setCentreActive,
   setClubActive,
+  setMemberActive,
   setUserActive,
   storeToken,
   StudentProgress,
   toggleMeetingLock,
   updateBandDocument,
+  updateMember,
   updateMeetingDetails,
   updateResourceLink,
   updateStudentProfile,
@@ -1031,6 +1035,8 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
 function MembersWorkspace({ user }: { user: PortalUser }) {
   const [data, setData] = useState<MembersResponse | null>(null);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
+  const [editingMember, setEditingMember] = useState<MemberDetail | null>(null);
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [filters, setFilters] = useState({
     centreId: "",
     clubId: "",
@@ -1089,16 +1095,12 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
   }
 
   async function updateMemberStatus(member: MemberListEntry, isActive: boolean) {
-    if (!member.userId) {
-      return;
-    }
-
     setError("");
     setStatus("");
     setIsSubmitting(true);
 
     try {
-      await setUserActive(member.userId, isActive);
+      await setMemberActive(member.id, isActive);
       await loadMembers();
       if (detail?.id === member.id) {
         const result = await getMemberDetail(member.id);
@@ -1112,8 +1114,99 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
     }
   }
 
+  async function startEditingMember(studentId: string) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await getMemberDetail(studentId);
+      setEditingMember(result.member);
+      setIsAddFormOpen(false);
+      window.setTimeout(() => {
+        document.getElementById("member-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+    } catch (editError) {
+      setError(editError instanceof Error ? editError.message : "Unable to load member for editing.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleMemberFormSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const clubIds = formData.getAll("clubIds").map((value) => String(value)).filter(Boolean);
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const payload = {
+        firstName: String(formData.get("firstName") || ""),
+        lastName: String(formData.get("lastName") || ""),
+        email: String(formData.get("email") || ""),
+        grade: String(formData.get("grade") || ""),
+        programLevel: String(formData.get("programLevel") || "SENIOR"),
+        bandLevel: String(formData.get("bandLevel") || "White"),
+        clubIds
+      };
+
+      if (editingMember) {
+        await updateMember(editingMember.id, {
+          ...payload,
+          isActive: editingMember.isActive !== false
+        });
+        setEditingMember(null);
+        setStatus("Member updated.");
+      } else {
+        await createMember({
+          ...payload,
+          password: String(formData.get("password") || "")
+        });
+        form.reset();
+        setIsAddFormOpen(false);
+        setStatus("Student member added.");
+      }
+
+      await loadMembers();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to save member.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function deleteMember(member: MemberListEntry) {
+    const confirmed = window.confirm(`Permanently delete ${member.displayName}? This action cannot be undone. Members with historical meeting, scoring, feedback, attendance, or progress records cannot be permanently deleted.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await permanentlyDeleteMember(member.id);
+      await loadMembers();
+      if (detail?.id === member.id) {
+        setDetail(null);
+      }
+      setStatus("Member permanently deleted.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete member.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const clubs = data?.clubs.filter((club) => !filters.centreId || club.centreId === filters.centreId) ?? [];
+  const assignableClubs = data?.clubs.filter((club) => club.isActive && club.centre?.isActive !== false) ?? [];
 
   return (
     <section className="members-workspace" id="members" aria-label="Members">
@@ -1122,11 +1215,29 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
           <p className="eyebrow">Members</p>
           <h2>Club Members</h2>
         </div>
-        <button type="button" onClick={() => loadMembers()} disabled={isLoading}>Refresh</button>
+        <div className="meeting-row-actions">
+          <button type="button" onClick={() => setIsAddFormOpen((isOpen) => !isOpen)} disabled={isLoading || !assignableClubs.length}>
+            {isAddFormOpen ? "Cancel" : "Add Member"}
+          </button>
+          <button type="button" onClick={() => loadMembers()} disabled={isLoading}>Refresh</button>
+        </div>
       </div>
 
       {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      {isAddFormOpen || editingMember ? (
+        <MemberForm
+          member={editingMember}
+          clubs={assignableClubs}
+          isSubmitting={isSubmitting}
+          onSubmit={handleMemberFormSubmit}
+          onCancel={() => {
+            setIsAddFormOpen(false);
+            setEditingMember(null);
+          }}
+        />
+      ) : null}
 
       <div className="member-filter-form">
         {user.role === "ADMIN" ? (
@@ -1219,13 +1330,21 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Details</button>
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Progress</button>
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Feedback</button>
-                        {user.role === "ADMIN" ? <a className="text-action" href="#admin">Edit User</a> : null}
+                        <button type="button" onClick={() => startEditingMember(member.id)} disabled={isSubmitting}>Edit</button>
+                        <button type="button" className="danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
+                          {member.isActive === false ? "Reactivate" : "Deactivate"}
+                        </button>
                         {user.role === "ADMIN" ? (
-                          <button type="button" className="danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
-                            {member.isActive === false ? "Reactivate" : "Deactivate"}
-                          </button>
+                          <a className="text-action" href="#admin">Admin User Setup</a>
                         ) : null}
                       </div>
+                      {user.role === "ADMIN" ? (
+                        <div className="member-destructive-actions">
+                          <button type="button" className="danger-action" onClick={() => deleteMember(member)} disabled={isSubmitting}>
+                            Delete Member
+                          </button>
+                        </div>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -1251,6 +1370,79 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
         />
       ) : null}
     </section>
+  );
+}
+
+function MemberForm({
+  member,
+  clubs,
+  isSubmitting,
+  onSubmit,
+  onCancel
+}: {
+  member: MemberDetail | null;
+  clubs: MembersResponse["clubs"];
+  isSubmitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  const nameParts = splitDisplayName(member);
+  const defaultClubIds = member?.clubs.map((club) => club.id).filter(Boolean) as string[] | undefined;
+  const singleClub = clubs.length === 1 ? clubs[0] : null;
+
+  return (
+    <form id="member-form" className="admin-form wide member-editor-form" onSubmit={onSubmit}>
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">{member ? "Edit member" : "Add member"}</p>
+          <h3>{member ? member.displayName : "New Student Member"}</h3>
+        </div>
+      </div>
+      <div className="form-two-column">
+        <label>First Name<input name="firstName" defaultValue={nameParts.firstName} placeholder="First name" required /></label>
+        <label>Last Name<input name="lastName" defaultValue={nameParts.lastName} placeholder="Last name" required /></label>
+        <label>Email<input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="name@example.com" required /></label>
+        {!member ? <label>Password<input name="password" type="password" placeholder="Minimum 8 characters" required minLength={8} /></label> : null}
+        <label>Grade<input name="grade" defaultValue={member?.grade ?? ""} placeholder="Grade 6" /></label>
+        <label>
+          Program Level
+          <select name="programLevel" defaultValue={member?.programLevel ?? "SENIOR"}>
+            {programLevelOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Current Band Level
+          <select name="bandLevel" defaultValue={member?.currentBandLevel ?? "White"}>
+            {bandLevelOptions.map((bandLevel) => (
+              <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Club
+          {singleClub ? (
+            <>
+              <input type="hidden" name="clubIds" value={singleClub.id} />
+              <select value={singleClub.id} disabled>
+                <option value={singleClub.id}>{singleClub.name}</option>
+              </select>
+            </>
+          ) : (
+            <select name="clubIds" multiple defaultValue={defaultClubIds ?? []} required>
+              {clubs.map((club) => (
+                <option key={club.id} value={club.id}>{club.name}</option>
+              ))}
+            </select>
+          )}
+        </label>
+      </div>
+      <div className="edit-user-actions">
+        <button type="submit" disabled={isSubmitting || !clubs.length}>{member ? "Save Member" : "Add Member"}</button>
+        <button type="button" className="text-action" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
+      </div>
+    </form>
   );
 }
 
@@ -1479,7 +1671,8 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
         description: String(formData.get("description") || ""),
         fileUrl: String(formData.get("fileUrl") || ""),
         programLevel: String(formData.get("programLevel") || "SENIOR"),
-        bandLevel: String(formData.get("bandLevel") || "White")
+        bandLevel: String(formData.get("bandLevel") || "White"),
+        clubId: String(formData.get("clubId") || "") || null
       });
       form.reset();
       await refreshDocuments();
@@ -1598,6 +1791,13 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
               {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
             </select>
           </label>
+          <label>
+            Club
+            <select name="clubId" defaultValue={user.role === "FACILITATOR" && clubs.length === 1 ? clubs[0].id : ""} required={user.role === "FACILITATOR"}>
+              {user.role === "ADMIN" ? <option value="">All clubs</option> : null}
+              {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
+            </select>
+          </label>
           <label className="document-link-field">
             Document Link <span>Optional</span>
             <input name="fileUrl" type="url" placeholder="Paste Google Drive, PDF, or website link" />
@@ -1616,7 +1816,9 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
             key={document.id}
             document={document}
             clubs={clubs}
-            canEdit={user.role === "ADMIN"}
+            canEdit={user.role === "ADMIN" || (user.role === "FACILITATOR" && Boolean(document.clubId))}
+            canArchive={user.role === "ADMIN"}
+            canAssignGlobal={user.role === "ADMIN"}
             isEditing={editingDocument?.id === document.id}
             isSubmitting={isSubmitting}
             onEdit={() => setEditingDocument(document)}
@@ -1634,6 +1836,8 @@ function ManagerDocumentCard({
   document,
   clubs,
   canEdit,
+  canArchive,
+  canAssignGlobal,
   isEditing,
   isSubmitting,
   onEdit,
@@ -1644,6 +1848,8 @@ function ManagerDocumentCard({
   document: BandDocument;
   clubs: AdminOverview["clubs"];
   canEdit: boolean;
+  canArchive: boolean;
+  canAssignGlobal: boolean;
   isEditing: boolean;
   isSubmitting: boolean;
   onEdit: () => void;
@@ -1690,7 +1896,7 @@ function ManagerDocumentCard({
           <label>
             Club
             <select name="clubId" defaultValue={document.clubId ?? ""}>
-              <option value="">All clubs</option>
+              {canAssignGlobal ? <option value="">All clubs</option> : null}
               {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
             </select>
           </label>
@@ -1726,7 +1932,7 @@ function ManagerDocumentCard({
               ? <a href={link} target="_blank" rel="noreferrer">Open / Download</a>
               : <span className="document-disabled-action">Open / Download</span>}
             {canEdit ? <button type="button" onClick={onEdit}>Edit</button> : null}
-            {canEdit ? (
+            {canArchive ? (
               <button type="button" onClick={() => onStatusChange(document)} disabled={isSubmitting}>
                 {document.status === "ARCHIVED" ? "Restore" : "Archive"}
               </button>
@@ -3617,6 +3823,22 @@ function normalizeResourceKey(value: string) {
 
 function formatStudentName(student: { user: { firstName: string; lastName: string } }) {
   return `${student.user.firstName} ${student.user.lastName}`;
+}
+
+function splitDisplayName(member: Pick<MemberDetail, "displayName" | "firstName" | "lastName"> | null) {
+  if (member?.firstName || member?.lastName) {
+    return {
+      firstName: member.firstName ?? "",
+      lastName: member.lastName ?? ""
+    };
+  }
+
+  const parts = (member?.displayName ?? "").trim().split(/\s+/).filter(Boolean);
+
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" ")
+  };
 }
 
 function dateInputValue(value: string) {

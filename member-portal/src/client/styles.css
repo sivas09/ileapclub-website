@@ -1272,6 +1272,13 @@ button {
   gap: 8px;
 }
 
+.member-destructive-actions {
+  display: flex;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #f1c7c7;
+}
+
 .meeting-row-actions button,
 .meeting-mode-tabs button,
 .manager-toolbar button,

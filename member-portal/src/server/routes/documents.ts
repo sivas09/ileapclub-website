@@ -197,8 +197,8 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
 documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN) {
-    response.status(403).json({ message: "Only admins can edit documents." });
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can edit documents." });
     return;
   }
 
@@ -218,6 +218,16 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
   }
 
   const targetClubId = parsed.data.clubId === undefined ? existing.clubId : parsed.data.clubId || null;
+
+  if (!canEditDocumentScope(user.role, existing.clubId, targetClubId)) {
+    response.status(403).json({ message: "Facilitators can only edit documents assigned to their clubs." });
+    return;
+  }
+
+  if (user.role === Role.FACILITATOR && existing.clubId && !(await canManageDocumentClub(user.id, user.role, existing.clubId))) {
+    response.status(403).json({ message: "You cannot edit documents for this club." });
+    return;
+  }
 
   if (targetClubId && !(await canManageDocumentClub(user.id, user.role, targetClubId))) {
     response.status(403).json({ message: "You cannot assign documents to this club." });
@@ -337,6 +347,18 @@ async function canManageDocumentClub(userId: string, role: Role, clubId: string)
   });
 
   return Boolean(assignment);
+}
+
+export function canEditDocumentScope(role: Role, existingClubId: string | null, targetClubId: string | null) {
+  if (role === Role.ADMIN) {
+    return true;
+  }
+
+  if (role !== Role.FACILITATOR) {
+    return false;
+  }
+
+  return Boolean(existingClubId && targetClubId);
 }
 
 function serializeDocument(document: Prisma.BandDocumentGetPayload<{ include: typeof documentInclude }>) {

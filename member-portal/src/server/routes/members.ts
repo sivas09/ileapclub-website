@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { Prisma, Role } from "@prisma/client";
+import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
 
@@ -26,6 +28,39 @@ const bandOrder = [
 ] as const;
 
 type ProgramLevel = "JUNIOR" | "SENIOR";
+
+const memberCreateSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().trim().min(1),
+  lastName: z.string().trim().min(1),
+  grade: z.string().trim().optional(),
+  programLevel: z.enum(["JUNIOR", "SENIOR"]).optional(),
+  bandLevel: z.enum(bandOrder).optional(),
+  clubIds: z.array(z.string().min(1)).min(1)
+});
+
+const memberUpdateSchema = memberCreateSchema.omit({ password: true }).extend({
+  isActive: z.boolean().optional()
+});
+
+const memberActiveSchema = z.object({
+  isActive: z.boolean()
+});
+
+const historicalDependencyLabels = {
+  clubMemberships: "club memberships",
+  parentLinks: "parent links",
+  assignedRoleSlots: "meeting role claims",
+  attendance: "attendance records",
+  roleScores: "role scores",
+  meetingFeedback: "facilitator feedback",
+  requirementProgress: "band progress records",
+  uploadedDocuments: "uploaded documents",
+  createdResourceLinks: "created resource links",
+  facilitatorClubAssignments: "facilitator club assignments",
+  facilitatorCentreAssignments: "facilitator centre assignments"
+} as const;
 
 type StudentWithClubs = {
   bandLevel: string;
@@ -64,15 +99,20 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
   const programLevel = stringQuery(request.query.programLevel);
   const currentBandLevel = stringQuery(request.query.currentBandLevel);
   const status = stringQuery(request.query.status);
+  const statusFilters: Prisma.StudentClubMembershipWhereInput[] = status === "inactive"
+    ? [{ OR: [{ status: { not: "ACTIVE" } }, { student: { user: { isActive: false } } }] }]
+    : status === ""
+      ? []
+      : [{ status: "ACTIVE" }, { student: { user: { isActive: true } } }];
   const clubFilter = requestedClubId
     ? requestedClubId
     : visibleClubIds === null
       ? undefined
       : { in: visibleClubIds };
   const where: Prisma.StudentClubMembershipWhereInput = {
+    ...(statusFilters.length ? { AND: statusFilters } : {}),
     ...(clubFilter ? { clubId: clubFilter } : {}),
     ...(requestedCentreId ? { club: { centreId: requestedCentreId } } : {}),
-    ...(status === "inactive" ? {} : { status: "ACTIVE" }),
     club: {
       ...(requestedCentreId ? { centreId: requestedCentreId } : {}),
       ...(user.role === Role.STUDENT ? { isActive: true, centre: { isActive: true } } : {})
@@ -82,8 +122,7 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
       ...(currentBandLevel ? { bandLevel: currentBandLevel } : {}),
       user: {
         role: Role.STUDENT,
-        ...(status === "active" || user.role === Role.STUDENT ? { isActive: true } : {}),
-        ...(status === "inactive" ? { isActive: false } : {}),
+        ...(user.role === Role.STUDENT ? { isActive: true } : {}),
         ...(search ? {
           OR: user.role === Role.STUDENT
             ? [
@@ -177,6 +216,8 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
         id: membership.student.id,
         userId: membership.student.userId,
         displayName: displayName(membership.student.user),
+        firstName: membership.student.user.firstName,
+        lastName: membership.student.user.lastName,
         email: membership.student.user.email,
         programLevel: membership.student.programLevel ?? inferProgramLevel(membership.club.program),
         currentBandLevel: membership.student.bandLevel,
@@ -196,6 +237,87 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
     centres,
     clubs
   });
+}));
+
+membersRouter.post("/", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can add student members." });
+    return;
+  }
+
+  const parsed = memberCreateSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid student details. Password must be at least 8 characters." });
+    return;
+  }
+
+  const data = parsed.data;
+  const clubIds = [...new Set(data.clubIds)];
+
+  if (!(await canManageRequestedClubs(user.id, user.role, clubIds))) {
+    response.status(403).json({ message: "You can only assign students to clubs you manage." });
+    return;
+  }
+
+  const email = data.email.toLowerCase();
+  const passwordHash = await bcrypt.hash(data.password, 12);
+
+  try {
+    const createdUser = await prisma.$transaction(async (tx) => {
+      const studentUser = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          role: Role.STUDENT
+        }
+      });
+
+      const student = await tx.student.create({
+        data: {
+          userId: studentUser.id,
+          grade: data.grade || "Not set",
+          programLevel: data.programLevel ?? null,
+          bandLevel: data.bandLevel || "White"
+        }
+      });
+
+      await tx.studentClubMembership.createMany({
+        data: clubIds.map((clubId) => ({
+          clubId,
+          studentId: student.id,
+          status: "ACTIVE"
+        })),
+        skipDuplicates: true
+      });
+
+      return studentUser;
+    });
+
+    response.status(201).json({
+      user: {
+        id: createdUser.id,
+        email: createdUser.email,
+        firstName: createdUser.firstName,
+        lastName: createdUser.lastName,
+        role: createdUser.role,
+        isActive: createdUser.isActive
+      }
+    });
+  } catch (error) {
+    const prismaError = error as { code?: string };
+
+    if (prismaError.code === "P2002") {
+      response.status(409).json({ message: "A user with this email already exists." });
+      return;
+    }
+
+    throw error;
+  }
 }));
 
 membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
@@ -263,13 +385,27 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
     return;
   }
 
-  if (user.role !== Role.ADMIN && !(await canFacilitatorAccessStudent(user.id, student.id))) {
+  if (user.role !== Role.ADMIN && !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
     response.status(403).json({ message: "You cannot view this member." });
     return;
   }
 
-  const selectedProgramLevel = getStudentProgramLevel(student);
-  const scorerIds = [...new Set(student.meetingFeedbacks.map((feedback) => feedback.scoredByUserId).filter(Boolean))] as string[];
+  const detailClubIds = user.role === Role.FACILITATOR ? await getVisibleClubIds(user.id, Role.FACILITATOR) : null;
+  const visibleClubIdSet = detailClubIds === null ? null : new Set(detailClubIds);
+  const visibleMemberships = visibleClubIdSet === null
+    ? student.clubMemberships
+    : student.clubMemberships.filter((membership) => visibleClubIdSet.has(membership.clubId));
+  const visibleRoleSlots = visibleClubIdSet === null
+    ? student.roleSlots
+    : student.roleSlots.filter((slot) => visibleClubIdSet.has(slot.meeting.clubId));
+  const visibleFeedback = visibleClubIdSet === null
+    ? student.meetingFeedbacks
+    : student.meetingFeedbacks.filter((feedback) => visibleClubIdSet.has(feedback.meeting.clubId));
+  const selectedProgramLevel = getStudentProgramLevel({
+    ...student,
+    clubMemberships: visibleMemberships
+  });
+  const scorerIds = [...new Set(visibleFeedback.map((feedback) => feedback.scoredByUserId).filter(Boolean))] as string[];
   const scorers = scorerIds.length
     ? await prisma.user.findMany({
       where: { id: { in: scorerIds } },
@@ -282,18 +418,20 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
 
   response.json({
     member: {
-      id: student.id,
-      userId: student.userId,
-      displayName: displayName(student.user),
-      email: student.user.email,
-      grade: student.grade,
-      programLevel: selectedProgramLevel,
-      currentBandLevel: student.bandLevel,
-      isActive: student.user.isActive,
-      clubs: student.clubMemberships.map((membership) => ({
-        id: membership.clubId,
-        name: membership.club.name,
-        centreName: membership.club.centre.name,
+        id: student.id,
+        userId: student.userId,
+        displayName: displayName(student.user),
+        firstName: student.user.firstName,
+        lastName: student.user.lastName,
+        email: student.user.email,
+        grade: student.grade,
+        programLevel: selectedProgramLevel,
+        currentBandLevel: student.bandLevel,
+        isActive: student.user.isActive,
+        clubs: visibleMemberships.map((membership) => ({
+          id: membership.clubId,
+          name: membership.club.name,
+          centreName: membership.club.centre.name,
         status: membership.status
       })),
       trackingSummary: {
@@ -302,7 +440,7 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
         remainingRequirements: requirements.length - completedRequirements
       },
       requirements,
-      roleHistory: student.roleSlots.map((slot) => {
+      roleHistory: visibleRoleSlots.map((slot) => {
         const attendance = student.attendance.find((entry) => entry.meetingId === slot.meetingId);
 
         return {
@@ -314,7 +452,7 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
           attendanceStatus: attendance?.status ?? null
         };
       }),
-      feedback: student.meetingFeedbacks.map((feedback) => {
+      feedback: visibleFeedback.map((feedback) => {
         const scorer = feedback.scoredByUserId ? scorerById.get(feedback.scoredByUserId) : null;
         const roles = feedback.meeting.roleSlots
           .filter((slot) => slot.assignedStudentId === student.id)
@@ -331,6 +469,263 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
           roleName: roles.join(", ") || "General meeting feedback"
         };
       })
+    }
+  });
+}));
+
+membersRouter.patch("/:studentId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can update student members." });
+    return;
+  }
+
+  const parsed = memberUpdateSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid student details." });
+    return;
+  }
+
+  const studentId = String(request.params.studentId);
+  const data = parsed.data;
+  const clubIds = [...new Set(data.clubIds)];
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: {
+      user: true,
+      clubMemberships: true
+    }
+  });
+
+  if (!student || student.user.role !== Role.STUDENT) {
+    response.status(404).json({ message: "Member not found." });
+    return;
+  }
+
+  if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
+    response.status(403).json({ message: "You cannot update this member." });
+    return;
+  }
+
+  if (!(await canManageRequestedClubs(user.id, user.role, clubIds))) {
+    response.status(403).json({ message: "You can only assign students to clubs you manage." });
+    return;
+  }
+
+  const email = data.email.toLowerCase();
+  const assignableClubIds = user.role === Role.ADMIN ? null : await getVisibleClubIds(user.id, Role.FACILITATOR);
+
+  try {
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      await tx.student.update({
+        where: { id: student.id },
+        data: {
+          grade: data.grade || "Not set",
+          programLevel: data.programLevel ?? null,
+          bandLevel: data.bandLevel || "White"
+        }
+      });
+
+      await tx.user.update({
+        where: { id: student.userId },
+        data: {
+          email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          ...(user.role === Role.ADMIN && data.isActive !== undefined ? { isActive: data.isActive } : {})
+        }
+      });
+
+      await tx.studentClubMembership.deleteMany({
+        where: assignableClubIds === null
+          ? { studentId: student.id, clubId: { notIn: clubIds } }
+          : { studentId: student.id, clubId: { in: assignableClubIds, notIn: clubIds } }
+      });
+
+      await tx.studentClubMembership.createMany({
+        data: clubIds.map((clubId) => ({
+          clubId,
+          studentId: student.id,
+          status: "ACTIVE"
+        })),
+        skipDuplicates: true
+      });
+
+      await tx.studentClubMembership.updateMany({
+        where: {
+          studentId: student.id,
+          clubId: { in: clubIds }
+        },
+        data: {
+          status: "ACTIVE",
+          endDate: null
+        }
+      });
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: student.userId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          isActive: true
+        }
+      });
+    });
+
+    response.json({ user: updatedUser });
+  } catch (error) {
+    const prismaError = error as { code?: string };
+
+    if (prismaError.code === "P2002") {
+      response.status(409).json({ message: "A user with this email already exists." });
+      return;
+    }
+
+    throw error;
+  }
+}));
+
+membersRouter.patch("/:studentId/active", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can update student member status." });
+    return;
+  }
+
+  const parsed = memberActiveSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Choose an active status." });
+    return;
+  }
+
+  const studentId = String(request.params.studentId);
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: { user: true }
+  });
+
+  if (!student || student.user.role !== Role.STUDENT) {
+    response.status(404).json({ message: "Member not found." });
+    return;
+  }
+
+  if (user.role === Role.FACILITATOR) {
+    const clubIds = await getVisibleClubIds(user.id, Role.FACILITATOR);
+
+    if (!clubIds?.length || !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
+      response.status(403).json({ message: "You cannot update this member status." });
+      return;
+    }
+
+    const result = await prisma.studentClubMembership.updateMany({
+      where: {
+        studentId: student.id,
+        clubId: { in: clubIds }
+      },
+      data: parsed.data.isActive
+        ? { status: "ACTIVE", endDate: null }
+        : { status: "INACTIVE", endDate: startOfTodayUtc() }
+    });
+
+    response.json({
+      user: {
+        id: student.user.id,
+        email: student.user.email,
+        firstName: student.user.firstName,
+        lastName: student.user.lastName,
+        role: student.user.role,
+        isActive: student.user.isActive
+      },
+      updatedMemberships: result.count
+    });
+    return;
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: student.userId },
+    data: { isActive: parsed.data.isActive },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      isActive: true
+    }
+  });
+
+  response.json({ user: updatedUser, updatedMemberships: 0 });
+}));
+
+membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  const roleDecision = permanentMemberDeleteDecision({
+    authenticatedRole: user.role,
+    targetRole: Role.STUDENT,
+    isSelf: false,
+    blockingReasons: []
+  });
+
+  if (roleDecision.status !== 200) {
+    response.status(roleDecision.status).json({ message: roleDecision.message });
+    return;
+  }
+
+  const studentId = String(request.params.studentId);
+  const student = await prisma.student.findUnique({
+    where: { id: studentId },
+    include: { user: true }
+  });
+
+  const targetDecision = permanentMemberDeleteDecision({
+    authenticatedRole: user.role,
+    targetRole: student?.user.role ?? null,
+    isSelf: student?.userId === user.id,
+    blockingReasons: []
+  });
+
+  if (targetDecision.status !== 200) {
+    response.status(targetDecision.status).json({ message: targetDecision.message });
+    return;
+  }
+
+  const dependencies = await getStudentDeleteDependencies(student!.id, student!.userId);
+  const blockingReasons = historicalDependencyReasons(dependencies);
+
+  const dependencyDecision = permanentMemberDeleteDecision({
+    authenticatedRole: user.role,
+    targetRole: student!.user.role,
+    isSelf: false,
+    blockingReasons
+  });
+
+  if (dependencyDecision.status !== 200) {
+    response.status(dependencyDecision.status).json({
+      message: dependencyDecision.message,
+      dependencies
+    });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.student.delete({ where: { id: student!.id } });
+    await tx.user.delete({ where: { id: student!.userId } });
+  });
+
+  response.json({
+    deletedMember: {
+      id: student!.id,
+      userId: student!.userId,
+      displayName: displayName(student!.user),
+      email: student!.user.email
     }
   });
 }));
@@ -382,16 +777,167 @@ async function canStudentViewPublicMember(userId: string, targetStudentId: strin
   }).then((count) => count > 0);
 }
 
-async function canFacilitatorAccessStudent(facilitatorId: string, studentId: string) {
+export async function canManageRequestedClubs(userId: string, role: Role, clubIds: string[]) {
+  if (role === Role.ADMIN) {
+    const activeClubCount = await prisma.club.count({
+      where: {
+        id: { in: clubIds },
+        isActive: true,
+        centre: { isActive: true }
+      }
+    });
+
+    return canManageClubIdSet(role, clubIds, [], activeClubCount);
+  }
+
+  if (role === Role.FACILITATOR) {
+    const visibleClubIds = await getVisibleClubIds(userId, Role.FACILITATOR);
+
+    return canManageClubIdSet(role, clubIds, visibleClubIds ?? []);
+  }
+
+  return canManageClubIdSet(role, clubIds, []);
+}
+
+export function canManageClubIdSet(role: Role, requestedClubIds: string[], visibleClubIds: string[], activeClubCount = 0) {
+  if (requestedClubIds.length === 0) {
+    return false;
+  }
+
+  if (role === Role.ADMIN) {
+    return activeClubCount === requestedClubIds.length;
+  }
+
+  if (role === Role.FACILITATOR) {
+    const visibleClubIdSet = new Set(visibleClubIds);
+
+    return requestedClubIds.every((clubId) => visibleClubIdSet.has(clubId));
+  }
+
+  return false;
+}
+
+export async function canFacilitatorAccessStudent(facilitatorId: string, studentId: string, includeInactiveMemberships = false) {
   const clubIds = await getVisibleClubIds(facilitatorId, Role.FACILITATOR);
 
-  return prisma.studentClubMembership.count({
+  const memberships = await prisma.studentClubMembership.findMany({
     where: {
       studentId,
-      clubId: { in: clubIds ?? [] },
-      status: "ACTIVE"
+      clubId: { in: clubIds ?? [] }
+    },
+    select: {
+      clubId: true,
+      status: true
     }
-  }).then((count) => count > 0);
+  });
+
+  return canAccessStudentMemberships(clubIds ?? [], memberships, includeInactiveMemberships);
+}
+
+export function canAccessStudentMemberships(
+  visibleClubIds: string[],
+  memberships: Array<{ clubId: string; status: string }>,
+  includeInactiveMemberships = false
+) {
+  const visibleClubIdSet = new Set(visibleClubIds);
+
+  return memberships.some((membership) =>
+    visibleClubIdSet.has(membership.clubId)
+    && (includeInactiveMemberships || membership.status === "ACTIVE")
+  );
+}
+
+export function canPermanentlyDeleteMemberRole(role: Role) {
+  return role === Role.ADMIN;
+}
+
+export function permanentMemberDeleteDecision(input: {
+  authenticatedRole: Role | null;
+  targetRole: Role | null;
+  isSelf: boolean;
+  blockingReasons: string[];
+}) {
+  if (!input.authenticatedRole) {
+    return { status: 401, message: "Authentication required." };
+  }
+
+  if (!canPermanentlyDeleteMemberRole(input.authenticatedRole)) {
+    return { status: 403, message: "Only admins can permanently delete members." };
+  }
+
+  if (input.targetRole !== Role.STUDENT) {
+    return { status: 404, message: "Member not found." };
+  }
+
+  if (input.isSelf) {
+    return { status: 400, message: "You cannot delete your own account." };
+  }
+
+  if (input.blockingReasons.length > 0) {
+    return {
+      status: 409,
+      message: `Member cannot be permanently deleted because historical records exist: ${input.blockingReasons.join(", ")}. Deactivate the member instead.`
+    };
+  }
+
+  return { status: 200, message: "Member can be permanently deleted." };
+}
+
+export type StudentDeleteDependencies = Awaited<ReturnType<typeof getStudentDeleteDependencies>>;
+
+export async function getStudentDeleteDependencies(studentId: string, userId: string) {
+  const [
+    clubMemberships,
+    parentLinks,
+    assignedRoleSlots,
+    attendance,
+    roleScores,
+    meetingFeedback,
+    requirementProgress,
+    uploadedDocuments,
+    createdResourceLinks,
+    facilitatorClubAssignments,
+    facilitatorCentreAssignments
+  ] = await Promise.all([
+    prisma.studentClubMembership.count({ where: { studentId } }),
+    prisma.studentParent.count({ where: { studentId } }),
+    prisma.meetingRoleSlot.count({ where: { assignedStudentId: studentId } }),
+    prisma.meetingAttendance.count({ where: { studentId } }),
+    prisma.meetingRoleScore.count({ where: { studentId } }),
+    prisma.studentMeetingFeedback.count({ where: { studentId } }),
+    prisma.studentRequirementProgress.count({ where: { studentId } }),
+    prisma.bandDocument.count({ where: { uploadedById: userId } }),
+    prisma.resourceLink.count({ where: { createdById: userId } }),
+    prisma.clubFacilitator.count({ where: { facilitatorId: userId } }),
+    prisma.centreFacilitator.count({ where: { facilitatorId: userId } })
+  ]);
+
+  return {
+    clubMemberships,
+    parentLinks,
+    assignedRoleSlots,
+    attendance,
+    roleScores,
+    meetingFeedback,
+    requirementProgress,
+    uploadedDocuments,
+    createdResourceLinks,
+    facilitatorClubAssignments,
+    facilitatorCentreAssignments
+  };
+}
+
+export function historicalDependencyReasons(dependencies: Record<keyof typeof historicalDependencyLabels, number>) {
+  return Object.entries(dependencies)
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => `${count} ${historicalDependencyLabels[key as keyof typeof historicalDependencyLabels]}`);
+}
+
+function startOfTodayUtc() {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  return today;
 }
 
 async function buildRequirementProgress(studentId: string, programLevel: ProgramLevel | null) {
