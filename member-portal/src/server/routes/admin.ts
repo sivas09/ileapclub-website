@@ -40,6 +40,10 @@ const facilitatorAssignmentSchema = z.object({
   facilitatorId: z.string().min(1)
 });
 
+const passwordResetSchema = z.object({
+  newPassword: z.string().min(8)
+});
+
 const validBandLevels = new Set([
   "White",
   "Yellow",
@@ -62,6 +66,10 @@ const editableRoles = new Set<Role>([Role.ADMIN, Role.FACILITATOR, Role.STUDENT]
 export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRole([Role.ADMIN]));
+
+export function canAdminResetPassword(role: Role) {
+  return role === Role.ADMIN;
+}
 
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
   return (request: Request, response: Response, next: NextFunction) => {
@@ -578,6 +586,53 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
   response.json({ user });
 }));
 
+adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response) => {
+  const userId = String(request.params.userId);
+  const parsed = passwordResetSchema.safeParse(request.body);
+
+  if (!request.user || !canAdminResetPassword(request.user.role)) {
+    response.status(403).json({ message: "Only admins can reset passwords." });
+    return;
+  }
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter a new password of at least 8 characters." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      isActive: true
+    }
+  });
+
+  if (!user || !editableRoles.has(user.role)) {
+    response.status(404).json({ message: "User not found." });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+  const updatedUser = await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      isActive: true
+    }
+  });
+
+  response.json({ user: updatedUser });
+}));
 adminRouter.delete("/users/:userId/demo", asyncRoute(async (request, response) => {
   const userId = String(request.params.userId);
   const result = await deleteSampleUser(userId, request.user!.id);

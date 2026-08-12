@@ -447,6 +447,16 @@ export async function getCurrentUser() {
   return request<{ user: PortalUser }>("/api/auth/me");
 }
 
+export async function changeMyPassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+}) {
+  return request<{ ok: boolean }>("/api/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function getAdminOverview() {
   return request<AdminOverview>("/api/admin/overview");
 }
@@ -541,6 +551,13 @@ export async function setUserActive(userId: string, isActive: boolean) {
   return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}/active`, {
     method: "PATCH",
     body: JSON.stringify({ isActive })
+  });
+}
+
+export async function resetUserPassword(userId: string, newPassword: string) {
+  return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}/password`, {
+    method: "PATCH",
+    body: JSON.stringify({ newPassword })
   });
 }
 

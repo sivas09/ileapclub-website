@@ -10,6 +10,15 @@ const loginSchema = z.object({
   password: z.string().min(1)
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8)
+});
+
+export function isValidNewPassword(password: string) {
+  return password.length >= 8;
+}
+
 export const authRouter = Router();
 
 authRouter.post("/login", async (request, response) => {
@@ -81,4 +90,49 @@ authRouter.get("/me", requireAuth, async (request, response) => {
   }
 
   response.json({ user });
+});
+
+authRouter.post("/change-password", requireAuth, async (request, response) => {
+  const parsed = changePasswordSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter your current password and a new password of at least 8 characters." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: request.user!.id },
+    select: {
+      id: true,
+      passwordHash: true,
+      isActive: true,
+      role: true
+    }
+  });
+
+  if (!user?.isActive || user.role === Role.PARENT) {
+    response.status(401).json({ message: "Session user no longer exists." });
+    return;
+  }
+
+  const isValidPassword = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
+
+  if (!isValidPassword) {
+    response.status(403).json({ message: "Current password is incorrect." });
+    return;
+  }
+
+  if (parsed.data.currentPassword === parsed.data.newPassword) {
+    response.status(400).json({ message: "Choose a new password that is different from your current password." });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash }
+  });
+
+  response.json({ ok: true });
 });

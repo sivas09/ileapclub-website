@@ -8,6 +8,7 @@ import {
   assignMeetingSlot,
   BandDocument,
   backfillPreviousBandRequirements,
+  changeMyPassword,
   claimMeetingSlot,
   clearToken,
   createBandDocument,
@@ -47,6 +48,7 @@ import {
   removeMeetingRoleSlot,
   removeClubFacilitator,
   resetDemoMeetingData,
+  resetUserPassword,
   ResourceLink,
   setCentreActive,
   setClubActive,
@@ -266,6 +268,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
   const copy = roleCopy[user.role];
   const displayName = `${user.firstName} ${user.lastName}`;
   const initials = useMemo(() => `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase(), [user.firstName, user.lastName]);
+  const [isPasswordPanelOpen, setIsPasswordPanelOpen] = useState(false);
 
   return (
     <main className="portal-shell">
@@ -302,9 +305,14 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
             <strong>{displayName}</strong>
             <small>{user.role.toLowerCase()}</small>
           </div>
+          <button type="button" onClick={() => setIsPasswordPanelOpen((isOpen) => !isOpen)}>
+            {isPasswordPanelOpen ? "Close" : "Change Password"}
+          </button>
           <button type="button" onClick={onLogout}>Sign Out</button>
         </div>
       </header>
+
+      {isPasswordPanelOpen ? <ChangePasswordPanel /> : null}
 
       <section className="dashboard-hero">
         <div>
@@ -348,6 +356,64 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+function ChangePasswordPanel() {
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const currentPassword = String(formData.get("currentPassword") || "");
+    const newPassword = String(formData.get("newPassword") || "");
+    const confirmPassword = String(formData.get("confirmPassword") || "");
+
+    setStatus("");
+    setError("");
+
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await changeMyPassword({ currentPassword, newPassword });
+      form.reset();
+      setStatus("Password changed.");
+    } catch (changeError) {
+      setError(changeError instanceof Error ? changeError.message : "Unable to change password.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="password-panel" aria-label="Change password">
+      <form className="edit-user-panel" onSubmit={handleSubmit}>
+        <div className="admin-heading">
+          <div>
+            <p className="eyebrow">Account</p>
+            <h3>Change Password</h3>
+          </div>
+        </div>
+        {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+        {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+        <div className="form-two-column">
+          <label>Current Password<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+          <label>New Password<input name="newPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
+          <label>Confirm New Password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
+        </div>
+        <div className="edit-user-actions">
+          <button type="submit" disabled={isSubmitting}>Save Password</button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
 type AdminUser = AdminOverview["users"][number];
 
 function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
@@ -359,6 +425,7 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const [newUserRole, setNewUserRole] = useState<Role>("STUDENT");
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [editingUserRole, setEditingUserRole] = useState<Role>("STUDENT");
+  const [passwordResetUser, setPasswordResetUser] = useState<AdminUser | null>(null);
 
   async function refreshOverview() {
     const data = await getAdminOverview();
@@ -409,10 +476,21 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   function startEditingUser(portalUser: AdminUser) {
     setError("");
     setStatus("");
+    setPasswordResetUser(null);
     setEditingUser(portalUser);
     setEditingUserRole(portalUser.role);
     window.setTimeout(() => {
       document.getElementById(`edit-user-${portalUser.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 0);
+  }
+
+  function startResettingPassword(portalUser: AdminUser) {
+    setError("");
+    setStatus("");
+    setEditingUser(null);
+    setPasswordResetUser(portalUser);
+    window.setTimeout(() => {
+      document.getElementById(`reset-password-${portalUser.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 0);
   }
 
@@ -583,6 +661,40 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     }
   }
 
+  async function handleResetPasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!passwordResetUser) {
+      return;
+    }
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const newPassword = String(formData.get("newPassword") || "");
+    const confirmPassword = String(formData.get("confirmPassword") || "");
+
+    setError("");
+    setStatus("");
+
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await resetUserPassword(passwordResetUser.id, newPassword);
+      form.reset();
+      setPasswordResetUser(null);
+      setStatus(`Password reset for ${passwordResetUser.firstName} ${passwordResetUser.lastName}.`);
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Unable to reset password.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   function renderEditUserForm(portalUser: AdminUser) {
     const isCurrentAdmin = portalUser.id === currentUser.id;
 
@@ -672,6 +784,27 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         <div className="edit-user-actions">
           <button type="submit" disabled={isSubmitting}>Save</button>
           <button type="button" className="text-action" onClick={() => setEditingUser(null)} disabled={isSubmitting}>Cancel</button>
+        </div>
+      </form>
+    );
+  }
+
+  function renderResetPasswordForm(portalUser: AdminUser) {
+    return (
+      <form id={`reset-password-${portalUser.id}`} key={portalUser.id} className="edit-user-panel" onSubmit={handleResetPasswordSubmit}>
+        <div className="admin-heading">
+          <div>
+            <p className="eyebrow">Admin reset</p>
+            <h3>Reset Password for {portalUser.firstName} {portalUser.lastName}</h3>
+          </div>
+        </div>
+        <div className="form-two-column">
+          <label>New Password<input name="newPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
+          <label>Confirm New Password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
+        </div>
+        <div className="edit-user-actions">
+          <button type="submit" disabled={isSubmitting}>Reset Password</button>
+          <button type="button" className="text-action" onClick={() => setPasswordResetUser(null)} disabled={isSubmitting}>Cancel</button>
         </div>
       </form>
     );
@@ -996,6 +1129,14 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                       >
                         {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
                       </button>
+                      <button
+                        type="button"
+                        className="text-action"
+                        onClick={() => startResettingPassword(portalUser)}
+                        disabled={isSubmitting}
+                      >
+                        Reset Password
+                      </button>
                       {isDemoUser(portalUser, currentUser.id) ? (
                         <button
                           type="button"
@@ -1008,6 +1149,7 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                       ) : null}
                     </div>
                     {editingUser?.id === portalUser.id ? renderEditUserForm(portalUser) : null}
+                    {passwordResetUser?.id === portalUser.id ? renderResetPasswordForm(portalUser) : null}
                   </li>
                 ))}
               </ul>

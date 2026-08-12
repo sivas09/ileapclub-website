@@ -1,4 +1,6 @@
 import { Role } from "@prisma/client";
+import { canAdminResetPassword } from "../src/server/routes/admin.js";
+import { isValidNewPassword } from "../src/server/routes/auth.js";
 import { canEditDocumentScope } from "../src/server/routes/documents.js";
 import {
   canAccessStudentMemberships,
@@ -168,6 +170,31 @@ assertEqual(
   }).status,
   409,
   "historical data cannot accidentally be deleted"
+);
+assertEqual(
+  isValidNewPassword("12345678"),
+  true,
+  "new passwords must allow at least 8 characters"
+);
+assertEqual(
+  isValidNewPassword("short"),
+  false,
+  "new passwords shorter than 8 characters are rejected"
+);
+assertEqual(
+  canAdminResetPassword(Role.ADMIN),
+  true,
+  "admin can reset user passwords"
+);
+assertEqual(
+  canAdminResetPassword(Role.FACILITATOR),
+  false,
+  "facilitator cannot reset user passwords"
+);
+assertEqual(
+  canAdminResetPassword(Role.STUDENT),
+  false,
+  "student cannot reset user passwords"
 );
 
 console.log("Facilitator authorization tests passed.");
