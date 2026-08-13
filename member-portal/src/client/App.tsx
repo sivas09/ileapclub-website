@@ -100,14 +100,6 @@ const roleCopy: Record<Role, { title: string; summary: string; actions: string[]
   }
 };
 
-const upcomingWork = [
-  "Centres and clubs management",
-  "Meeting builder with agenda templates",
-  "Student role self-claiming",
-  "RTF agenda download",
-  "Attendance, scoring, and Personal Tracking requirements"
-];
-
 const programLevelOptions = [
   { value: "JUNIOR", label: "Junior" },
   { value: "SENIOR", label: "Senior" }
@@ -355,7 +347,6 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
         <section className="dashboard-grid">
           <PortalCard title="Primary Actions" items={copy.actions} />
           <PortalCard title="Important Reports" items={copy.reports} />
-          <PortalCard title="Next Modules To Build" items={upcomingWork} />
         </section>
       ) : null}
 
