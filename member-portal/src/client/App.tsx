@@ -131,7 +131,9 @@ const resourceCategoryOptions = [
   "Role Guide",
   "Speech Guide",
   "Presentation Guide",
+  "Report Guide",
   "Video",
+  "Document",
   "Sample",
   "Other"
 ];
@@ -2372,7 +2374,7 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
           {canEdit ? (
             <div className="document-add-toggle">
               <button type="button" onClick={() => setIsAddFormOpen((isOpen) => !isOpen)}>
-                {isAddFormOpen ? "Cancel New Resource" : "Add Resource Link"}
+                {isAddFormOpen ? "Cancel New Resource" : "Add Resource"}
               </button>
             </div>
           ) : null}
@@ -2537,15 +2539,16 @@ function ResourceLinkForm({
 }) {
   return (
     <form className="document-form resource-link-form" onSubmit={onSubmit}>
-      <h3>{resource ? "Edit Resource Link" : "Add Resource Link"}</h3>
+      <h3>{resource ? "Edit Resource" : "Add Resource"}</h3>
       <label>Title<input name="title" defaultValue={resource?.title ?? ""} required /></label>
       <label>
-        Category
-        <select name="category" defaultValue={resource?.category ?? "Role Guide"}>
-          {resourceCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-        </select>
+        Type / Category
+        <input name="category" defaultValue={resource?.category ?? "Role Guide"} list="resource-category-options" required />
       </label>
-      <label>Role Key <span>Optional</span><input name="roleKey" defaultValue={resource?.roleKey ?? ""} placeholder="iChair" /></label>
+      <datalist id="resource-category-options">
+        {resourceCategoryOptions.map((category) => <option key={category} value={category} />)}
+      </datalist>
+      <label>Related Role or Speech Type <span>Optional</span><input name="roleKey" defaultValue={resource?.roleKey ?? ""} placeholder="iChair, Prepared Speech, Timer Report" /></label>
       <label>
         Program <span>Optional</span>
         <select name="programLevel" defaultValue={resource?.programLevel ?? ""}>
@@ -2563,7 +2566,7 @@ function ResourceLinkForm({
       <label>Requirement ID <span>Optional</span><input name="requirementId" defaultValue={resource?.requirementId ?? ""} /></label>
       <label className="document-link-field">YouTube URL <span>Optional</span><input name="youtubeUrl" type="url" defaultValue={resource?.youtubeUrl ?? ""} /></label>
       <label className="document-link-field">Document URL <span>Optional</span><input name="documentUrl" type="url" defaultValue={resource?.documentUrl ?? ""} /></label>
-      <label className="document-link-field">Short Explanation<textarea name="explanation" defaultValue={resource?.explanation ?? ""} rows={3} required /></label>
+      <label className="document-link-field">Description<textarea name="explanation" defaultValue={resource?.explanation ?? ""} rows={3} required /></label>
       <div className="document-actions">
         <button type="submit" disabled={isSubmitting}>{resource ? "Save Resource" : "Add Resource"}</button>
         {onCancel ? <button type="button" onClick={onCancel} disabled={isSubmitting}>Cancel</button> : null}

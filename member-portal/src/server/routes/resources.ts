@@ -27,15 +27,6 @@ const bandLevels = [
   "Black II"
 ] as const;
 
-const resourceCategories = [
-  "Role Guide",
-  "Speech Guide",
-  "Presentation Guide",
-  "Video",
-  "Sample",
-  "Other"
-] as const;
-
 const optionalUrl = z.string().trim().refine((value) => !value || isHttpUrl(value), {
   message: "Enter a valid http or https URL."
 });
@@ -49,7 +40,7 @@ const resourceSchema = z.object({
   bandLevel: z.enum(bandLevels).nullable().optional(),
   roleKey: z.string().trim().nullable().optional(),
   requirementId: z.string().trim().nullable().optional(),
-  category: z.enum(resourceCategories),
+  category: z.string().trim().min(2).max(80),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional()
 });
 
