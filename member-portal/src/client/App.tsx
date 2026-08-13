@@ -4779,9 +4779,11 @@ function resourcesForRequirement(resources: ResourceLink[], requirementId: strin
 }
 
 function roleDefinitionsForMeeting(roleDefinitions: RoleDefinition[], meeting: Meeting) {
+  const programLevel = normalizeProgramLevel(meeting.club.program);
+
   return roleDefinitions.filter((roleDefinition) => (
     roleDefinition.isActive
-    && (!roleDefinition.programLevel || roleDefinition.programLevel === meeting.club.program)
+    && (!roleDefinition.programLevel || roleDefinition.programLevel === programLevel)
   ));
 }
 
@@ -4801,6 +4803,20 @@ function isLeadershipRoleName(roleName: string) {
   return ["ichair", "igrammarian", "ifinesmaster", "ifillercounter", "itimer"].includes(
     roleName.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
   );
+}
+
+function normalizeProgramLevel(program: string | null | undefined) {
+  const normalizedProgram = (program ?? "").trim().toLowerCase();
+
+  if (normalizedProgram === "junior" || normalizedProgram.includes("junior")) {
+    return "JUNIOR";
+  }
+
+  if (normalizedProgram === "senior" || normalizedProgram.includes("senior")) {
+    return "SENIOR";
+  }
+
+  return null;
 }
 
 function normalizeResourceKey(value: string) {

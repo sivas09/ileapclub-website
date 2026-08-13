@@ -1365,6 +1365,8 @@ async function getStandardRoleDefinitions() {
 }
 
 async function getAvailableRoleDefinitionForClub(roleDefinitionId: string, clubProgram: string) {
+  const programLevel = normalizeProgramLevel(clubProgram);
+
   return prisma.roleDefinition.findFirst({
     where: {
       id: roleDefinitionId,
@@ -1372,7 +1374,7 @@ async function getAvailableRoleDefinitionForClub(roleDefinitionId: string, clubP
       OR: [
         { programLevel: null },
         { programLevel: "" },
-        { programLevel: clubProgram }
+        ...(programLevel ? [{ programLevel }] : [])
       ]
     }
   });
@@ -1414,6 +1416,20 @@ function normalizeLeadershipRoleName(roleName: string) {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeProgramLevel(program: string | null | undefined) {
+  const normalizedProgram = (program ?? "").trim().toLowerCase();
+
+  if (normalizedProgram === "junior" || normalizedProgram.includes("junior")) {
+    return "JUNIOR";
+  }
+
+  if (normalizedProgram === "senior" || normalizedProgram.includes("senior")) {
+    return "SENIOR";
+  }
+
+  return null;
 }
 
 function normalizeRoleDefinitionPayload(data: Partial<z.infer<typeof roleDefinitionSchema>>) {
