@@ -56,6 +56,7 @@ import {
   saveStudentMeetingFeedback,
   removeMeetingRoleSlot,
   removeClubFacilitator,
+  releaseMeetingSlot,
   resetDemoMeetingData,
   resetUserPassword,
   ResourceLink,
@@ -2970,6 +2971,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
               onSelectResource={setSelectedResource}
               isSubmitting={isSubmitting}
               onClaim={(slotId) => updateMeeting(() => claimMeetingSlot(selectedMeeting.id, slotId), "Role claimed.")}
+              onRelease={(slotId) => updateMeeting(() => releaseMeetingSlot(selectedMeeting.id, slotId), "Role released.")}
             />
           ) : null}
           {canManageMeetings && meetingMode === "edit" && overview ? (
@@ -2989,7 +2991,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
               onSelectResource={setSelectedResource}
               isSubmitting={isSubmitting}
               onAddSlot={(roleDefinitionId, slotLabel) => updateMeeting(() => addMeetingRoleSlot(selectedMeeting.id, { roleDefinitionId, slotLabel }), "Role slot added.")}
-              onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(selectedMeeting.id, slotId, studentId), "Role assignment updated.")}
+              onAssign={(slotId, studentId) => updateMeeting(() => assignMeetingSlot(selectedMeeting.id, slotId, studentId), studentId ? "Role assignment updated." : "Role released.")}
               onEditSlot={(slotId, payload) => updateMeeting(() => editMeetingRoleSlot(selectedMeeting.id, slotId, payload), "Role slot updated.")}
               onRemoveSlot={(slotId) => updateMeeting(() => removeMeetingRoleSlot(selectedMeeting.id, slotId), "Role slot removed.")}
               onToggleLock={() => updateMeeting(() => toggleMeetingLock(selectedMeeting.id), selectedMeeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
@@ -3317,7 +3319,8 @@ function BookRoles({
   resources,
   onSelectResource,
   isSubmitting,
-  onClaim
+  onClaim,
+  onRelease
 }: {
   meeting: Meeting;
   user: PortalUser;
@@ -3325,6 +3328,7 @@ function BookRoles({
   onSelectResource: (resource: ResourceLink) => void;
   isSubmitting: boolean;
   onClaim: (slotId: string) => void;
+  onRelease: (slotId: string) => void;
 }) {
   const claimedCount = user.role === "STUDENT"
     ? meeting.roleSlots.filter((slot) => slot.assignedStudent?.user.id === user.id).length
@@ -3343,6 +3347,7 @@ function BookRoles({
           const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "";
           const isOwnRole = slot.assignedStudent?.user.id === user.id;
           const isAvailable = canBook && !slot.assignedStudentId && claimedCount < 2;
+          const canRelease = canBook && isOwnRole;
 
           return (
             <li key={slot.id} className={!slot.assignedStudentId ? "is-open" : ""}>
@@ -3360,6 +3365,20 @@ function BookRoles({
               {!slot.assignedStudentId ? (
                 <button type="button" onClick={() => onClaim(slot.id)} disabled={!isAvailable || isSubmitting}>
                   Claim
+                </button>
+              ) : null}
+              {isOwnRole ? (
+                <button
+                  type="button"
+                  className="danger-action"
+                  onClick={() => {
+                    if (window.confirm(`Release ${roleSlotName(slot)}? Another student will be able to claim it.`)) {
+                      onRelease(slot.id);
+                    }
+                  }}
+                  disabled={!canRelease || isSubmitting}
+                >
+                  Release
                 </button>
               ) : null}
               {slot.assignedStudentId && !isOwnRole ? <em>Not available</em> : null}
@@ -4154,6 +4173,14 @@ function ManageRoleSlotRow({
     });
   }
 
+  function handleReleaseAssignment() {
+    const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "this student";
+
+    if (window.confirm(`Release ${roleSlotName(slot)} from ${assignedName}? Another student will be able to claim it.`)) {
+      onAssign(null);
+    }
+  }
+
   return (
     <article className="manager-role-row">
       <div>
@@ -4198,6 +4225,7 @@ function ManageRoleSlotRow({
         />
       </label>
       <button type="button" onClick={handleSaveSlot} disabled={isSubmitting || !roleDefinitionId || !sortOrder}>Update Slot</button>
+      <button type="button" className="danger-action" onClick={handleReleaseAssignment} disabled={isSubmitting || !slot.assignedStudentId}>Release Role</button>
       <button type="button" className="danger-action" onClick={onRemoveSlot} disabled={isSubmitting || Boolean(slot.assignedStudentId || slot.score)}>Remove</button>
     </article>
   );

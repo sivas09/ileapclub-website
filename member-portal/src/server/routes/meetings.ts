@@ -652,6 +652,61 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
   response.json({ meeting });
 }));
 
+meetingsRouter.post("/:meetingId/slots/:slotId/release", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.STUDENT) {
+    response.status(403).json({ message: "Only students can release their own role claims." });
+    return;
+  }
+
+  const student = await prisma.student.findUnique({
+    where: { userId: user.id }
+  });
+
+  if (!student) {
+    response.status(404).json({ message: "Student profile not found." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const slotId = String(request.params.slotId);
+  const slot = await prisma.meetingRoleSlot.findUnique({
+    where: { id: slotId },
+    include: { meeting: true }
+  });
+
+  if (!slot || slot.meetingId !== meetingId) {
+    response.status(404).json({ message: "Role slot not found." });
+    return;
+  }
+
+  if (slot.meeting.isRoleLocked) {
+    response.status(409).json({ message: "Roles are locked for this meeting." });
+    return;
+  }
+
+  if (!(await isStudentInClub(student.id, slot.meeting.clubId))) {
+    response.status(403).json({ message: "You can only release roles in your club." });
+    return;
+  }
+
+  if (!slot.assignedStudentId) {
+    response.status(409).json({ message: "This role is already available." });
+    return;
+  }
+
+  if (!canReleaseMeetingRole(user.role, slot.assignedStudentId === student.id)) {
+    response.status(403).json({ message: "You can only release your own claimed role." });
+    return;
+  }
+
+  await clearRoleAssignment(slot.id);
+
+  const meeting = await getMeeting(meetingId);
+  response.json({ meeting });
+}));
+
 meetingsRouter.patch("/:meetingId/slots/:slotId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
@@ -799,14 +854,18 @@ meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, respo
     }
   }
 
-  await prisma.meetingRoleSlot.update({
-    where: { id: slot.id },
-    data: {
-      assignedStudentId: parsed.data.studentId || null,
-      assignedByUserId: parsed.data.studentId ? user.id : null,
-      assignedAt: parsed.data.studentId ? new Date() : null
-    }
-  });
+  if (parsed.data.studentId) {
+    await prisma.meetingRoleSlot.update({
+      where: { id: slot.id },
+      data: {
+        assignedStudentId: parsed.data.studentId,
+        assignedByUserId: user.id,
+        assignedAt: new Date()
+      }
+    });
+  } else {
+    await clearRoleAssignment(slot.id);
+  }
 
   const meeting = await getMeeting(meetingId);
   response.json({ meeting });
@@ -1119,6 +1178,17 @@ async function getNextRoleSlotSortOrder(meetingId: string) {
   return (lastSlot?.sortOrder ?? 0) + 1;
 }
 
+function clearRoleAssignment(slotId: string) {
+  return prisma.meetingRoleSlot.update({
+    where: { id: slotId },
+    data: {
+      assignedStudentId: null,
+      assignedByUserId: null,
+      assignedAt: null
+    }
+  });
+}
+
 async function getVisibleClubFilter(userId: string, role: Role) {
   if (role === Role.ADMIN) {
     return null;
@@ -1285,6 +1355,10 @@ async function getAvailableRoleDefinitionForClub(roleDefinitionId: string, clubP
 
 export function canManageRoleDefinitions(role: Role) {
   return role === Role.ADMIN;
+}
+
+export function canReleaseMeetingRole(role: Role, isOwnClaim = false) {
+  return role === Role.ADMIN || role === Role.FACILITATOR || (role === Role.STUDENT && isOwnClaim);
 }
 
 function normalizeRoleDefinitionPayload(data: Partial<z.infer<typeof roleDefinitionSchema>>) {

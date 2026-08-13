@@ -684,6 +684,12 @@ export async function claimMeetingSlot(meetingId: string, slotId: string) {
   });
 }
 
+export async function releaseMeetingSlot(meetingId: string, slotId: string) {
+  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}/release`, {
+    method: "POST"
+  });
+}
+
 export async function assignMeetingSlot(meetingId: string, slotId: string, studentId: string | null) {
   return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}`, {
     method: "PUT",

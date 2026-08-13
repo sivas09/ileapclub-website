@@ -11,7 +11,7 @@ import {
 } from "../src/server/routes/members.js";
 import { canPermanentlyDeleteResourceLink } from "../src/server/routes/resources.js";
 import { canManageBandRequirementDefinitions } from "../src/server/routes/student.js";
-import { canManageRoleDefinitions } from "../src/server/routes/meetings.js";
+import { canManageRoleDefinitions, canReleaseMeetingRole } from "../src/server/routes/meetings.js";
 
 const assignedClubId = "assigned-club";
 const otherClubId = "other-club";
@@ -147,6 +147,26 @@ assertEqual(
   canManageRoleDefinitions(Role.STUDENT),
   false,
   "student cannot manage speaking role definitions"
+);
+assertEqual(
+  canReleaseMeetingRole(Role.ADMIN),
+  true,
+  "admin can release any meeting role"
+);
+assertEqual(
+  canReleaseMeetingRole(Role.FACILITATOR),
+  true,
+  "facilitator can release meeting roles in assigned clubs"
+);
+assertEqual(
+  canReleaseMeetingRole(Role.STUDENT, true),
+  true,
+  "student can release own meeting role"
+);
+assertEqual(
+  canReleaseMeetingRole(Role.STUDENT, false),
+  false,
+  "student cannot release another student's meeting role"
 );
 
 assertEqual(
