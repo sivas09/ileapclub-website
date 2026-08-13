@@ -15,7 +15,8 @@ import {
   canManageRoleDefinitions,
   canReleaseMeetingRole,
   isLeadershipRoleName,
-  roleAssignmentLimitViolation
+  roleAssignmentLimitViolation,
+  sanitizeMeetingsForUser
 } from "../src/server/routes/meetings.js";
 
 const assignedClubId = "assigned-club";
@@ -212,6 +213,21 @@ assertEqual(
   null,
   "one leadership role plus one regular role is allowed"
 );
+assertEqual(
+  JSON.stringify(sanitizeMeetingsForUser([meetingWithPrivateStudentData()] as any, "student-user", Role.STUDENT)).includes("other@example.com"),
+  false,
+  "student meeting response does not expose other student email"
+);
+assertEqual(
+  JSON.stringify(sanitizeMeetingsForUser([meetingWithPrivateStudentData()] as any, "student-user", Role.STUDENT)).includes("student@example.com"),
+  false,
+  "student meeting response does not expose own raw email in nested meeting users"
+);
+assertEqual(
+  sanitizeMeetingsForUser([meetingWithPrivateStudentData()] as any, "student-user", Role.STUDENT)[0].attendance.length,
+  0,
+  "student meeting response removes attendance roster"
+);
 
 assertEqual(
   canPermanentlyDeleteMemberRole(Role.ADMIN),
@@ -336,6 +352,92 @@ function roleSlot(name: string) {
   return {
     slotLabel: name,
     roleDefinition: { name }
+  };
+}
+
+function meetingWithPrivateStudentData() {
+  return {
+    id: "meeting-1",
+    roleSlots: [
+      {
+        id: "slot-1",
+        roleSlotId: "slot-1",
+        assignedStudentId: "other-student",
+        assignedStudent: {
+          id: "other-student",
+          userId: "other-user",
+          grade: "6",
+          programLevel: "JUNIOR",
+          bandLevel: "White",
+          user: {
+            id: "other-user",
+            email: "other@example.com",
+            firstName: "Other",
+            lastName: "Student",
+            role: Role.STUDENT,
+            isActive: true
+          }
+        },
+        roleDefinition: { name: "Prepared Speech" },
+        score: { id: "score-1" }
+      },
+      {
+        id: "slot-2",
+        roleSlotId: "slot-2",
+        assignedStudentId: "student",
+        assignedStudent: {
+          id: "student",
+          userId: "student-user",
+          grade: "7",
+          programLevel: "SENIOR",
+          bandLevel: "Yellow",
+          user: {
+            id: "student-user",
+            email: "student@example.com",
+            firstName: "Current",
+            lastName: "Student",
+            role: Role.STUDENT,
+            isActive: true
+          }
+        },
+        roleDefinition: { name: "iChair" },
+        score: { id: "score-2" }
+      }
+    ],
+    attendance: [
+      {
+        id: "attendance-1",
+        student: {
+          user: {
+            id: "other-user",
+            email: "other@example.com",
+            firstName: "Other",
+            lastName: "Student",
+            role: Role.STUDENT
+          }
+        }
+      }
+    ],
+    roleScores: [{ id: "score-1", roleSlotId: "slot-1" }, { id: "score-2", roleSlotId: "slot-2" }],
+    studentFeedbacks: [
+      {
+        id: "feedback-1",
+        student: {
+          id: "student",
+          userId: "student-user",
+          grade: "7",
+          programLevel: "SENIOR",
+          bandLevel: "Yellow",
+          user: {
+            id: "student-user",
+            email: "student@example.com",
+            firstName: "Current",
+            lastName: "Student",
+            role: Role.STUDENT
+          }
+        }
+      }
+    ]
   };
 }
 

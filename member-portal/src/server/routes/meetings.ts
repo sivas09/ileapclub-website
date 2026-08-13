@@ -138,7 +138,7 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
     meetings: sanitizeMeetingsForUser(meetings, user.id, user.role),
     roleDefinitions,
     clubs,
-    students
+    students: user.role === Role.STUDENT ? [] : students
   });
 }));
 
@@ -1169,7 +1169,7 @@ async function getMeeting(meetingId: string) {
   });
 }
 
-function sanitizeMeetingsForUser<T extends Array<Prisma.MeetingGetPayload<{ include: typeof meetingInclude }>>>(
+export function sanitizeMeetingsForUser<T extends Array<Prisma.MeetingGetPayload<{ include: typeof meetingInclude }>>>(
   meetings: T,
   userId: string,
   role: Role
@@ -1182,15 +1182,42 @@ function sanitizeMeetingsForUser<T extends Array<Prisma.MeetingGetPayload<{ incl
     ...meeting,
     roleSlots: meeting.roleSlots.map((slot) => ({
       ...slot,
+      assignedStudent: publicMeetingStudent(slot.assignedStudent),
       score: slot.assignedStudent?.user.id === userId ? slot.score : null
     })),
+    attendance: [],
     roleScores: meeting.roleScores.filter((score) => {
       const slot = meeting.roleSlots.find((candidate) => candidate.id === score.roleSlotId);
 
       return slot?.assignedStudent?.user.id === userId;
     }),
-    studentFeedbacks: meeting.studentFeedbacks.filter((feedback) => feedback.student.user.id === userId)
+    studentFeedbacks: meeting.studentFeedbacks
+      .filter((feedback) => feedback.student.user.id === userId)
+      .map((feedback) => ({
+        ...feedback,
+        student: publicMeetingStudent(feedback.student)
+      }))
   }));
+}
+
+function publicMeetingStudent<T extends { id: string; userId?: string; grade?: string; programLevel?: string | null; bandLevel?: string; user: { id: string; firstName: string; lastName: string; role: Role } } | null>(student: T) {
+  if (!student) {
+    return null;
+  }
+
+  return {
+    id: student.id,
+    userId: student.userId,
+    grade: student.grade,
+    programLevel: student.programLevel,
+    bandLevel: student.bandLevel,
+    user: {
+      id: student.user.id,
+      firstName: student.user.firstName,
+      lastName: student.user.lastName,
+      role: student.user.role
+    }
+  };
 }
 
 async function getNextRoleSlotSortOrder(meetingId: string) {
