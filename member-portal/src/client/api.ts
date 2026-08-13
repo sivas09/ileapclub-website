@@ -62,6 +62,10 @@ export type RoleDefinition = {
   id: string;
   name: string;
   description?: string | null;
+  category?: string;
+  programLevel?: string | null;
+  level?: string | null;
+  sortOrder?: number;
   isActive: boolean;
 };
 
@@ -588,6 +592,46 @@ export async function resetDemoMeetingData() {
 
 export async function getMeetingsOverview() {
   return request<MeetingsOverview>("/api/meetings");
+}
+
+export async function getRoleDefinitions() {
+  return request<{ roleDefinitions: RoleDefinition[] }>("/api/meetings/role-definitions");
+}
+
+export async function createRoleDefinition(payload: {
+  name: string;
+  description?: string;
+  category?: string;
+  programLevel?: string | null;
+  level?: string | null;
+  sortOrder?: number;
+  isActive?: boolean;
+}) {
+  return request<{ roleDefinition: RoleDefinition }>("/api/meetings/role-definitions", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateRoleDefinition(roleDefinitionId: string, payload: Partial<{
+  name: string;
+  description: string;
+  category: string;
+  programLevel: string | null;
+  level: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}>) {
+  return request<{ roleDefinition: RoleDefinition }>(`/api/meetings/role-definitions/${roleDefinitionId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteRoleDefinition(roleDefinitionId: string) {
+  return request<{ roleDefinition: RoleDefinition; deleted: boolean; archived: boolean; message?: string }>(`/api/meetings/role-definitions/${roleDefinitionId}`, {
+    method: "DELETE"
+  });
 }
 
 export async function createMeeting(payload: {

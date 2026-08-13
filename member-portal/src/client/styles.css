@@ -624,6 +624,92 @@ button {
   margin-top: 0;
 }
 
+.role-definition-manager {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.role-definition-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+}
+
+.role-definition-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.role-definition-table th,
+.role-definition-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e8f1;
+  color: #132238;
+  text-align: left;
+  vertical-align: top;
+}
+
+.role-definition-table th {
+  color: #00296b;
+  background: #f7fafc;
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.role-definition-table td span {
+  display: block;
+  margin-top: 4px;
+  color: var(--portal-muted);
+  font-size: 0.88rem;
+}
+
+.role-definition-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.role-definition-table tr.is-archived {
+  opacity: 0.68;
+}
+
+.role-definition-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.role-definition-form label {
+  display: grid;
+  gap: 7px;
+  color: #243657;
+  font-weight: 800;
+}
+
+.role-definition-form input,
+.role-definition-form select,
+.role-definition-form textarea {
+  min-height: 42px;
+  border: 1px solid #d4dcea;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  font: inherit;
+}
+
+.role-definition-form textarea {
+  resize: vertical;
+}
+
 .admin-form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

@@ -19,11 +19,13 @@ import {
   createMeeting,
   createMember,
   createResourceLink,
+  createRoleDefinition,
   createUser,
   deleteDemoUser,
   deleteBandDocument,
   deleteBandRequirement,
   deleteResourceLink,
+  deleteRoleDefinition,
   deleteSampleFeedback,
   deleteSampleUsers,
   downloadAgenda,
@@ -39,6 +41,7 @@ import {
   getMembers,
   getMeetingsOverview,
   getResourceLinks,
+  getRoleDefinitions,
   getStoredToken,
   getStudentProgress,
   login,
@@ -56,6 +59,7 @@ import {
   resetDemoMeetingData,
   resetUserPassword,
   ResourceLink,
+  RoleDefinition,
   setCentreActive,
   setClubActive,
   setMemberActive,
@@ -68,6 +72,7 @@ import {
   updateMember,
   updateMeetingDetails,
   updateResourceLink,
+  updateRoleDefinition,
   updateStudentProfile,
   updateStudentRequirement,
   updateUser
@@ -2927,6 +2932,10 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
         </form>
       ) : null}
 
+      {user.role === "ADMIN" ? (
+        <RoleDefinitionManagementPanel onChanged={() => refreshMeetings()} />
+      ) : null}
+
       <MeetingList
         meetings={overview?.meetings ?? []}
         user={user}
@@ -3012,6 +3021,208 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
       <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
   );
+}
+
+function RoleDefinitionManagementPanel({ onChanged }: { onChanged: () => void }) {
+  const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinition[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [editingRoleDefinition, setEditingRoleDefinition] = useState<RoleDefinition | null>(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function refreshRoleDefinitions() {
+    const data = await getRoleDefinitions();
+    setRoleDefinitions(data.roleDefinitions);
+  }
+
+  useEffect(() => {
+    setIsLoading(true);
+    refreshRoleDefinitions()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load role types."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const payload = roleDefinitionPayloadFromForm(form);
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      if (editingRoleDefinition) {
+        await updateRoleDefinition(editingRoleDefinition.id, payload);
+        setStatus("Role type updated.");
+      } else {
+        await createRoleDefinition(payload);
+        form.reset();
+        setStatus("Role type added.");
+      }
+
+      setEditingRoleDefinition(null);
+      setIsOpen(false);
+      await refreshRoleDefinitions();
+      onChanged();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save role type.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleRemove(roleDefinition: RoleDefinition) {
+    if (!window.confirm(`Remove ${roleDefinition.name}? Existing meetings will be preserved; role types already used by meetings will be archived.`)) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await deleteRoleDefinition(roleDefinition.id);
+      setStatus(result.message || (result.deleted ? "Role type deleted." : "Role type archived."));
+      await refreshRoleDefinitions();
+      onChanged();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Unable to remove role type.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="role-definition-manager" aria-label="Speaking role type management">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Meeting Setup</p>
+          <h3>Speaking Role Types</h3>
+        </div>
+        <button type="button" onClick={() => {
+          setEditingRoleDefinition(null);
+          setIsOpen((current) => !current);
+        }}>
+          {isOpen ? "Close" : "Add Role Type"}
+        </button>
+      </div>
+      <p className="field-note">Manage the role types that can be added to Junior and Senior meeting role slots.</p>
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {isOpen || editingRoleDefinition ? (
+        <RoleDefinitionForm
+          key={editingRoleDefinition?.id ?? "new-role-definition"}
+          roleDefinition={editingRoleDefinition}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSubmit}
+          onCancel={() => {
+            setEditingRoleDefinition(null);
+            setIsOpen(false);
+          }}
+        />
+      ) : null}
+      {isLoading ? <p className="loading-state">Loading role types...</p> : null}
+      <div className="role-definition-table-wrap">
+        <table className="role-definition-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Program</th>
+              <th>Level</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roleDefinitions.map((roleDefinition) => (
+              <tr key={roleDefinition.id} className={!roleDefinition.isActive ? "is-archived" : ""}>
+                <td>
+                  <strong>{roleDefinition.name}</strong>
+                  <span>{roleDefinition.description || "No description entered."}</span>
+                </td>
+                <td>{roleDefinition.category || "Speaking Role"}</td>
+                <td>{roleDefinition.programLevel ? formatProgramLevel(roleDefinition.programLevel) : "All programs"}</td>
+                <td>{roleDefinition.level || "All levels"}</td>
+                <td>{roleDefinition.isActive ? "Active" : "Archived"}</td>
+                <td>
+                  <div className="resource-actions">
+                    <button type="button" onClick={() => {
+                      setEditingRoleDefinition(roleDefinition);
+                      setIsOpen(false);
+                    }} disabled={isSubmitting}>Edit</button>
+                    <button type="button" className="danger-action" onClick={() => handleRemove(roleDefinition)} disabled={isSubmitting}>
+                      {roleDefinition.isActive ? "Remove" : "Delete"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!roleDefinitions.length && !isLoading ? <p className="loading-state">No role types have been configured.</p> : null}
+    </section>
+  );
+}
+
+function RoleDefinitionForm({
+  roleDefinition,
+  isSubmitting,
+  onSubmit,
+  onCancel
+}: {
+  roleDefinition: RoleDefinition | null;
+  isSubmitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form className="role-definition-form" onSubmit={onSubmit}>
+      <label>Name<input name="name" defaultValue={roleDefinition?.name ?? ""} placeholder="Prepared Speech" required /></label>
+      <label>
+        Category
+        <input name="category" defaultValue={roleDefinition?.category ?? "Speaking Role"} placeholder="Speaking Role" required />
+      </label>
+      <label>
+        Program
+        <select name="programLevel" defaultValue={roleDefinition?.programLevel ?? ""}>
+          <option value="">All programs</option>
+          {programLevelOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <label>Level<input name="level" defaultValue={roleDefinition?.level ?? ""} placeholder="Optional syllabus level" /></label>
+      <label>Sort Order<input name="sortOrder" type="number" min="0" defaultValue={roleDefinition?.sortOrder ?? 0} /></label>
+      <label className="checkbox-field">
+        <input name="isActive" type="checkbox" defaultChecked={roleDefinition?.isActive ?? true} />
+        Active
+      </label>
+      <label className="wide-field">Description<textarea name="description" defaultValue={roleDefinition?.description ?? ""} rows={3} placeholder="How this role is used in meetings" /></label>
+      <div className="form-actions wide-field">
+        <button type="submit" disabled={isSubmitting}>{roleDefinition ? "Save Role Type" : "Add Role Type"}</button>
+        <button type="button" className="secondary-action" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function roleDefinitionPayloadFromForm(form: HTMLFormElement) {
+  const formData = new FormData(form);
+
+  return {
+    name: String(formData.get("name") || ""),
+    description: String(formData.get("description") || ""),
+    category: String(formData.get("category") || "Speaking Role"),
+    programLevel: String(formData.get("programLevel") || "") || null,
+    level: String(formData.get("level") || "") || null,
+    sortOrder: Number(formData.get("sortOrder") || 0),
+    isActive: formData.get("isActive") === "on"
+  };
 }
 
 function MeetingList({
@@ -3187,6 +3398,8 @@ function ManageRoles({
   onRemoveSlot: (slotId: string) => void;
   onToggleLock: () => void;
 }) {
+  const availableRoleDefinitions = roleDefinitionsForMeeting(roleDefinitions, meeting);
+
   return (
     <section className="meeting-mode-section" aria-label="Manage roles">
       <MeetingSummary meeting={meeting} />
@@ -3194,13 +3407,13 @@ function ManageRoles({
         <button type="button" onClick={onToggleLock} disabled={isSubmitting}>{meeting.isRoleLocked ? "Unlock Role Claims" : "Lock Role Claims"}</button>
         <StatusText isLocked={meeting.isRoleLocked} />
       </div>
-      <AddRoleSlotControls roleDefinitions={roleDefinitions} isSubmitting={isSubmitting} onAddSlot={onAddSlot} />
+      <AddRoleSlotControls roleDefinitions={availableRoleDefinitions} isSubmitting={isSubmitting} onAddSlot={onAddSlot} />
       <div className="manager-role-list">
         {meeting.roleSlots.map((slot) => (
           <ManageRoleSlotRow
             key={slot.id}
             slot={slot}
-            roleDefinitions={roleDefinitions}
+            roleDefinitions={roleDefinitionsForSlot(availableRoleDefinitions, slot)}
             students={students}
             resources={resources}
             onSelectResource={onSelectResource}
@@ -4469,6 +4682,21 @@ function resourcesForRequirement(resources: ResourceLink[], requirementId: strin
     return normalizeResourceKey(resource.requirementName ?? resource.title).includes(normalizedRequirementName)
       || normalizedRequirementName.includes(normalizeResourceKey(resource.requirementName ?? resource.title));
   });
+}
+
+function roleDefinitionsForMeeting(roleDefinitions: RoleDefinition[], meeting: Meeting) {
+  return roleDefinitions.filter((roleDefinition) => (
+    roleDefinition.isActive
+    && (!roleDefinition.programLevel || roleDefinition.programLevel === meeting.club.program)
+  ));
+}
+
+function roleDefinitionsForSlot(roleDefinitions: RoleDefinition[], slot: Meeting["roleSlots"][number]) {
+  if (roleDefinitions.some((roleDefinition) => roleDefinition.id === slot.roleDefinition.id)) {
+    return roleDefinitions;
+  }
+
+  return [...roleDefinitions, slot.roleDefinition];
 }
 
 function normalizeResourceKey(value: string) {

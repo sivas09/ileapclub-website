@@ -55,6 +55,16 @@ const studentFeedbackSchema = scoreSchema.extend({
   roleSlotId: z.string().nullable().optional()
 });
 
+const roleDefinitionSchema = z.object({
+  name: z.string().trim().min(2),
+  description: z.string().trim().optional(),
+  category: z.string().trim().min(2).default("Speaking Role"),
+  programLevel: z.string().trim().optional().nullable(),
+  level: z.string().trim().optional().nullable(),
+  sortOrder: z.coerce.number().int().min(0).default(0),
+  isActive: z.boolean().optional()
+});
+
 export const meetingsRouter = Router();
 
 meetingsRouter.use(requireAuth);
@@ -83,7 +93,7 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
     }),
     prisma.roleDefinition.findMany({
       where: { isActive: true },
-      orderBy: { name: "asc" }
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
     }),
     prisma.club.findMany({
       where: {
@@ -127,6 +137,134 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
     clubs,
     students
   });
+}));
+
+meetingsRouter.get("/role-definitions", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  const roleDefinitions = await prisma.roleDefinition.findMany({
+    where: user.role === Role.ADMIN ? {} : { isActive: true },
+    orderBy: [{ programLevel: "asc" }, { sortOrder: "asc" }, { name: "asc" }]
+  });
+
+  response.json({ roleDefinitions });
+}));
+
+meetingsRouter.post("/role-definitions", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (!canManageRoleDefinitions(user.role)) {
+    response.status(403).json({ message: "Only admins can create role types." });
+    return;
+  }
+
+  const parsed = roleDefinitionSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter role type details." });
+    return;
+  }
+
+  try {
+    const roleDefinition = await prisma.roleDefinition.create({
+      data: {
+        name: parsed.data.name,
+        description: parsed.data.description || null,
+        category: parsed.data.category || "Speaking Role",
+        programLevel: parsed.data.programLevel || null,
+        level: parsed.data.level || null,
+        sortOrder: parsed.data.sortOrder,
+        isActive: parsed.data.isActive ?? true
+      }
+    });
+
+    response.status(201).json({ roleDefinition });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      response.status(409).json({ message: "A role type with this name already exists." });
+      return;
+    }
+
+    throw error;
+  }
+}));
+
+meetingsRouter.patch("/role-definitions/:roleDefinitionId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (!canManageRoleDefinitions(user.role)) {
+    response.status(403).json({ message: "Only admins can edit role types." });
+    return;
+  }
+
+  const parsed = roleDefinitionSchema.partial().safeParse(request.body);
+
+  if (!parsed.success || Object.keys(parsed.data).length === 0) {
+    response.status(400).json({ message: "Enter role type changes." });
+    return;
+  }
+
+  const roleDefinitionId = String(request.params.roleDefinitionId);
+  const existing = await prisma.roleDefinition.findUnique({ where: { id: roleDefinitionId } });
+
+  if (!existing) {
+    response.status(404).json({ message: "Role type not found." });
+    return;
+  }
+
+  try {
+    const roleDefinition = await prisma.roleDefinition.update({
+      where: { id: existing.id },
+      data: normalizeRoleDefinitionPayload(parsed.data)
+    });
+
+    response.json({ roleDefinition });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      response.status(409).json({ message: "A role type with this name already exists." });
+      return;
+    }
+
+    throw error;
+  }
+}));
+
+meetingsRouter.delete("/role-definitions/:roleDefinitionId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (!canManageRoleDefinitions(user.role)) {
+    response.status(403).json({ message: "Only admins can remove role types." });
+    return;
+  }
+
+  const roleDefinitionId = String(request.params.roleDefinitionId);
+  const existing = await prisma.roleDefinition.findUnique({
+    where: { id: roleDefinitionId },
+    include: { _count: { select: { meetingSlots: true } } }
+  });
+
+  if (!existing) {
+    response.status(404).json({ message: "Role type not found." });
+    return;
+  }
+
+  if (existing._count.meetingSlots > 0) {
+    const roleDefinition = await prisma.roleDefinition.update({
+      where: { id: existing.id },
+      data: { isActive: false }
+    });
+
+    response.json({
+      roleDefinition,
+      deleted: false,
+      archived: true,
+      message: "Role type is used by existing meetings, so it was archived instead of deleted."
+    });
+    return;
+  }
+
+  const roleDefinition = await prisma.roleDefinition.delete({ where: { id: existing.id } });
+  response.json({ roleDefinition, deleted: true, archived: false });
 }));
 
 meetingsRouter.post("/", asyncRoute(async (request, response) => {
@@ -293,7 +431,10 @@ meetingsRouter.patch("/:meetingId", asyncRoute(async (request, response) => {
   }
 
   const meetingId = String(request.params.meetingId);
-  const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    include: { club: true }
+  });
 
   if (!meeting) {
     response.status(404).json({ message: "Meeting not found." });
@@ -376,7 +517,10 @@ meetingsRouter.post("/:meetingId/slots", asyncRoute(async (request, response) =>
   }
 
   const meetingId = String(request.params.meetingId);
-  const meeting = await prisma.meeting.findUnique({ where: { id: meetingId } });
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    include: { club: true }
+  });
 
   if (!meeting) {
     response.status(404).json({ message: "Meeting not found." });
@@ -388,12 +532,7 @@ meetingsRouter.post("/:meetingId/slots", asyncRoute(async (request, response) =>
     return;
   }
 
-  const roleDefinition = await prisma.roleDefinition.findFirst({
-    where: {
-      id: parsed.data.roleDefinitionId,
-      isActive: true
-    }
-  });
+  const roleDefinition = await getAvailableRoleDefinitionForClub(parsed.data.roleDefinitionId, meeting.club.program);
 
   if (!roleDefinition) {
     response.status(400).json({ message: "Choose an active role definition." });
@@ -532,7 +671,12 @@ meetingsRouter.patch("/:meetingId/slots/:slotId", asyncRoute(async (request, res
   const slotId = String(request.params.slotId);
   const slot = await prisma.meetingRoleSlot.findUnique({
     where: { id: slotId },
-    include: { meeting: true, roleDefinition: true }
+    include: {
+      meeting: {
+        include: { club: true }
+      },
+      roleDefinition: true
+    }
   });
 
   if (!slot || slot.meetingId !== meetingId) {
@@ -546,12 +690,7 @@ meetingsRouter.patch("/:meetingId/slots/:slotId", asyncRoute(async (request, res
   }
 
   const roleDefinition = parsed.data.roleDefinitionId
-    ? await prisma.roleDefinition.findFirst({
-      where: {
-        id: parsed.data.roleDefinitionId,
-        isActive: true
-      }
-    })
+    ? await getAvailableRoleDefinitionForClub(parsed.data.roleDefinitionId, slot.meeting.club.program)
     : null;
 
   if (parsed.data.roleDefinitionId && !roleDefinition) {
@@ -1128,6 +1267,36 @@ async function getStandardRoleDefinitions() {
 
     return role ? [role] : [];
   });
+}
+
+async function getAvailableRoleDefinitionForClub(roleDefinitionId: string, clubProgram: string) {
+  return prisma.roleDefinition.findFirst({
+    where: {
+      id: roleDefinitionId,
+      isActive: true,
+      OR: [
+        { programLevel: null },
+        { programLevel: "" },
+        { programLevel: clubProgram }
+      ]
+    }
+  });
+}
+
+export function canManageRoleDefinitions(role: Role) {
+  return role === Role.ADMIN;
+}
+
+function normalizeRoleDefinitionPayload(data: Partial<z.infer<typeof roleDefinitionSchema>>) {
+  return {
+    name: data.name,
+    description: data.description === undefined ? undefined : data.description || null,
+    category: data.category === undefined ? undefined : data.category || "Speaking Role",
+    programLevel: data.programLevel === undefined ? undefined : data.programLevel || null,
+    level: data.level === undefined ? undefined : data.level || null,
+    sortOrder: data.sortOrder,
+    isActive: data.isActive
+  };
 }
 
 function isUniqueConstraintError(error: unknown) {

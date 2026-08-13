@@ -11,6 +11,7 @@ import {
 } from "../src/server/routes/members.js";
 import { canPermanentlyDeleteResourceLink } from "../src/server/routes/resources.js";
 import { canManageBandRequirementDefinitions } from "../src/server/routes/student.js";
+import { canManageRoleDefinitions } from "../src/server/routes/meetings.js";
 
 const assignedClubId = "assigned-club";
 const otherClubId = "other-club";
@@ -131,6 +132,21 @@ assertEqual(
   canManageBandRequirementDefinitions(Role.STUDENT),
   false,
   "student cannot manage band requirement definitions"
+);
+assertEqual(
+  canManageRoleDefinitions(Role.ADMIN),
+  true,
+  "admin can manage speaking role definitions"
+);
+assertEqual(
+  canManageRoleDefinitions(Role.FACILITATOR),
+  false,
+  "facilitator cannot manage speaking role definitions"
+);
+assertEqual(
+  canManageRoleDefinitions(Role.STUDENT),
+  false,
+  "student cannot manage speaking role definitions"
 );
 
 assertEqual(
