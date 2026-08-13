@@ -2278,15 +2278,19 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
 
   async function handleCreateResource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const payload = resourcePayloadFromForm(event.currentTarget);
+    const form = event.currentTarget;
+    const payload = resourcePayloadFromForm(form);
     setError("");
     setStatus("");
     setIsSubmitting(true);
 
     try {
-      await createResourceLink(payload);
-      event.currentTarget.reset();
-      await refreshResources();
+      const result = await createResourceLink(payload);
+      form.reset();
+      const nextFilters = { category: "", search: "", status: "ACTIVE" };
+      setFilters(nextFilters);
+      setResources((currentResources) => [result.resource, ...currentResources.filter((resource) => resource.id !== result.resource.id)]);
+      await refreshResources(nextFilters);
       setIsAddFormOpen(false);
       setStatus("Resource link added.");
     } catch (createError) {
