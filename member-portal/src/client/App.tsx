@@ -2459,7 +2459,10 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
           {!isLoading && resources.length ? (
             <ResourceLinksTable
               resources={resources}
+              canDelete={canEdit}
+              isSubmitting={isSubmitting}
               onOpenResource={openResourceDetails}
+              onDeleteResource={handleDeleteResource}
             />
           ) : null}
         </>
@@ -2470,10 +2473,16 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
 
 function ResourceLinksTable({
   resources,
-  onOpenResource
+  canDelete,
+  isSubmitting,
+  onOpenResource,
+  onDeleteResource
 }: {
   resources: ResourceLink[];
+  canDelete: boolean;
+  isSubmitting: boolean;
   onOpenResource: (resource: ResourceLink) => void;
+  onDeleteResource: (resource: ResourceLink) => void;
 }) {
   return (
     <div className="resource-table-wrap">
@@ -2502,6 +2511,11 @@ function ResourceLinksTable({
               <td data-label="Status"><StatusBadge isActive={resource.status !== "ARCHIVED"} /></td>
               <td data-label="Actions">
                 <button type="button" className="text-action" onClick={() => onOpenResource(resource)}>View</button>
+                {canDelete ? (
+                  <button type="button" className="text-action danger-action" onClick={() => onDeleteResource(resource)} disabled={isSubmitting}>
+                    Delete
+                  </button>
+                ) : null}
               </td>
             </tr>
           ))}
