@@ -2218,12 +2218,16 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
   const [resources, setResources] = useState<ResourceLink[]>([]);
   const [filters, setFilters] = useState<ResourceFilters>({ category: "", search: "", status: "ACTIVE" });
   const [editingResource, setEditingResource] = useState<ResourceLink | null>(null);
+  const [selectedResourceId, setSelectedResourceId] = useState(() => resourceIdFromHash());
+  const [selectedResourceOverride, setSelectedResourceOverride] = useState<ResourceLink | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const canEdit = user.role === "ADMIN";
+  const selectedResource = resources.find((resource) => resource.id === selectedResourceId)
+    ?? (selectedResourceOverride?.id === selectedResourceId ? selectedResourceOverride : null);
 
   async function refreshResources(nextFilters = filters) {
     const data = await getResourceLinks(nextFilters);
@@ -2236,11 +2240,38 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
       .finally(() => setIsLoading(false));
   }, []);
 
+  useEffect(() => {
+    function syncResourceRoute() {
+      const nextResourceId = resourceIdFromHash();
+      setSelectedResourceId(nextResourceId);
+      setEditingResource(null);
+      setSelectedResourceOverride((currentResource) => currentResource?.id === nextResourceId ? currentResource : null);
+    }
+
+    window.addEventListener("hashchange", syncResourceRoute);
+
+    return () => window.removeEventListener("hashchange", syncResourceRoute);
+  }, []);
+
   function updateFilter(key: keyof ResourceFilters, value: string) {
     const nextFilters = { ...filters, [key]: value };
     setFilters(nextFilters);
     setError("");
     refreshResources(nextFilters).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to filter resource links."));
+  }
+
+  function openResourceDetails(resource: ResourceLink) {
+    setSelectedResourceOverride(resource);
+    setSelectedResourceId(resource.id);
+    setEditingResource(null);
+    window.location.hash = `resources/${resource.id}`;
+  }
+
+  function returnToResourceList() {
+    setSelectedResourceId(null);
+    setSelectedResourceOverride(null);
+    setEditingResource(null);
+    window.location.hash = "resource-links";
   }
 
   async function handleCreateResource(event: FormEvent<HTMLFormElement>) {
@@ -2269,7 +2300,11 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
     setIsSubmitting(true);
 
     try {
-      await updateResourceLink(resourceId, payload);
+      const result = await updateResourceLink(resourceId, payload);
+      setResources((currentResources) => currentResources.map((resource) => resource.id === resourceId ? result.resource : resource));
+      if (selectedResourceId === resourceId) {
+        setSelectedResourceOverride(result.resource);
+      }
       await refreshResources();
       setEditingResource(null);
       setStatus("Resource link updated.");
@@ -2293,85 +2328,154 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
       {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
 
-      <form className="document-filter-form" onSubmit={(event) => event.preventDefault()}>
-        <label>
-          Category
-          <select value={filters.category} onChange={(event) => updateFilter("category", event.currentTarget.value)}>
-            <option value="">All categories</option>
-            {resourceCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-          </select>
-        </label>
-        {user.role === "ADMIN" ? (
-          <label>
-            Status
-            <select value={filters.status} onChange={(event) => updateFilter("status", event.currentTarget.value)}>
-              <option value="ACTIVE">Active</option>
-              <option value="ARCHIVED">Archived</option>
-              <option value="">All statuses</option>
-            </select>
-          </label>
-        ) : null}
-        <label>
-          Search
-          <input value={filters.search} placeholder="Title" onChange={(event) => updateFilter("search", event.currentTarget.value)} />
-        </label>
-      </form>
+      {selectedResourceId ? (
+        <ResourceLinkDetails
+          resource={selectedResource}
+          canEdit={canEdit}
+          isEditing={editingResource?.id === selectedResourceId}
+          isLoading={isLoading}
+          isSubmitting={isSubmitting}
+          onBack={returnToResourceList}
+          onEdit={() => selectedResource ? setEditingResource(selectedResource) : null}
+          onCancelEdit={() => setEditingResource(null)}
+          onSave={handleSaveResource}
+          onStatusChange={(targetResource) => handleSaveResource(targetResource.id, {
+            status: targetResource.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED"
+          })}
+        />
+      ) : (
+        <>
+          <form className="document-filter-form" onSubmit={(event) => event.preventDefault()}>
+            <label>
+              Category
+              <select value={filters.category} onChange={(event) => updateFilter("category", event.currentTarget.value)}>
+                <option value="">All categories</option>
+                {resourceCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </label>
+            {user.role === "ADMIN" ? (
+              <label>
+                Status
+                <select value={filters.status} onChange={(event) => updateFilter("status", event.currentTarget.value)}>
+                  <option value="ACTIVE">Active</option>
+                  <option value="ARCHIVED">Archived</option>
+                  <option value="">All statuses</option>
+                </select>
+              </label>
+            ) : null}
+            <label>
+              Search
+              <input value={filters.search} placeholder="Title" onChange={(event) => updateFilter("search", event.currentTarget.value)} />
+            </label>
+          </form>
 
-      {canEdit ? (
-        <div className="document-add-toggle">
-          <button type="button" onClick={() => setIsAddFormOpen((isOpen) => !isOpen)}>
-            {isAddFormOpen ? "Cancel New Resource" : "Add Resource Link"}
-          </button>
-        </div>
-      ) : null}
+          {canEdit ? (
+            <div className="document-add-toggle">
+              <button type="button" onClick={() => setIsAddFormOpen((isOpen) => !isOpen)}>
+                {isAddFormOpen ? "Cancel New Resource" : "Add Resource Link"}
+              </button>
+            </div>
+          ) : null}
 
-      {canEdit && isAddFormOpen ? <ResourceLinkForm isSubmitting={isSubmitting} onSubmit={handleCreateResource} /> : null}
-      {isLoading ? <p className="loading-state">Loading resource links...</p> : null}
-      {!isLoading && !resources.length ? <p className="loading-state">No resource links found.</p> : null}
+          {canEdit && isAddFormOpen ? <ResourceLinkForm isSubmitting={isSubmitting} onSubmit={handleCreateResource} /> : null}
+          {isLoading ? <p className="loading-state">Loading resource links...</p> : null}
+          {!isLoading && !resources.length ? <p className="loading-state">No resource links found.</p> : null}
 
-      <div className="document-card-grid">
-        {resources.map((resource) => (
-          <ResourceLinkCard
-            key={resource.id}
-            resource={resource}
-            canEdit={canEdit}
-            isEditing={editingResource?.id === resource.id}
-            isSubmitting={isSubmitting}
-            onEdit={() => setEditingResource(resource)}
-            onCancelEdit={() => setEditingResource(null)}
-            onSave={handleSaveResource}
-            onStatusChange={(targetResource) => handleSaveResource(targetResource.id, {
-              status: targetResource.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED"
-            })}
-          />
-        ))}
-      </div>
+          {!isLoading && resources.length ? (
+            <ResourceLinksTable
+              resources={resources}
+              onOpenResource={openResourceDetails}
+            />
+          ) : null}
+        </>
+      )}
     </section>
   );
 }
 
-function ResourceLinkCard({
+function ResourceLinksTable({
+  resources,
+  onOpenResource
+}: {
+  resources: ResourceLink[];
+  onOpenResource: (resource: ResourceLink) => void;
+}) {
+  return (
+    <div className="resource-table-wrap">
+      <table className="resource-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Type</th>
+            <th>Role</th>
+            <th>Program / Band</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {resources.map((resource) => (
+            <tr key={resource.id} className={resource.status === "ARCHIVED" ? "is-archived" : ""}>
+              <td data-label="Title">
+                <button type="button" className="resource-title-button" onClick={() => onOpenResource(resource)}>
+                  {resource.title}
+                </button>
+              </td>
+              <td data-label="Type">{resource.category}</td>
+              <td data-label="Role">{resource.roleKey || "Any"}</td>
+              <td data-label="Program / Band">{formatResourceScope(resource)}</td>
+              <td data-label="Status"><StatusBadge isActive={resource.status !== "ARCHIVED"} /></td>
+              <td data-label="Actions">
+                <button type="button" className="text-action" onClick={() => onOpenResource(resource)}>View</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ResourceLinkDetails({
   resource,
   canEdit,
   isEditing,
+  isLoading,
   isSubmitting,
   onEdit,
+  onBack,
   onCancelEdit,
   onSave,
   onStatusChange
 }: {
-  resource: ResourceLink;
+  resource: ResourceLink | null;
   canEdit: boolean;
   isEditing: boolean;
+  isLoading: boolean;
   isSubmitting: boolean;
   onEdit: () => void;
+  onBack: () => void;
   onCancelEdit: () => void;
   onSave: (resourceId: string, payload: Parameters<typeof updateResourceLink>[1]) => void;
   onStatusChange: (resource: ResourceLink) => void;
 }) {
+  if (isLoading) {
+    return <p className="loading-state">Loading resource details...</p>;
+  }
+
+  if (!resource) {
+    return (
+      <section className="resource-detail-page" aria-label="Resource details">
+        <button type="button" className="text-action" onClick={onBack}>Back to Resources</button>
+        <p className="loading-state">Resource not found or not available with the current filters.</p>
+      </section>
+    );
+  }
+
   if (isEditing) {
     return (
-      <article className="document-card">
+      <section className="resource-detail-page" aria-label={`Edit ${resource.title}`}>
+        <button type="button" className="text-action" onClick={onBack}>Back to Resources</button>
         <ResourceLinkForm
           resource={resource}
           isSubmitting={isSubmitting}
@@ -2381,26 +2485,32 @@ function ResourceLinkCard({
           }}
           onCancel={onCancelEdit}
         />
-      </article>
+      </section>
     );
   }
 
   return (
-    <article className={`document-card ${resource.status === "ARCHIVED" ? "is-archived" : ""}`}>
-      <div className="document-card-header">
+    <section className={`resource-detail-page ${resource.status === "ARCHIVED" ? "is-archived" : ""}`} aria-label={`Resource details for ${resource.title}`}>
+      <button type="button" className="text-action" onClick={onBack}>Back to Resources</button>
+      <div className="resource-detail-header">
         <div>
-          <span>{resource.category}</span>
+          <p className="eyebrow">{resource.category}</p>
           <h3>{resource.title}</h3>
         </div>
-        <em>{resource.status === "ARCHIVED" ? "Archived" : "Active"}</em>
+        <StatusBadge isActive={resource.status !== "ARCHIVED"} />
       </div>
-      <p>{resource.explanation}</p>
-      <dl className="document-meta">
+      <dl className="resource-detail-meta">
+        <div><dt>Type</dt><dd>{resource.category}</dd></div>
         <div><dt>Role</dt><dd>{resource.roleKey || "Any"}</dd></div>
         <div><dt>Program</dt><dd>{formatProgramLevel(resource.programLevel)}</dd></div>
         <div><dt>Band</dt><dd>{resource.bandLevel || "Any"}</dd></div>
         <div><dt>Requirement</dt><dd>{resource.requirementName || resource.requirementId || "Any"}</dd></div>
+        <div><dt>Status</dt><dd>{resource.status === "ARCHIVED" ? "Archived" : "Active"}</dd></div>
       </dl>
+      <div className="resource-detail-description">
+        <h4>Description</h4>
+        <p>{resource.explanation}</p>
+      </div>
       <ResourceActions resource={resource} />
       {canEdit ? (
         <div className="document-actions">
@@ -2410,7 +2520,7 @@ function ResourceLinkCard({
           </button>
         </div>
       ) : null}
-    </article>
+    </section>
   );
 }
 
@@ -3997,6 +4107,19 @@ function formatProgramLevel(programLevel?: string | null) {
   }
 
   return "Not set";
+}
+
+function formatResourceScope(resource: ResourceLink) {
+  const program = formatProgramLevel(resource.programLevel);
+  const band = resource.bandLevel || "Any band";
+
+  return `${program} / ${band}`;
+}
+
+function resourceIdFromHash() {
+  const match = window.location.hash.match(/^#resources\/([^/?#]+)$/);
+
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 function formatBandLadder(programLevel?: string | null) {
