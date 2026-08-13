@@ -27,6 +27,13 @@ const bandLevels = [
 ] as const;
 
 const categories = [
+  "Band Requirements",
+  "Session Materials",
+  "Case Studies",
+  "Worksheets",
+  "Speech Guides",
+  "Role Guides",
+  "Tips / Reference",
   "Speech Guide",
   "Presentation Guide",
   "Worksheet",
@@ -47,6 +54,7 @@ const documentSchema = z.object({
   fileUrl: optionalDocumentUrl.optional(),
   programLevel: z.enum(["JUNIOR", "SENIOR"]),
   bandLevel: z.enum(bandLevels),
+  sessionModule: z.string().trim().optional(),
   clubId: z.string().nullable().optional(),
   category: z.enum(categories).optional(),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional()
@@ -183,6 +191,7 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
       programLevel: data.programLevel,
       bandLevel: data.bandLevel,
       bandOrder: getBandOrder(data.bandLevel),
+      sessionModule: data.sessionModule || null,
       clubId,
       category: data.category ?? "Other",
       uploadedById: user.id,
@@ -246,6 +255,7 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
       programLevel: parsed.data.programLevel,
       bandLevel: parsed.data.bandLevel,
       bandOrder: parsed.data.bandLevel ? getBandOrder(parsed.data.bandLevel) : undefined,
+      sessionModule: parsed.data.sessionModule === undefined ? undefined : parsed.data.sessionModule || null,
       clubId: targetClubId,
       category: parsed.data.category,
       status: user.role === Role.ADMIN ? parsed.data.status : undefined
@@ -399,6 +409,7 @@ function serializeDocument(document: Prisma.BandDocumentGetPayload<{ include: ty
     programLevel: document.programLevel,
     bandLevel: document.bandLevel,
     bandOrder: document.bandOrder,
+    sessionModule: document.sessionModule,
     clubId: document.clubId,
     clubName: document.club?.name ?? "All clubs",
     category: document.category,

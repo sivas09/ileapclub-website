@@ -336,6 +336,7 @@ model BandDocument {
   programLevel String
   bandLevel    String
   bandOrder    Int
+  sessionModule String?
   clubId       String?
   category     String
   uploadedById String

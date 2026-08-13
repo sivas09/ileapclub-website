@@ -1130,6 +1130,46 @@ button {
   margin-top: 0;
 }
 
+.document-group-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #dbe4f0;
+}
+
+.document-group-section .document-card-grid {
+  margin-top: 0;
+}
+
+.document-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.document-group-heading h3 {
+  margin: 0;
+  color: var(--portal-blue);
+  font-size: 1rem;
+}
+
+.document-group-heading span {
+  color: var(--portal-muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.document-group-heading.compact {
+  margin: 10px 0;
+}
+
+.student-document-category {
+  display: grid;
+  gap: 10px;
+}
+
 .document-card {
   display: grid;
   gap: 12px;

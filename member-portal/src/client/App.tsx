@@ -131,6 +131,13 @@ const bandLevelOptions = [
 ];
 
 const documentCategoryOptions = [
+  "Band Requirements",
+  "Session Materials",
+  "Case Studies",
+  "Worksheets",
+  "Speech Guides",
+  "Role Guides",
+  "Tips / Reference",
   "Speech Guide",
   "Presentation Guide",
   "Worksheet",
@@ -1876,6 +1883,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const groupedDocuments = groupDocumentsByProgramBandCategory(documents);
 
   async function refreshDocuments(nextFilters = filters) {
     const data = await getBandDocuments(nextFilters);
@@ -1911,6 +1919,8 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
         fileUrl: String(formData.get("fileUrl") || ""),
         programLevel: String(formData.get("programLevel") || "SENIOR"),
         bandLevel: String(formData.get("bandLevel") || "White"),
+        sessionModule: String(formData.get("sessionModule") || ""),
+        category: String(formData.get("category") || "Other"),
         clubId: String(formData.get("clubId") || "") || null
       });
       form.reset();
@@ -2055,6 +2065,13 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
               {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
             </select>
           </label>
+          <label>Session / Module <span>Optional</span><input name="sessionModule" placeholder="Session 3, Module 2, Debate Week" /></label>
+          <label>
+            Category
+            <select name="category" defaultValue="Session Materials">
+              {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </label>
           <label>
             Club
             <select name="clubId" defaultValue={user.role === "FACILITATOR" && clubs.length === 1 ? clubs[0].id : ""} required={user.role === "FACILITATOR"}>
@@ -2074,26 +2091,34 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       {isLoading ? <p className="loading-state">Loading documents...</p> : null}
       {!isLoading && !documents.length ? <p className="loading-state">No documents found.</p> : null}
 
-      <div className="document-card-grid">
-        {documents.map((document) => (
-          <ManagerDocumentCard
-            key={document.id}
-            document={document}
-            clubs={clubs}
-            canEdit={user.role === "ADMIN" || (user.role === "FACILITATOR" && Boolean(document.clubId))}
-            canArchive={user.role === "ADMIN"}
-            canDelete={user.role === "ADMIN"}
-            canAssignGlobal={user.role === "ADMIN"}
-            isEditing={editingDocument?.id === document.id}
-            isSubmitting={isSubmitting}
-            onEdit={() => setEditingDocument(document)}
-            onCancelEdit={() => setEditingDocument(null)}
-            onSave={handleSaveDocument}
-            onStatusChange={handleStatusChange}
-            onDelete={handleDeleteDocument}
-          />
-        ))}
-      </div>
+      {groupedDocuments.map((group) => (
+        <section key={group.key} className="document-group-section" aria-label={group.title}>
+          <div className="document-group-heading">
+            <h3>{group.title}</h3>
+            <span>{group.documents.length} {group.documents.length === 1 ? "document" : "documents"}</span>
+          </div>
+          <div className="document-card-grid">
+            {group.documents.map((document) => (
+              <ManagerDocumentCard
+                key={document.id}
+                document={document}
+                clubs={clubs}
+                canEdit={user.role === "ADMIN" || (user.role === "FACILITATOR" && Boolean(document.clubId))}
+                canArchive={user.role === "ADMIN"}
+                canDelete={user.role === "ADMIN"}
+                canAssignGlobal={user.role === "ADMIN"}
+                isEditing={editingDocument?.id === document.id}
+                isSubmitting={isSubmitting}
+                onEdit={() => setEditingDocument(document)}
+                onCancelEdit={() => setEditingDocument(null)}
+                onSave={handleSaveDocument}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDeleteDocument}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
     </section>
   );
 }
@@ -2139,6 +2164,7 @@ function ManagerDocumentCard({
       fileUrl: String(formData.get("fileUrl") || ""),
       programLevel: String(formData.get("programLevel") || "SENIOR"),
       bandLevel: String(formData.get("bandLevel") || "White"),
+      sessionModule: String(formData.get("sessionModule") || ""),
       clubId: String(formData.get("clubId") || "") || null,
       category: String(formData.get("category") || "Other")
     });
@@ -2151,6 +2177,7 @@ function ManagerDocumentCard({
           <label>Document Title<input name="title" defaultValue={document.title} required /></label>
           <label>Description<textarea name="description" defaultValue={document.description ?? ""} rows={3} /></label>
           <label>Document Link<input name="fileUrl" type="url" defaultValue={document.fileUrl} placeholder="Paste Google Drive, PDF, or website link" /></label>
+          <label>Session / Module<input name="sessionModule" defaultValue={document.sessionModule ?? ""} placeholder="Optional" /></label>
           <label>
             Program
             <select name="programLevel" defaultValue={document.programLevel}>
@@ -2194,6 +2221,7 @@ function ManagerDocumentCard({
           <dl className="document-meta">
             <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
             <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
+            <div><dt>Session</dt><dd>{document.sessionModule || "General"}</dd></div>
             <div><dt>Status</dt><dd>{document.status === "ARCHIVED" ? "Archived" : "Active"}</dd></div>
           </dl>
           {!link ? <p className="document-link-missing">Link not added yet</p> : null}
@@ -2304,15 +2332,23 @@ function ResourceHelpGroup({
 }
 
 function ResourceGroup({ title, documents, emptyText }: { title: string; documents: BandDocument[]; emptyText: string }) {
+  const groupedDocuments = groupDocumentsByCategory(documents);
+
   return (
     <DataPanel title={title}>
-      {documents.length ? (
-        <div className="document-card-grid compact">
-          {documents.map((document) => (
-            <ResourceCard key={document.id} document={document} />
-          ))}
-        </div>
-      ) : <p>{emptyText}</p>}
+      {documents.length ? groupedDocuments.map((group) => (
+        <section key={group.key} className="student-document-category">
+          <div className="document-group-heading compact">
+            <h3>{group.title}</h3>
+            <span>{group.documents.length}</span>
+          </div>
+          <div className="document-card-grid compact">
+            {group.documents.map((document) => (
+              <ResourceCard key={document.id} document={document} />
+            ))}
+          </div>
+        </section>
+      )) : <p>{emptyText}</p>}
     </DataPanel>
   );
 }
@@ -2332,6 +2368,7 @@ function ResourceCard({ document }: { document: BandDocument }) {
       <dl className="document-meta">
         <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
         <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
+        <div><dt>Session</dt><dd>{document.sessionModule || "General"}</dd></div>
       </dl>
       {!link ? <p className="document-link-missing">Resource link not added yet.</p> : null}
       <div className="document-actions">
@@ -2341,6 +2378,39 @@ function ResourceCard({ document }: { document: BandDocument }) {
       </div>
     </article>
   );
+}
+
+function groupDocumentsByProgramBandCategory(documents: BandDocument[]) {
+  const groups = new Map<string, { key: string; title: string; documents: BandDocument[] }>();
+
+  documents.forEach((document) => {
+    const key = `${document.programLevel}|${document.bandLevel}|${document.category}`;
+    const title = `${formatProgramLevel(document.programLevel)} - ${document.bandLevel} - ${document.category}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, { key, title, documents: [] });
+    }
+
+    groups.get(key)!.documents.push(document);
+  });
+
+  return Array.from(groups.values());
+}
+
+function groupDocumentsByCategory(documents: BandDocument[]) {
+  const groups = new Map<string, { key: string; title: string; documents: BandDocument[] }>();
+
+  documents.forEach((document) => {
+    const key = document.category || "Other";
+
+    if (!groups.has(key)) {
+      groups.set(key, { key, title: key, documents: [] });
+    }
+
+    groups.get(key)!.documents.push(document);
+  });
+
+  return Array.from(groups.values());
 }
 
 type ResourceFilters = {

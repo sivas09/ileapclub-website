@@ -259,6 +259,7 @@ export type BandDocument = {
   programLevel: string;
   bandLevel: string;
   bandOrder: number;
+  sessionModule?: string | null;
   clubId?: string | null;
   clubName: string;
   category: string;
@@ -819,6 +820,7 @@ export async function createBandDocument(payload: {
   fileUrl: string;
   programLevel: string;
   bandLevel: string;
+  sessionModule?: string;
   clubId?: string | null;
   category?: string;
   status?: string;
@@ -836,6 +838,7 @@ export async function updateBandDocument(documentId: string, payload: Partial<{
   fileUrl: string;
   programLevel: string;
   bandLevel: string;
+  sessionModule: string;
   clubId: string | null;
   category: string;
   status: string;
