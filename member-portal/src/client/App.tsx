@@ -331,11 +331,15 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
         </div>
       </section>
 
-      <section className="dashboard-grid">
-        <PortalCard title="Primary Actions" items={copy.actions} />
-        <PortalCard title="Important Reports" items={copy.reports} />
-        <PortalCard title="Next Modules To Build" items={upcomingWork} />
-      </section>
+      {user.role === "STUDENT" ? <StudentHomeSummary user={user} /> : null}
+
+      {user.role !== "STUDENT" ? (
+        <section className="dashboard-grid">
+          <PortalCard title="Primary Actions" items={copy.actions} />
+          <PortalCard title="Important Reports" items={copy.reports} />
+          <PortalCard title="Next Modules To Build" items={upcomingWork} />
+        </section>
+      ) : null}
 
       {user.role === "ADMIN" ? <AdminWorkspace currentUser={user} /> : null}
       {user.role !== "STUDENT" ? <MembersWorkspace user={user} /> : null}
@@ -357,6 +361,83 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
         {items.map((item) => <li key={item}>{item}</li>)}
       </ul>
     </article>
+  );
+}
+
+function StudentHomeSummary({ user }: { user: PortalUser }) {
+  const [progress, setProgress] = useState<StudentProgress | null>(null);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([getStudentProgress(), getMeetingsOverview()])
+      .then(([progressResult, meetingsResult]) => {
+        setProgress(progressResult);
+        setMeetings(meetingsResult.meetings);
+      })
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load your dashboard summary."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const upcomingMeetings = meetings
+    .filter((meeting) => isTodayOrFuture(meeting.meetingDate))
+    .sort((first, second) => new Date(first.meetingDate).getTime() - new Date(second.meetingDate).getTime());
+  const nextMeeting = upcomingMeetings[0] ?? null;
+  const bookedSlots = upcomingMeetings.flatMap((meeting) =>
+    meeting.roleSlots
+      .filter((slot) => slot.assignedStudent?.user.id === user.id)
+      .map((slot) => ({ meeting, slot }))
+  );
+  const currentBand = progress?.summary.bandLevel ?? "Not set";
+  const currentBandRequirements = progress?.requirements.filter((entry) => entry.requirement.bandLevel === currentBand) ?? [];
+  const completedCurrentBandRequirements = currentBandRequirements.filter((entry) => entry.isCompleted).length;
+  const progressText = currentBandRequirements.length
+    ? `${completedCurrentBandRequirements}/${currentBandRequirements.length} requirements`
+    : "No requirements yet";
+
+  return (
+    <section className="student-home-summary" aria-label="Student home summary">
+      <div className="student-home-summary-header">
+        <div>
+          <p className="eyebrow">My snapshot</p>
+          <h3>What matters now</h3>
+        </div>
+        {isLoading ? <span>Loading...</span> : null}
+      </div>
+
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      <div className="student-home-grid">
+        <article>
+          <span>Current Band</span>
+          <strong>{currentBand}</strong>
+          <small>{formatProgramLevel(progress?.summary.programLevel)}</small>
+        </article>
+        <article>
+          <span>Progress Toward Next Band</span>
+          <strong>{progressText}</strong>
+          <small>{currentBandRequirements.length ? "Current band requirements" : "Ask your facilitator for setup"}</small>
+        </article>
+        <article>
+          <span>Next Meeting</span>
+          <strong>{nextMeeting ? nextMeeting.title : "No upcoming meeting"}</strong>
+          <small>{nextMeeting ? `${formatDate(nextMeeting.meetingDate)}${nextMeeting.startTime ? ` at ${nextMeeting.startTime}` : ""}` : "Check back soon"}</small>
+        </article>
+        <article>
+          <span>Booked Roles</span>
+          <strong>{bookedSlots.length ? `${bookedSlots.length} booked` : "None booked"}</strong>
+          <small>{bookedSlots[0] ? `${roleSlotName(bookedSlots[0].slot)} - ${bookedSlots[0].meeting.title}` : "Open Meetings to choose roles"}</small>
+        </article>
+      </div>
+
+      <nav className="student-quick-links" aria-label="Student quick links">
+        <a href="#meetings">Meetings</a>
+        <a href="#resources">Resources</a>
+        <a href="#progress">Band Progress</a>
+        <a href="#club-members">My Club</a>
+      </nav>
+    </section>
   );
 }
 
@@ -4258,4 +4339,12 @@ function formatDate(value: string) {
     year: "numeric",
     timeZone: "UTC"
   }).format(new Date(value));
+}
+
+function isTodayOrFuture(value: string) {
+  const target = new Date(value);
+  const today = new Date();
+
+  return Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate())
+    >= Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
 }

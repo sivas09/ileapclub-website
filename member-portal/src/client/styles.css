@@ -2090,6 +2090,7 @@ button {
   .resource-detail-meta {
     grid-template-columns: 1fr;
   }
+
 }
 
 @media (max-width: 520px) {
@@ -2107,6 +2108,7 @@ button {
   .user-menu button {
     width: 100%;
   }
+
 }
 
 /* Portal product shell */
@@ -2446,6 +2448,97 @@ body {
   margin-top: 18px;
 }
 
+.student-home-summary {
+  width: min(1240px, 100%);
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--portal-shadow);
+}
+
+.student-home-summary-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.student-home-summary-header h3 {
+  margin: 4px 0 0;
+  color: var(--portal-blue);
+  font-size: 1.25rem;
+}
+
+.student-home-summary-header span {
+  color: var(--portal-muted);
+  font-weight: 850;
+}
+
+.student-home-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.student-home-grid article {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid #e0e8f1;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.student-home-grid span {
+  color: var(--portal-muted);
+  font-size: 0.74rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.student-home-grid strong {
+  color: var(--portal-blue);
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.student-home-grid small {
+  color: var(--portal-muted);
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.student-quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.student-quick-links a {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.student-quick-links a:hover,
+.student-quick-links a:focus-visible {
+  border-color: var(--portal-teal);
+  color: var(--portal-teal);
+}
+
 .portal-card,
 .admin-workspace,
 .meeting-workspace,
@@ -2635,6 +2728,10 @@ body {
   .dashboard-hero {
     grid-template-columns: 1fr;
   }
+
+  .student-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 520px) {
@@ -2666,5 +2763,18 @@ body {
   .portal-brand-logo img {
     max-width: 88px;
     max-height: 28px;
+  }
+
+  .student-home-summary-header {
+    flex-direction: column;
+  }
+
+  .student-home-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-quick-links a {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 }
