@@ -3333,20 +3333,24 @@ function BookRoles({
   const claimedCount = user.role === "STUDENT"
     ? meeting.roleSlots.filter((slot) => slot.assignedStudent?.user.id === user.id).length
     : 0;
+  const hasClaimedLeadershipRole = user.role === "STUDENT"
+    ? meeting.roleSlots.some((slot) => slot.assignedStudent?.user.id === user.id && isLeadershipMeetingRole(slot))
+    : false;
   const openSlots = meeting.roleSlots.filter((slot) => !slot.assignedStudentId);
   const canBook = user.role === "STUDENT" && !meeting.isRoleLocked;
 
   return (
     <section className="meeting-mode-section" aria-label="Book roles">
       <MeetingSummary meeting={meeting} />
-      <p className="field-note">You can claim up to 2 roles per meeting.</p>
+      <p className="field-note">You can claim up to 2 roles per meeting, including a maximum of 1 leadership role.</p>
       {meeting.isRoleLocked ? <p className="admin-status is-error">Role booking is locked for this meeting.</p> : null}
       {user.role !== "STUDENT" ? <p className="loading-state">Managers can review booking availability here. Use Manage Roles to assign students.</p> : null}
       <ul className="booking-list">
         {meeting.roleSlots.map((slot) => {
           const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "";
           const isOwnRole = slot.assignedStudent?.user.id === user.id;
-          const isAvailable = canBook && !slot.assignedStudentId && claimedCount < 2;
+          const isLeadershipRole = isLeadershipMeetingRole(slot);
+          const isAvailable = canBook && !slot.assignedStudentId && claimedCount < 2 && (!isLeadershipRole || !hasClaimedLeadershipRole);
           const canRelease = canBook && isOwnRole;
 
           return (
@@ -3388,6 +3392,7 @@ function BookRoles({
       </ul>
       {!openSlots.length ? <p className="loading-state">No open roles are available for this meeting.</p> : null}
       {user.role === "STUDENT" && claimedCount >= 2 ? <p className="admin-status is-success">You have claimed 2 roles for this meeting.</p> : null}
+      {user.role === "STUDENT" && claimedCount < 2 && hasClaimedLeadershipRole ? <p className="admin-status is-success">You have claimed your leadership role for this meeting.</p> : null}
     </section>
   );
 }
@@ -4725,6 +4730,16 @@ function roleDefinitionsForSlot(roleDefinitions: RoleDefinition[], slot: Meeting
   }
 
   return [...roleDefinitions, slot.roleDefinition];
+}
+
+function isLeadershipMeetingRole(slot: Meeting["roleSlots"][number]) {
+  return isLeadershipRoleName(slot.slotLabel || "") || isLeadershipRoleName(slot.roleDefinition.name);
+}
+
+function isLeadershipRoleName(roleName: string) {
+  return ["ichair", "igrammarian", "ifinesmaster", "ifillercounter", "itimer"].includes(
+    roleName.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
+  );
 }
 
 function normalizeResourceKey(value: string) {

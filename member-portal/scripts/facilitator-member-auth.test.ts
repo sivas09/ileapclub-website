@@ -11,7 +11,12 @@ import {
 } from "../src/server/routes/members.js";
 import { canPermanentlyDeleteResourceLink } from "../src/server/routes/resources.js";
 import { canManageBandRequirementDefinitions } from "../src/server/routes/student.js";
-import { canManageRoleDefinitions, canReleaseMeetingRole } from "../src/server/routes/meetings.js";
+import {
+  canManageRoleDefinitions,
+  canReleaseMeetingRole,
+  isLeadershipRoleName,
+  roleAssignmentLimitViolation
+} from "../src/server/routes/meetings.js";
 
 const assignedClubId = "assigned-club";
 const otherClubId = "other-club";
@@ -168,6 +173,45 @@ assertEqual(
   false,
   "student cannot release another student's meeting role"
 );
+assertEqual(
+  isLeadershipRoleName("iFines Master"),
+  true,
+  "iFines Master is treated as a leadership role"
+);
+assertEqual(
+  isLeadershipRoleName("iFinesMaster"),
+  true,
+  "iFinesMaster is treated as a leadership role"
+);
+assertEqual(
+  isLeadershipRoleName("Prepared Speech"),
+  false,
+  "prepared speech is not treated as a leadership role"
+);
+assertEqual(
+  roleAssignmentLimitViolation(
+    [roleSlot("Prepared Speech"), roleSlot("iNews Report")],
+    roleSlot("Prepared Speech Evaluator")
+  ) !== null,
+  true,
+  "third role assignment is blocked"
+);
+assertEqual(
+  roleAssignmentLimitViolation(
+    [roleSlot("iChair")],
+    roleSlot("iTimer")
+  ) !== null,
+  true,
+  "second leadership role assignment is blocked"
+);
+assertEqual(
+  roleAssignmentLimitViolation(
+    [roleSlot("iChair")],
+    roleSlot("Prepared Speech")
+  ),
+  null,
+  "one leadership role plus one regular role is allowed"
+);
 
 assertEqual(
   canPermanentlyDeleteMemberRole(Role.ADMIN),
@@ -282,10 +326,17 @@ assertEqual(
 
 console.log("Facilitator authorization tests passed.");
 
-function assertEqual(actual: boolean | number, expected: boolean | number, label: string) {
+function assertEqual(actual: boolean | number | string | null, expected: boolean | number | string | null, label: string) {
   if (actual !== expected) {
     throw new Error(`${label}: expected ${expected}, received ${actual}`);
   }
+}
+
+function roleSlot(name: string) {
+  return {
+    slotLabel: name,
+    roleDefinition: { name }
+  };
 }
 
 function emptyDependencies() {
