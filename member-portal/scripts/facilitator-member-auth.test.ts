@@ -1,7 +1,7 @@
 import { Role } from "@prisma/client";
 import { canAdminResetPassword } from "../src/server/routes/admin.js";
 import { isValidNewPassword } from "../src/server/routes/auth.js";
-import { canEditDocumentScope } from "../src/server/routes/documents.js";
+import { canEditDocumentScope, canPermanentlyDeleteDocument } from "../src/server/routes/documents.js";
 import {
   canAccessStudentMemberships,
   canManageClubIdSet,
@@ -9,6 +9,7 @@ import {
   historicalDependencyReasons,
   permanentMemberDeleteDecision
 } from "../src/server/routes/members.js";
+import { canPermanentlyDeleteResourceLink } from "../src/server/routes/resources.js";
 
 const assignedClubId = "assigned-club";
 const otherClubId = "other-club";
@@ -85,6 +86,36 @@ assertEqual(
   true,
   "admin can edit global documents"
 );
+assertEqual(
+  canPermanentlyDeleteDocument(Role.ADMIN),
+  true,
+  "admin can permanently delete documents"
+);
+assertEqual(
+  canPermanentlyDeleteDocument(Role.FACILITATOR),
+  false,
+  "facilitator cannot permanently delete documents"
+);
+assertEqual(
+  canPermanentlyDeleteDocument(Role.STUDENT),
+  false,
+  "student cannot permanently delete documents"
+);
+assertEqual(
+  canPermanentlyDeleteResourceLink(Role.ADMIN),
+  true,
+  "admin can permanently delete resource links"
+);
+assertEqual(
+  canPermanentlyDeleteResourceLink(Role.FACILITATOR),
+  false,
+  "facilitator cannot permanently delete resource links"
+);
+assertEqual(
+  canPermanentlyDeleteResourceLink(Role.STUDENT),
+  false,
+  "student cannot permanently delete resource links"
+);
 
 assertEqual(
   canPermanentlyDeleteMemberRole(Role.ADMIN),
@@ -109,7 +140,7 @@ assertEqual(
 assertEqual(
   historicalDependencyReasons({ ...emptyDependencies(), attendance: 1, meetingFeedback: 1 }).length > 0,
   true,
-  "related historical data blocks permanent deletion"
+  "related historical data is detected before permanent deletion"
 );
 assertEqual(
   permanentMemberDeleteDecision({
@@ -168,8 +199,8 @@ assertEqual(
     isSelf: false,
     blockingReasons: ["1 attendance record"]
   }).status,
-  409,
-  "historical data cannot accidentally be deleted"
+  200,
+  "admin can permanently delete a member with historical data"
 );
 assertEqual(
   isValidNewPassword("12345678"),

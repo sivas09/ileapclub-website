@@ -697,28 +697,7 @@ membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
     return;
   }
 
-  const dependencies = await getStudentDeleteDependencies(student!.id, student!.userId);
-  const blockingReasons = historicalDependencyReasons(dependencies);
-
-  const dependencyDecision = permanentMemberDeleteDecision({
-    authenticatedRole: user.role,
-    targetRole: student!.user.role,
-    isSelf: false,
-    blockingReasons
-  });
-
-  if (dependencyDecision.status !== 200) {
-    response.status(dependencyDecision.status).json({
-      message: dependencyDecision.message,
-      dependencies
-    });
-    return;
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.student.delete({ where: { id: student!.id } });
-    await tx.user.delete({ where: { id: student!.userId } });
-  });
+  const deletionSummary = await deleteStudentMemberRecords(student!.id, student!.userId);
 
   response.json({
     deletedMember: {
@@ -726,7 +705,8 @@ membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
       userId: student!.userId,
       displayName: displayName(student!.user),
       email: student!.user.email
-    }
+    },
+    deletionSummary
   });
 }));
 
@@ -855,7 +835,7 @@ export function permanentMemberDeleteDecision(input: {
   authenticatedRole: Role | null;
   targetRole: Role | null;
   isSelf: boolean;
-  blockingReasons: string[];
+  blockingReasons?: string[];
 }) {
   if (!input.authenticatedRole) {
     return { status: 401, message: "Authentication required." };
@@ -871,13 +851,6 @@ export function permanentMemberDeleteDecision(input: {
 
   if (input.isSelf) {
     return { status: 400, message: "You cannot delete your own account." };
-  }
-
-  if (input.blockingReasons.length > 0) {
-    return {
-      status: 409,
-      message: `Member cannot be permanently deleted because historical records exist: ${input.blockingReasons.join(", ")}. Deactivate the member instead.`
-    };
   }
 
   return { status: 200, message: "Member can be permanently deleted." };
@@ -931,6 +904,46 @@ export function historicalDependencyReasons(dependencies: Record<keyof typeof hi
   return Object.entries(dependencies)
     .filter(([, count]) => count > 0)
     .map(([key, count]) => `${count} ${historicalDependencyLabels[key as keyof typeof historicalDependencyLabels]}`);
+}
+
+export async function deleteStudentMemberRecords(studentId: string, userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const roleScores = await tx.meetingRoleScore.deleteMany({ where: { studentId } });
+    const meetingFeedback = await tx.studentMeetingFeedback.deleteMany({ where: { studentId } });
+    const attendance = await tx.meetingAttendance.deleteMany({ where: { studentId } });
+    const requirementProgress = await tx.studentRequirementProgress.deleteMany({ where: { studentId } });
+    const clubMemberships = await tx.studentClubMembership.deleteMany({ where: { studentId } });
+    const parentLinks = await tx.studentParent.deleteMany({ where: { studentId } });
+    const assignedRoleSlots = await tx.meetingRoleSlot.updateMany({
+      where: { assignedStudentId: studentId },
+      data: {
+        assignedStudentId: null,
+        assignedByUserId: null,
+        assignedAt: null
+      }
+    });
+    const uploadedDocuments = await tx.bandDocument.deleteMany({ where: { uploadedById: userId } });
+    await tx.resourceLink.updateMany({
+      where: { updatedById: userId },
+      data: { updatedById: null }
+    });
+    const createdResourceLinks = await tx.resourceLink.deleteMany({ where: { createdById: userId } });
+
+    await tx.student.delete({ where: { id: studentId } });
+    await tx.user.delete({ where: { id: userId } });
+
+    return {
+      deletedRoleScores: roleScores.count,
+      deletedMeetingFeedback: meetingFeedback.count,
+      deletedAttendance: attendance.count,
+      deletedRequirementProgress: requirementProgress.count,
+      deletedClubMemberships: clubMemberships.count,
+      deletedParentLinks: parentLinks.count,
+      clearedAssignedRoleSlots: assignedRoleSlots.count,
+      deletedUploadedDocuments: uploadedDocuments.count,
+      deletedCreatedResourceLinks: createdResourceLinks.count
+    };
+  });
 }
 
 function startOfTodayUtc() {

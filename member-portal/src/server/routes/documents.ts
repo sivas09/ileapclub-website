@@ -256,6 +256,34 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
   response.json({ document: serializeDocument(updatedDocument) });
 }));
 
+documentsRouter.delete("/:documentId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (!canPermanentlyDeleteDocument(user.role)) {
+    response.status(403).json({ message: "Only admins can delete documents." });
+    return;
+  }
+
+  const documentId = String(request.params.documentId);
+  const existing = await prisma.bandDocument.findUnique({
+    where: { id: documentId },
+    include: documentInclude
+  });
+
+  if (!existing) {
+    response.status(404).json({ message: "Document not found." });
+    return;
+  }
+
+  await prisma.bandDocument.delete({ where: { id: existing.id } });
+
+  response.json({ deletedDocument: serializeDocument(existing) });
+}));
+
+export function canPermanentlyDeleteDocument(role: Role) {
+  return role === Role.ADMIN;
+}
+
 const documentInclude = {
   club: true,
   uploadedBy: {

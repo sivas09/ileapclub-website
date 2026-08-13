@@ -795,6 +795,12 @@ export async function updateBandDocument(documentId: string, payload: Partial<{
   });
 }
 
+export async function deleteBandDocument(documentId: string) {
+  return request<{ deletedDocument: BandDocument }>(`/api/documents/${documentId}`, {
+    method: "DELETE"
+  });
+}
+
 export async function getResourceLinks(params: {
   roleKey?: string;
   requirementId?: string;
@@ -849,6 +855,12 @@ export async function updateResourceLink(resourceId: string, payload: Partial<{
   });
 }
 
+export async function deleteResourceLink(resourceId: string) {
+  return request<{ deletedResource: ResourceLink }>(`/api/resources/${resourceId}`, {
+    method: "DELETE"
+  });
+}
+
 export async function getMemberDetail(studentId: string) {
   return request<{ member: MemberDetail }>(`/api/members/${studentId}`);
 }
@@ -899,6 +911,17 @@ export async function permanentlyDeleteMember(studentId: string) {
       userId: string;
       displayName: string;
       email: string;
+    };
+    deletionSummary: {
+      deletedRoleScores: number;
+      deletedMeetingFeedback: number;
+      deletedAttendance: number;
+      deletedRequirementProgress: number;
+      deletedClubMemberships: number;
+      deletedParentLinks: number;
+      clearedAssignedRoleSlots: number;
+      deletedUploadedDocuments: number;
+      deletedCreatedResourceLinks: number;
     };
   }>(`/api/members/${studentId}`, {
     method: "DELETE"

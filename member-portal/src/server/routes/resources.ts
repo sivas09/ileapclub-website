@@ -177,6 +177,34 @@ resourcesRouter.patch("/:resourceId", asyncRoute(async (request, response) => {
   response.json({ resource: serializeResource(resource) });
 }));
 
+resourcesRouter.delete("/:resourceId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (!canPermanentlyDeleteResourceLink(user.role)) {
+    response.status(403).json({ message: "Only admins can delete resource links." });
+    return;
+  }
+
+  const resourceId = String(request.params.resourceId);
+  const existing = await prisma.resourceLink.findUnique({
+    where: { id: resourceId },
+    include: resourceInclude
+  });
+
+  if (!existing) {
+    response.status(404).json({ message: "Resource link not found." });
+    return;
+  }
+
+  await prisma.resourceLink.delete({ where: { id: existing.id } });
+
+  response.json({ deletedResource: serializeResource(existing) });
+}));
+
+export function canPermanentlyDeleteResourceLink(role: Role) {
+  return role === Role.ADMIN;
+}
+
 const resourceInclude = {
   requirement: true,
   createdBy: {

@@ -19,6 +19,8 @@ import {
   createResourceLink,
   createUser,
   deleteDemoUser,
+  deleteBandDocument,
+  deleteResourceLink,
   deleteSampleFeedback,
   deleteSampleUsers,
   downloadAgenda,
@@ -1324,7 +1326,7 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
   }
 
   async function deleteMember(member: MemberListEntry) {
-    const confirmed = window.confirm(`Permanently delete ${member.displayName}? This action cannot be undone. Members with historical meeting, scoring, feedback, attendance, or progress records cannot be permanently deleted.`);
+    const confirmed = window.confirm(`Permanently delete ${member.displayName}? This will delete this member's club memberships, attendance, role claims, scores, facilitator feedback, band progress, parent links, and other owned records. This action cannot be undone.`);
 
     if (!confirmed) {
       return;
@@ -1851,6 +1853,31 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
     await handleSaveDocument(document.id, { status: nextStatus });
   }
 
+  async function handleDeleteDocument(document: BandDocument) {
+    const confirmed = window.confirm(`Permanently delete document "${document.title}"? This action cannot be undone.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await deleteBandDocument(document.id);
+      await refreshDocuments();
+      if (editingDocument?.id === document.id) {
+        setEditingDocument(null);
+      }
+      setStatus("Document permanently deleted.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete document.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <section className="documents-workspace" id="documents" aria-label="Band document resources">
       <div className="admin-heading">
@@ -1962,6 +1989,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
             clubs={clubs}
             canEdit={user.role === "ADMIN" || (user.role === "FACILITATOR" && Boolean(document.clubId))}
             canArchive={user.role === "ADMIN"}
+            canDelete={user.role === "ADMIN"}
             canAssignGlobal={user.role === "ADMIN"}
             isEditing={editingDocument?.id === document.id}
             isSubmitting={isSubmitting}
@@ -1969,6 +1997,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
             onCancelEdit={() => setEditingDocument(null)}
             onSave={handleSaveDocument}
             onStatusChange={handleStatusChange}
+            onDelete={handleDeleteDocument}
           />
         ))}
       </div>
@@ -1981,18 +2010,21 @@ function ManagerDocumentCard({
   clubs,
   canEdit,
   canArchive,
+  canDelete,
   canAssignGlobal,
   isEditing,
   isSubmitting,
   onEdit,
   onCancelEdit,
   onSave,
-  onStatusChange
+  onStatusChange,
+  onDelete
 }: {
   document: BandDocument;
   clubs: AdminOverview["clubs"];
   canEdit: boolean;
   canArchive: boolean;
+  canDelete: boolean;
   canAssignGlobal: boolean;
   isEditing: boolean;
   isSubmitting: boolean;
@@ -2000,6 +2032,7 @@ function ManagerDocumentCard({
   onCancelEdit: () => void;
   onSave: (documentId: string, payload: Parameters<typeof updateBandDocument>[1]) => void;
   onStatusChange: (document: BandDocument) => void;
+  onDelete: (document: BandDocument) => void;
 }) {
   const link = documentLink(document);
 
@@ -2082,6 +2115,13 @@ function ManagerDocumentCard({
               </button>
             ) : null}
           </div>
+          {canDelete ? (
+            <div className="member-destructive-actions">
+              <button type="button" className="text-action danger-action" onClick={() => onDelete(document)} disabled={isSubmitting}>
+                Delete
+              </button>
+            </div>
+          ) : null}
         </>
       )}
     </article>
@@ -2321,6 +2361,34 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
     }
   }
 
+  async function handleDeleteResource(resource: ResourceLink) {
+    const confirmed = window.confirm(`Permanently delete resource "${resource.title}"? This action cannot be undone.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await deleteResourceLink(resource.id);
+      await refreshResources();
+      if (selectedResourceId === resource.id) {
+        setSelectedResourceId(null);
+        setSelectedResourceOverride(null);
+        setEditingResource(null);
+        window.location.hash = "resource-links";
+      }
+      setStatus("Resource permanently deleted.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete resource.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <section className="documents-workspace" id="resource-links" aria-label="Role and band resource help links">
       <div className="admin-heading">
@@ -2348,6 +2416,7 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
           onStatusChange={(targetResource) => handleSaveResource(targetResource.id, {
             status: targetResource.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED"
           })}
+          onDelete={handleDeleteResource}
         />
       ) : (
         <>
@@ -2452,7 +2521,8 @@ function ResourceLinkDetails({
   onBack,
   onCancelEdit,
   onSave,
-  onStatusChange
+  onStatusChange,
+  onDelete
 }: {
   resource: ResourceLink | null;
   canEdit: boolean;
@@ -2464,6 +2534,7 @@ function ResourceLinkDetails({
   onCancelEdit: () => void;
   onSave: (resourceId: string, payload: Parameters<typeof updateResourceLink>[1]) => void;
   onStatusChange: (resource: ResourceLink) => void;
+  onDelete: (resource: ResourceLink) => void;
 }) {
   if (isLoading) {
     return <p className="loading-state">Loading resource details...</p>;
@@ -2523,6 +2594,13 @@ function ResourceLinkDetails({
           <button type="button" onClick={onEdit}>Edit</button>
           <button type="button" onClick={() => onStatusChange(resource)} disabled={isSubmitting}>
             {resource.status === "ARCHIVED" ? "Restore" : "Archive"}
+          </button>
+        </div>
+      ) : null}
+      {canEdit ? (
+        <div className="member-destructive-actions">
+          <button type="button" className="text-action danger-action" onClick={() => onDelete(resource)} disabled={isSubmitting}>
+            Delete
           </button>
         </div>
       ) : null}
