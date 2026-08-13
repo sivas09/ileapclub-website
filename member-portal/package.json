@@ -18,7 +18,7 @@
     "db:setup": "npm run prisma:migrate:deploy && npm run db:seed",
     "smoke:api": "tsx scripts/smoke-api.ts",
     "test": "npm run test:auth",
-    "test:auth": "tsx scripts/facilitator-member-auth.test.ts",
+    "test:auth": "tsx scripts/facilitator-member-auth.test.ts && tsx scripts/endpoint-authorization.test.ts",
     "check": "npm run prisma:generate && npm run build"
   },
   "dependencies": {
