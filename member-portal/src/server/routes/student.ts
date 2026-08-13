@@ -15,6 +15,32 @@ const progressSchema = z.object({
   notes: z.string().trim().optional()
 });
 
+const bandRequirementSchema = z.object({
+  programLevel: z.enum(["JUNIOR", "SENIOR"]),
+  bandLevel: z.enum([
+    "White",
+    "Yellow",
+    "Orange I",
+    "Orange II",
+    "Green I",
+    "Green II",
+    "Blue I",
+    "Blue II",
+    "Red I",
+    "Red II",
+    "Brown I",
+    "Brown II",
+    "Black I",
+    "Black II"
+  ]),
+  name: z.string().trim().min(2),
+  description: z.string().trim().min(5),
+  requirementType: z.string().trim().min(2),
+  targetCount: z.coerce.number().int().min(1).default(1),
+  sortOrder: z.coerce.number().int().min(0).default(0),
+  isActive: z.boolean().optional()
+});
+
 const profileSchema = z.object({
   programLevel: z.enum(["JUNIOR", "SENIOR"]),
   bandLevel: z.enum([
@@ -286,6 +312,126 @@ studentRouter.get("/me/club-members", requireRole([Role.STUDENT]), asyncRoute(as
       clubName: membership.club.name
     }))
   });
+}));
+
+studentRouter.get("/requirements", requireRole([Role.ADMIN]), asyncRoute(async (_request, response) => {
+  const requirements = await prisma.bandRequirement.findMany({
+    orderBy: [{ programLevel: "asc" }, { bandOrder: "asc" }, { sortOrder: "asc" }, { name: "asc" }]
+  });
+
+  response.json({ requirements });
+}));
+
+studentRouter.post("/requirements", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+  const parsed = bandRequirementSchema.safeParse(request.body);
+
+  if (!parsed.success) {
+    response.status(400).json({ message: "Enter valid band requirement details." });
+    return;
+  }
+
+  const duplicate = await prisma.bandRequirement.findUnique({
+    where: {
+      programLevel_bandLevel_name: {
+        programLevel: parsed.data.programLevel,
+        bandLevel: parsed.data.bandLevel,
+        name: parsed.data.name
+      }
+    }
+  });
+
+  if (duplicate) {
+    response.status(409).json({ message: "A requirement with this program, band, and name already exists." });
+    return;
+  }
+
+  const requirement = await prisma.bandRequirement.create({
+    data: {
+      ...parsed.data,
+      bandOrder: getBandOrder(parsed.data.bandLevel) ?? 0,
+      isActive: parsed.data.isActive ?? true
+    }
+  });
+
+  response.status(201).json({ requirement });
+}));
+
+studentRouter.patch("/requirements/:requirementId", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+  const parsed = bandRequirementSchema.partial().safeParse(request.body);
+
+  if (!parsed.success || Object.keys(parsed.data).length === 0) {
+    response.status(400).json({ message: "Enter requirement changes." });
+    return;
+  }
+
+  const requirementId = String(request.params.requirementId);
+  const existing = await prisma.bandRequirement.findUnique({ where: { id: requirementId } });
+
+  if (!existing) {
+    response.status(404).json({ message: "Band requirement not found." });
+    return;
+  }
+
+  const programLevel = parsed.data.programLevel ?? existing.programLevel;
+  const bandLevel = parsed.data.bandLevel ?? existing.bandLevel;
+  const name = parsed.data.name ?? existing.name;
+  const duplicate = await prisma.bandRequirement.findFirst({
+    where: {
+      id: { not: existing.id },
+      programLevel,
+      bandLevel,
+      name
+    }
+  });
+
+  if (duplicate) {
+    response.status(409).json({ message: "A requirement with this program, band, and name already exists." });
+    return;
+  }
+
+  const requirement = await prisma.bandRequirement.update({
+    where: { id: existing.id },
+    data: {
+      ...parsed.data,
+      bandOrder: parsed.data.bandLevel ? getBandOrder(parsed.data.bandLevel) ?? existing.bandOrder : undefined
+    }
+  });
+
+  response.json({ requirement });
+}));
+
+studentRouter.delete("/requirements/:requirementId", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+  const requirementId = String(request.params.requirementId);
+  const existing = await prisma.bandRequirement.findUnique({ where: { id: requirementId } });
+
+  if (!existing) {
+    response.status(404).json({ message: "Band requirement not found." });
+    return;
+  }
+
+  const [progressCount, resourceCount] = await Promise.all([
+    prisma.studentRequirementProgress.count({ where: { requirementId: existing.id } }),
+    prisma.resourceLink.count({ where: { requirementId: existing.id } })
+  ]);
+
+  if (progressCount > 0 || resourceCount > 0) {
+    const requirement = await prisma.bandRequirement.update({
+      where: { id: existing.id },
+      data: { isActive: false }
+    });
+
+    response.json({
+      requirement,
+      deleted: false,
+      archived: true,
+      message: "Requirement has progress or resource links, so it was marked inactive instead of deleted."
+    });
+    return;
+  }
+
+  await prisma.bandRequirement.delete({ where: { id: existing.id } });
+
+  response.json({ requirement: existing, deleted: true, archived: false });
 }));
 
 studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (request, response) => {
@@ -728,6 +874,10 @@ async function canFacilitatorAccessStudent(facilitatorId: string, studentId: str
   ]);
 
   return Boolean(clubAssignment || centreAssignment);
+}
+
+export function canManageBandRequirementDefinitions(role: Role) {
+  return role === Role.ADMIN;
 }
 
 function formatClubNames(memberships: Array<{ club: { name: string } }>) {

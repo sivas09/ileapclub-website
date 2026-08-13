@@ -326,6 +326,7 @@ export type BandRequirement = {
   requirementType: string;
   targetCount: number;
   sortOrder: number;
+  isActive?: boolean;
 };
 
 export type StudentRequirementStatus = {
@@ -956,6 +957,48 @@ export async function updateStudentRequirement(studentId: string, requirementId:
 export async function backfillPreviousBandRequirements(studentId: string) {
   return request<{ updatedCount: number }>(`/api/student/${studentId}/requirements/backfill`, {
     method: "POST"
+  });
+}
+
+export async function getBandRequirements() {
+  return request<{ requirements: BandRequirement[] }>("/api/student/requirements");
+}
+
+export async function createBandRequirement(payload: {
+  programLevel: string;
+  bandLevel: string;
+  name: string;
+  description: string;
+  requirementType: string;
+  targetCount: number;
+  sortOrder: number;
+  isActive?: boolean;
+}) {
+  return request<{ requirement: BandRequirement }>("/api/student/requirements", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateBandRequirement(requirementId: string, payload: Partial<{
+  programLevel: string;
+  bandLevel: string;
+  name: string;
+  description: string;
+  requirementType: string;
+  targetCount: number;
+  sortOrder: number;
+  isActive: boolean;
+}>) {
+  return request<{ requirement: BandRequirement }>(`/api/student/requirements/${requirementId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteBandRequirement(requirementId: string) {
+  return request<{ requirement: BandRequirement; deleted: boolean; archived: boolean; message?: string }>(`/api/student/requirements/${requirementId}`, {
+    method: "DELETE"
   });
 }
 

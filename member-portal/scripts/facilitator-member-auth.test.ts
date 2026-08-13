@@ -10,6 +10,7 @@ import {
   permanentMemberDeleteDecision
 } from "../src/server/routes/members.js";
 import { canPermanentlyDeleteResourceLink } from "../src/server/routes/resources.js";
+import { canManageBandRequirementDefinitions } from "../src/server/routes/student.js";
 
 const assignedClubId = "assigned-club";
 const otherClubId = "other-club";
@@ -115,6 +116,21 @@ assertEqual(
   canPermanentlyDeleteResourceLink(Role.STUDENT),
   false,
   "student cannot permanently delete resource links"
+);
+assertEqual(
+  canManageBandRequirementDefinitions(Role.ADMIN),
+  true,
+  "admin can manage band requirement definitions"
+);
+assertEqual(
+  canManageBandRequirementDefinitions(Role.FACILITATOR),
+  false,
+  "facilitator cannot manage band requirement definitions"
+);
+assertEqual(
+  canManageBandRequirementDefinitions(Role.STUDENT),
+  false,
+  "student cannot manage band requirement definitions"
 );
 
 assertEqual(

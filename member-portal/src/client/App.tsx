@@ -7,11 +7,13 @@ import {
   assignClubFacilitator,
   assignMeetingSlot,
   BandDocument,
+  BandRequirement,
   backfillPreviousBandRequirements,
   changeMyPassword,
   claimMeetingSlot,
   clearToken,
   createBandDocument,
+  createBandRequirement,
   createCentre,
   createClub,
   createMeeting,
@@ -20,6 +22,7 @@ import {
   createUser,
   deleteDemoUser,
   deleteBandDocument,
+  deleteBandRequirement,
   deleteResourceLink,
   deleteSampleFeedback,
   deleteSampleUsers,
@@ -29,6 +32,7 @@ import {
   FeedbackReportEntry,
   getAdminOverview,
   getBandDocuments,
+  getBandRequirements,
   getCurrentUser,
   getFeedbackReport,
   getMemberDetail,
@@ -60,6 +64,7 @@ import {
   StudentProgress,
   toggleMeetingLock,
   updateBandDocument,
+  updateBandRequirement,
   updateMember,
   updateMeetingDetails,
   updateResourceLink,
@@ -390,6 +395,7 @@ function StudentHomeSummary({ user }: { user: PortalUser }) {
       .map((slot) => ({ meeting, slot }))
   );
   const currentBand = progress?.summary.bandLevel ?? "Not set";
+  const nextBand = getNextBandLevel(currentBand);
   const currentBandRequirements = progress?.requirements.filter((entry) => entry.requirement.bandLevel === currentBand) ?? [];
   const completedCurrentBandRequirements = currentBandRequirements.filter((entry) => entry.isCompleted).length;
   const progressText = currentBandRequirements.length
@@ -412,7 +418,7 @@ function StudentHomeSummary({ user }: { user: PortalUser }) {
         <article>
           <span>Current Band</span>
           <strong>{currentBand}</strong>
-          <small>{formatProgramLevel(progress?.summary.programLevel)}</small>
+          <small>{nextBand ? `Next band: ${nextBand}` : formatProgramLevel(progress?.summary.programLevel)}</small>
         </article>
         <article>
           <span>Progress Toward Next Band</span>
@@ -2996,6 +3002,7 @@ function MeetingWorkspace({ user }: { user: PortalUser }) {
 
       {canManageMeetings && overview?.students.length ? (
         <RequirementManagementPanel
+          user={user}
           students={overview.students}
           resources={resources}
           onSelectResource={setSelectedResource}
@@ -3380,11 +3387,13 @@ function StatusText({ isLocked }: { isLocked: boolean }) {
 }
 
 function RequirementManagementPanel({
+  user,
   students,
   resources,
   onSelectResource,
   onUpdated
 }: {
+  user: PortalUser;
   students: MeetingsOverview["students"];
   resources: ResourceLink[];
   onSelectResource: (resource: ResourceLink) => void;
@@ -3397,6 +3406,15 @@ function RequirementManagementPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  async function refreshSelectedProgress() {
+    if (!selectedStudentId) {
+      return;
+    }
+
+    const updatedProgress = await fetchStudentProgressForManager(selectedStudentId);
+    setProgress(updatedProgress);
+  }
+
   useEffect(() => {
     if (!selectedStudentId) {
       return;
@@ -3404,8 +3422,7 @@ function RequirementManagementPanel({
 
     setIsLoading(true);
     setError("");
-    fetchStudentProgressForManager(selectedStudentId)
-      .then(setProgress)
+    refreshSelectedProgress()
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load requirements."))
       .finally(() => setIsLoading(false));
   }, [selectedStudentId]);
@@ -3421,8 +3438,7 @@ function RequirementManagementPanel({
 
     try {
       await updateStudentRequirement(selectedStudentId, requirementId, { currentCount, isCompleted, notes });
-      const updatedProgress = await fetchStudentProgressForManager(selectedStudentId);
-      setProgress(updatedProgress);
+      await refreshSelectedProgress();
       setStatus(isCompleted ? "Requirement marked complete." : "Requirement completion undone.");
       onUpdated();
     } catch (updateError) {
@@ -3443,8 +3459,7 @@ function RequirementManagementPanel({
 
     try {
       const result = await backfillPreviousBandRequirements(selectedStudentId);
-      const updatedProgress = await fetchStudentProgressForManager(selectedStudentId);
-      setProgress(updatedProgress);
+      await refreshSelectedProgress();
       setStatus(`Previous band requirements backfilled. ${result.updatedCount} requirements marked complete.`);
       onUpdated();
     } catch (backfillError) {
@@ -3499,6 +3514,14 @@ function RequirementManagementPanel({
       {isLoading ? <p className="loading-state">Loading requirements...</p> : null}
       {progress ? (
         <>
+          {user.role === "ADMIN" ? (
+            <BandRequirementDefinitionManager
+              onChanged={() => {
+                refreshSelectedProgress().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to refresh requirements."));
+                onUpdated();
+              }}
+            />
+          ) : null}
           <div className="student-context-card">
             <strong>{progress.student.user.firstName} {progress.student.user.lastName}</strong>
             <span>Program Level: {formatProgramLevel(progress.summary.programLevel)} - Current Band: {progress.summary.bandLevel} - Band Ladder: {formatBandLadder(progress.summary.programLevel)}</span>
@@ -3541,6 +3564,7 @@ function RequirementManagementPanel({
                   <span>{formatBandLadder(progress.summary.programLevel)} - {entry.requirement.description}</span>
                 </div>
                 <div className="requirement-controls">
+                  <em>{entry.isCompleted ? "Completed" : "Not Completed"}</em>
                   <input
                     key={`${entry.requirement.id}-${entry.currentCount}-${entry.isCompleted}`}
                     type="number"
@@ -3570,6 +3594,197 @@ function RequirementManagementPanel({
       ) : null}
     </section>
   );
+}
+
+function BandRequirementDefinitionManager({ onChanged }: { onChanged: () => void }) {
+  const [requirements, setRequirements] = useState<BandRequirement[]>([]);
+  const [editingRequirement, setEditingRequirement] = useState<BandRequirement | null>(null);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+
+  async function refreshRequirements() {
+    const result = await getBandRequirements();
+    setRequirements(result.requirements);
+  }
+
+  useEffect(() => {
+    refreshRequirements()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load band requirements."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const payload = bandRequirementPayloadFromForm(form);
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      if (editingRequirement) {
+        await updateBandRequirement(editingRequirement.id, payload);
+        setEditingRequirement(null);
+        setStatus("Band requirement updated.");
+      } else {
+        await createBandRequirement(payload);
+        form.reset();
+        setIsFormOpen(false);
+        setStatus("Band requirement added.");
+      }
+
+      await refreshRequirements();
+      onChanged();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to save band requirement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleRemove(requirement: BandRequirement) {
+    const confirmed = window.confirm(`Remove "${requirement.name}" from ${formatProgramLevel(requirement.programLevel)} ${requirement.bandLevel}? If students already have progress for it, it will be marked inactive instead of deleted.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await deleteBandRequirement(requirement.id);
+      await refreshRequirements();
+      onChanged();
+      setStatus(result.message ?? (result.deleted ? "Band requirement deleted." : "Band requirement marked inactive."));
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Unable to remove band requirement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="requirement-definition-manager" aria-label="Band requirement definition management">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Admin setup</p>
+          <h3>Band Requirement Checklist Items</h3>
+        </div>
+        <button type="button" onClick={() => setIsFormOpen((isOpen) => !isOpen)} disabled={isSubmitting}>
+          {isFormOpen ? "Cancel Requirement" : "Add Requirement"}
+        </button>
+      </div>
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {isFormOpen || editingRequirement ? (
+        <BandRequirementForm
+          requirement={editingRequirement}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSubmit}
+          onCancel={() => {
+            setEditingRequirement(null);
+            setIsFormOpen(false);
+          }}
+        />
+      ) : null}
+      {isLoading ? <p className="loading-state">Loading band requirements...</p> : null}
+      {!isLoading && requirements.length ? (
+        <div className="requirement-definition-table-wrap">
+          <table className="requirement-definition-table">
+            <thead>
+              <tr>
+                <th>Program</th>
+                <th>Band</th>
+                <th>Requirement</th>
+                <th>Type</th>
+                <th>Target</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requirements.map((requirement) => (
+                <tr key={requirement.id} className={requirement.isActive === false ? "is-archived" : ""}>
+                  <td>{formatProgramLevel(requirement.programLevel)}</td>
+                  <td>{requirement.bandLevel}</td>
+                  <td>{requirement.name}</td>
+                  <td>{requirement.requirementType}</td>
+                  <td>{requirement.targetCount}</td>
+                  <td>{requirement.isActive === false ? "Inactive" : "Active"}</td>
+                  <td>
+                    <div className="meeting-row-actions">
+                      <button type="button" className="text-action" onClick={() => setEditingRequirement(requirement)} disabled={isSubmitting}>Edit</button>
+                      <button type="button" className="text-action danger-action" onClick={() => handleRemove(requirement)} disabled={isSubmitting}>Remove</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function BandRequirementForm({
+  requirement,
+  isSubmitting,
+  onSubmit,
+  onCancel
+}: {
+  requirement: BandRequirement | null;
+  isSubmitting: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <form className="document-form requirement-definition-form" onSubmit={onSubmit}>
+      <h3>{requirement ? "Edit Requirement" : "Add Requirement"}</h3>
+      <label>
+        Program
+        <select name="programLevel" defaultValue={requirement?.programLevel ?? "SENIOR"}>
+          {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>
+      <label>
+        Band
+        <select name="bandLevel" defaultValue={requirement?.bandLevel ?? "White"}>
+          {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
+        </select>
+      </label>
+      <label>Name<input name="name" defaultValue={requirement?.name ?? ""} required /></label>
+      <label>Type<input name="requirementType" defaultValue={requirement?.requirementType ?? ""} placeholder="Speech, Role, Report" required /></label>
+      <label>Target Count<input name="targetCount" type="number" min="1" defaultValue={requirement?.targetCount ?? 1} required /></label>
+      <label>Sort Order<input name="sortOrder" type="number" min="0" defaultValue={requirement?.sortOrder ?? 0} required /></label>
+      <label className="document-link-field">Description<textarea name="description" defaultValue={requirement?.description ?? ""} rows={3} required /></label>
+      <label className="checkbox-label"><input name="isActive" type="checkbox" defaultChecked={requirement?.isActive !== false} /> Active</label>
+      <div className="document-actions">
+        <button type="submit" disabled={isSubmitting}>{requirement ? "Save Requirement" : "Add Requirement"}</button>
+        <button type="button" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function bandRequirementPayloadFromForm(form: HTMLFormElement) {
+  const formData = new FormData(form);
+
+  return {
+    programLevel: String(formData.get("programLevel") || "SENIOR"),
+    bandLevel: String(formData.get("bandLevel") || "White"),
+    name: String(formData.get("name") || ""),
+    description: String(formData.get("description") || ""),
+    requirementType: String(formData.get("requirementType") || ""),
+    targetCount: Number(formData.get("targetCount") || 1),
+    sortOrder: Number(formData.get("sortOrder") || 0),
+    isActive: formData.get("isActive") === "on"
+  };
 }
 
 function FeedbackReportPanel() {
@@ -3944,14 +4159,26 @@ function StudentProgressDashboard() {
 
       {progress ? (
         <>
+          {(() => {
+            const completedRequirements = progress.requirements.filter((entry) => entry.isCompleted).length;
+            const currentBandRequirements = progress.requirements.filter((entry) => entry.requirement.bandLevel === progress.summary.bandLevel);
+            const completedCurrentBandRequirements = currentBandRequirements.filter((entry) => entry.isCompleted).length;
+
+            return (
+              <>
           <div className="progress-summary-grid">
             <SummaryTile label="Program Level" valueText={formatProgramLevel(progress.summary.programLevel)} />
             <SummaryTile label="Current Band" valueText={progress.summary.bandLevel} />
-            <SummaryTile label="Band Ladder" valueText={formatBandLadder(progress.summary.programLevel)} />
+            <SummaryTile label="Next Band" valueText={getNextBandLevel(progress.summary.bandLevel) ?? "Final band"} />
+            <SummaryTile label="Overall Progress" valueText={progress.requirements.length ? `${completedRequirements}/${progress.requirements.length}` : "N/A"} />
+            <SummaryTile label="Current Band Progress" valueText={currentBandRequirements.length ? `${completedCurrentBandRequirements}/${currentBandRequirements.length}` : "N/A"} />
             <SummaryTile label="Attendance" valueText={progress.summary.attendanceRate === null ? "N/A" : `${progress.summary.attendanceRate}%`} />
             <SummaryTile label="Roles Completed" value={progress.summary.rolesCompleted} />
             <SummaryTile label="Average Score" valueText={progress.summary.averageScore === null ? "N/A" : `${progress.summary.averageScore}`} />
           </div>
+              </>
+            );
+          })()}
           {progress.summary.programLevelWarning ? <p className="admin-status is-error" role="alert">{progress.summary.programLevelWarning}</p> : null}
 
           <div className="student-context-card">
@@ -3994,7 +4221,7 @@ function StudentProgressDashboard() {
             ) : <p>No facilitator feedback yet.</p>}
           </DataPanel>
 
-          <DataPanel title="Band Ladder Requirements">
+          <DataPanel title="Band Requirements Checklist">
             {progress.requirements.length ? (
               <ul className="requirement-list">
                 {progress.requirements.map((entry) => (
@@ -4014,7 +4241,7 @@ function StudentProgressDashboard() {
                         {entry.adminOverrideAt ? ` - admin override ${formatDate(entry.adminOverrideAt)}` : ""}
                       </span>
                     </div>
-                    <em>{entry.currentCount}/{entry.requirement.targetCount}</em>
+                    <em>{entry.isCompleted ? "Completed" : "Not Completed"} ({entry.currentCount}/{entry.requirement.targetCount})</em>
                   </li>
                 ))}
               </ul>
@@ -4312,6 +4539,12 @@ function formatBandLadder(programLevel?: string | null) {
   }
 
   return "Program level not set";
+}
+
+function getNextBandLevel(currentBand?: string | null) {
+  const currentIndex = bandLevelOptions.findIndex((bandLevel) => bandLevel === currentBand);
+
+  return currentIndex >= 0 ? bandLevelOptions[currentIndex + 1] ?? null : null;
 }
 
 function documentLink(document: { fileUrl?: string | null }) {

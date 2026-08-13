@@ -513,8 +513,9 @@ button {
 
 .requirement-controls {
   display: grid;
-  grid-template-columns: 86px auto;
+  grid-template-columns: minmax(110px, auto) 86px auto;
   gap: 10px;
+  align-items: center;
 }
 
 .student-placement-form {
@@ -570,6 +571,57 @@ button {
   color: #ffffff;
   background: #00296b;
   font-weight: 900;
+}
+
+.requirement-definition-manager {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.requirement-definition-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+}
+
+.requirement-definition-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.requirement-definition-table th,
+.requirement-definition-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e8f1;
+  color: #132238;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.requirement-definition-table th {
+  color: #00296b;
+  background: #f7fafc;
+  font-size: 0.76rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.requirement-definition-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.requirement-definition-table tr.is-archived {
+  opacity: 0.68;
+}
+
+.requirement-definition-form {
+  margin-top: 0;
 }
 
 .admin-form-grid {
