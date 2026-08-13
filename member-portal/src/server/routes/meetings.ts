@@ -6,6 +6,7 @@ import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
 import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
 import { standardIleapRoleNames } from "../services/standardRoles.js";
+import { leadershipRoleKeys } from "../../shared/portalConstants.js";
 
 const createMeetingSchema = z.object({
   clubId: z.string().min(1),
@@ -56,7 +57,7 @@ const studentFeedbackSchema = scoreSchema.extend({
 });
 
 const maximumRolesPerStudentMeeting = 2;
-const leadershipRoleKeys = new Set(["ichair", "igrammarian", "ifinesmaster", "ifillercounter", "itimer"]);
+const leadershipRoleKeySet = new Set(leadershipRoleKeys);
 
 const roleDefinitionSchema = z.object({
   name: z.string().trim().min(2),
@@ -1416,7 +1417,7 @@ export function canReleaseMeetingRole(role: Role, isOwnClaim = false) {
 }
 
 export function isLeadershipRoleName(roleName: string) {
-  return leadershipRoleKeys.has(normalizeLeadershipRoleName(roleName));
+  return leadershipRoleKeySet.has(normalizeLeadershipRoleName(roleName) as typeof leadershipRoleKeys[number]);
 }
 
 export function roleAssignmentLimitViolation(

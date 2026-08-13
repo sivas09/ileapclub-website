@@ -4,44 +4,11 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { bandLevels, documentCategories, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
 export const documentsRouter = Router();
 
 documentsRouter.use(requireAuth);
-
-const bandLevels = [
-  "White",
-  "Yellow",
-  "Orange I",
-  "Orange II",
-  "Green I",
-  "Green II",
-  "Blue I",
-  "Blue II",
-  "Red I",
-  "Red II",
-  "Brown I",
-  "Brown II",
-  "Black I",
-  "Black II"
-] as const;
-
-const categories = [
-  "Band Requirements",
-  "Session Materials",
-  "Case Studies",
-  "Worksheets",
-  "Speech Guides",
-  "Role Guides",
-  "Tips / Reference",
-  "Speech Guide",
-  "Presentation Guide",
-  "Worksheet",
-  "Rubric",
-  "Sample",
-  "Training Material",
-  "Other"
-] as const;
 
 const optionalDocumentUrl = z.string().trim().refine((value) => !value || isHttpUrl(value), {
   message: "Enter a valid http or https document link."
@@ -52,15 +19,13 @@ const documentSchema = z.object({
   description: z.string().trim().optional(),
   fileName: z.string().trim().optional(),
   fileUrl: optionalDocumentUrl.optional(),
-  programLevel: z.enum(["JUNIOR", "SENIOR"]),
+  programLevel: z.enum(programLevels),
   bandLevel: z.enum(bandLevels),
   sessionModule: z.string().trim().optional(),
   clubId: z.string().nullable().optional(),
-  category: z.enum(categories).optional(),
+  category: z.enum(documentCategories).optional(),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional()
 });
-
-type ProgramLevel = "JUNIOR" | "SENIOR";
 
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
   return (request: Request, response: Response, next: NextFunction) => {

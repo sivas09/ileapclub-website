@@ -1,54 +1,14 @@
 import type { ReactNode } from "react";
 import type { Meeting, MeetingsOverview, MemberDetail, ResourceLink, Role, RoleDefinition } from "../api";
-export const programLevelOptions = [
-  { value: "JUNIOR", label: "Junior" },
-  { value: "SENIOR", label: "Senior" }
-];
+import { bandLevels, documentCategories, leadershipRoleKeys, programLevels, resourceCategories } from "../../shared/portalConstants";
 
-export const bandLevelOptions = [
-  "White",
-  "Yellow",
-  "Orange I",
-  "Orange II",
-  "Green I",
-  "Green II",
-  "Blue I",
-  "Blue II",
-  "Red I",
-  "Red II",
-  "Brown I",
-  "Brown II",
-  "Black I",
-  "Black II"
-];
-
-export const documentCategoryOptions = [
-  "Band Requirements",
-  "Session Materials",
-  "Case Studies",
-  "Worksheets",
-  "Speech Guides",
-  "Role Guides",
-  "Tips / Reference",
-  "Speech Guide",
-  "Presentation Guide",
-  "Worksheet",
-  "Rubric",
-  "Sample",
-  "Training Material",
-  "Other"
-];
-
-export const resourceCategoryOptions = [
-  "Role Guide",
-  "Speech Guide",
-  "Presentation Guide",
-  "Report Guide",
-  "Video",
-  "Document",
-  "Sample",
-  "Other"
-];
+export const programLevelOptions = programLevels.map((value) => ({
+  value,
+  label: value === "JUNIOR" ? "Junior" : "Senior"
+}));
+export const bandLevelOptions = bandLevels;
+export const documentCategoryOptions = documentCategories;
+export const resourceCategoryOptions = resourceCategories;
 
 export function HelpLabel({
   label,
@@ -236,9 +196,11 @@ export function isLeadershipMeetingRole(slot: Meeting["roleSlots"][number]) {
 }
 
 export function isLeadershipRoleName(roleName: string) {
-  return ["ichair", "igrammarian", "ifinesmaster", "ifillercounter", "itimer"].includes(
-    roleName.trim().toLowerCase().replace(/[^a-z0-9]/g, "")
-  );
+  return leadershipRoleKeys.includes(normalizeLeadershipRoleName(roleName));
+}
+
+function normalizeLeadershipRoleName(roleName: string) {
+  return roleName.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 export function normalizeProgramLevel(program: string | null | undefined) {

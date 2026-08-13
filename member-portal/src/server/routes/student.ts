@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
+import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
 export const studentRouter = Router();
 
@@ -16,23 +17,8 @@ const progressSchema = z.object({
 });
 
 const bandRequirementSchema = z.object({
-  programLevel: z.enum(["JUNIOR", "SENIOR"]),
-  bandLevel: z.enum([
-    "White",
-    "Yellow",
-    "Orange I",
-    "Orange II",
-    "Green I",
-    "Green II",
-    "Blue I",
-    "Blue II",
-    "Red I",
-    "Red II",
-    "Brown I",
-    "Brown II",
-    "Black I",
-    "Black II"
-  ]),
+  programLevel: z.enum(programLevels),
+  bandLevel: z.enum(bandLevels),
   name: z.string().trim().min(2),
   description: z.string().trim().min(5),
   requirementType: z.string().trim().min(2),
@@ -42,41 +28,9 @@ const bandRequirementSchema = z.object({
 });
 
 const profileSchema = z.object({
-  programLevel: z.enum(["JUNIOR", "SENIOR"]),
-  bandLevel: z.enum([
-    "White",
-    "Yellow",
-    "Orange I",
-    "Orange II",
-    "Green I",
-    "Green II",
-    "Blue I",
-    "Blue II",
-    "Red I",
-    "Red II",
-    "Brown I",
-    "Brown II",
-    "Black I",
-    "Black II"
-  ])
+  programLevel: z.enum(programLevels),
+  bandLevel: z.enum(bandLevels)
 });
-
-const bandOrder = [
-  "White",
-  "Yellow",
-  "Orange I",
-  "Orange II",
-  "Green I",
-  "Green II",
-  "Blue I",
-  "Blue II",
-  "Red I",
-  "Red II",
-  "Brown I",
-  "Brown II",
-  "Black I",
-  "Black II"
-] as const;
 
 type StudentWithClubs = {
   bandLevel: string;
@@ -90,8 +44,6 @@ type StudentWithClubs = {
     };
   }>;
 };
-
-type ProgramLevel = "JUNIOR" | "SENIOR";
 
 const programLevelWarning = "Program level not set. Please ask Admin or Facilitator to set Junior or Senior.";
 
@@ -833,7 +785,7 @@ function inferProgramLevel(program: string): ProgramLevel | null {
 }
 
 function getBandOrder(bandLevel: string) {
-  const index = bandOrder.findIndex((level) => level === bandLevel);
+  const index = bandLevels.findIndex((level) => level === bandLevel);
 
   return index === -1 ? null : index + 1;
 }

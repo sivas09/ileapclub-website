@@ -5,29 +5,11 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
 export const membersRouter = Router();
 
 membersRouter.use(requireAuth);
-
-const bandOrder = [
-  "White",
-  "Yellow",
-  "Orange I",
-  "Orange II",
-  "Green I",
-  "Green II",
-  "Blue I",
-  "Blue II",
-  "Red I",
-  "Red II",
-  "Brown I",
-  "Brown II",
-  "Black I",
-  "Black II"
-] as const;
-
-type ProgramLevel = "JUNIOR" | "SENIOR";
 
 const memberCreateSchema = z.object({
   email: z.string().email(),
@@ -35,8 +17,8 @@ const memberCreateSchema = z.object({
   firstName: z.string().trim().min(1),
   lastName: z.string().trim().min(1),
   grade: z.string().trim().optional(),
-  programLevel: z.enum(["JUNIOR", "SENIOR"]).optional(),
-  bandLevel: z.enum(bandOrder).optional(),
+  programLevel: z.enum(programLevels).optional(),
+  bandLevel: z.enum(bandLevels).optional(),
   clubIds: z.array(z.string().min(1)).min(1)
 });
 
