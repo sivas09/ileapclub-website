@@ -1034,7 +1034,7 @@ function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
             <h3>Remove Sample Data</h3>
           </div>
         </div>
-        <p className="field-note">These actions only target sample/test records such as users with example.com email addresses or Sample in the name. Real member data should be deactivated, not deleted.</p>
+        <p className="field-note">These actions only target sample/test records such as users with example.com email addresses or Sample in the name. Use the Members page for permanent deletion of real member records.</p>
         <div className="record-actions">
           <button
             type="button"
@@ -1477,7 +1477,7 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Progress</button>
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Feedback</button>
                         <button type="button" onClick={() => startEditingMember(member.id)} disabled={isSubmitting}>Edit</button>
-                        <button type="button" className="danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
+                        <button type="button" className="text-action danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
                           {member.isActive === false ? "Reactivate" : "Deactivate"}
                         </button>
                         {user.role === "ADMIN" ? (
@@ -1486,7 +1486,7 @@ function MembersWorkspace({ user }: { user: PortalUser }) {
                       </div>
                       {user.role === "ADMIN" ? (
                         <div className="member-destructive-actions">
-                          <button type="button" className="danger-action" onClick={() => deleteMember(member)} disabled={isSubmitting}>
+                          <button type="button" className="text-action danger-action" onClick={() => deleteMember(member)} disabled={isSubmitting}>
                             Delete Member
                           </button>
                         </div>
