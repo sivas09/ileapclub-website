@@ -60,7 +60,7 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
     ...(bandLevel ? { bandLevel } : {}),
     ...(category ? { category } : {}),
     ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
-    ...(user.role === Role.ADMIN && status ? { status } : { status: "ACTIVE" })
+    ...(user.role === Role.ADMIN ? (status ? { status } : {}) : { status: "ACTIVE" })
   };
 
   if (user.role === Role.STUDENT) {
@@ -380,6 +380,7 @@ function serializeDocument(document: Prisma.BandDocumentGetPayload<{ include: ty
     category: document.category,
     uploadedBy: `${document.uploadedBy.firstName} ${document.uploadedBy.lastName}`,
     createdAt: document.createdAt,
+    updatedAt: document.updatedAt,
     status: document.status
   };
 }

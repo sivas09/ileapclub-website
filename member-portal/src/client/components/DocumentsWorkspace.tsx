@@ -108,8 +108,11 @@ type DocumentFilters = {
   clubId: string;
   category: string;
   search: string;
+  session: string;
   status: string;
 };
+
+type DocumentSort = "newest" | "oldest" | "name" | "band";
 
 export function DocumentsWorkspace({ user }: { user: PortalUser }) {
   const isStudent = user.role === "STUDENT";
@@ -131,18 +134,30 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
     clubId: "",
     category: "",
     search: "",
+    session: "",
     status: "ACTIVE"
   });
+  const [sortOrder, setSortOrder] = useState<DocumentSort>("newest");
   const [editingDocument, setEditingDocument] = useState<BandDocument | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
-  const groupedDocuments = groupDocumentsByProgramBandCategory(documents);
+  const sessionOptions = useMemo(() => {
+    return Array.from(new Set(documents.map((document) => documentSession(document)))).sort((left, right) => left.localeCompare(right));
+  }, [documents]);
+  const displayedDocuments = useMemo(() => {
+    const sessionDocuments = filters.session
+      ? documents.filter((document) => documentSession(document) === filters.session)
+      : documents;
+
+    return [...sessionDocuments].sort((left, right) => compareDocuments(left, right, sortOrder));
+  }, [documents, filters.session, sortOrder]);
 
   async function refreshDocuments(nextFilters = filters) {
-    const data = await getBandDocuments(nextFilters);
+    const { session: _session, ...serverFilters } = nextFilters;
+    const data = await getBandDocuments(serverFilters);
     setDocuments(data.documents);
     setClubs(data.clubs);
   }
@@ -157,7 +172,27 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
     const nextFilters = { ...filters, [key]: value };
     setFilters(nextFilters);
     setError("");
-    refreshDocuments(nextFilters).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to filter documents."));
+
+    if (key !== "session") {
+      refreshDocuments(nextFilters).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to filter documents."));
+    }
+  }
+
+  function clearFilters() {
+    const nextFilters: DocumentFilters = {
+      programLevel: "",
+      bandLevel: "",
+      clubId: "",
+      category: "",
+      search: "",
+      session: "",
+      status: user.role === "ADMIN" ? "" : "ACTIVE"
+    };
+
+    setFilters(nextFilters);
+    setSortOrder("newest");
+    setError("");
+    refreshDocuments(nextFilters).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to clear document filters."));
   }
 
   async function handleCreateDocument(event: FormEvent<HTMLFormElement>) {
@@ -269,6 +304,13 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
           </select>
         </label>
         <label>
+          Session
+          <select value={filters.session} onChange={(event) => updateFilter("session", event.currentTarget.value)}>
+            <option value="">All sessions</option>
+            {sessionOptions.map((session) => <option key={session} value={session}>{session}</option>)}
+          </select>
+        </label>
+        <label>
           Club
           <select value={filters.clubId} onChange={(event) => updateFilter("clubId", event.currentTarget.value)}>
             <option value="">All visible clubs</option>
@@ -297,6 +339,22 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
           <input value={filters.search} placeholder="Title" onChange={(event) => updateFilter("search", event.currentTarget.value)} />
         </label>
       </form>
+
+      <div className="document-list-toolbar">
+        <p aria-live="polite"><strong>{displayedDocuments.length}</strong> {displayedDocuments.length === 1 ? "document" : "documents"} found</p>
+        <div className="document-list-controls">
+          <label>
+            Sort
+            <select value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value as DocumentSort)}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name">Document name A-Z</option>
+              <option value="band">Band</option>
+            </select>
+          </label>
+          <button type="button" className="document-clear-filters" onClick={clearFilters}>Clear Filters</button>
+        </div>
+      </div>
 
       <div className="document-add-toggle">
         <button type="button" onClick={() => setIsAddFormOpen((isOpen) => !isOpen)}>
@@ -345,41 +403,52 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       ) : null}
 
       {isLoading ? <p className="loading-state">Loading documents...</p> : null}
-      {!isLoading && !documents.length ? <p className="loading-state">No documents found.</p> : null}
+      {!isLoading && !displayedDocuments.length ? <p className="loading-state">No documents match the selected filters.</p> : null}
 
-      {groupedDocuments.map((group) => (
-        <section key={group.key} className="document-group-section" aria-label={group.title}>
-          <div className="document-group-heading">
-            <h3>{group.title}</h3>
-            <span>{group.documents.length} {group.documents.length === 1 ? "document" : "documents"}</span>
-          </div>
-          <div className="document-card-grid">
-            {group.documents.map((document) => (
-              <ManagerDocumentCard
-                key={document.id}
-                document={document}
-                clubs={clubs}
-                canEdit={user.role === "ADMIN" || (user.role === "FACILITATOR" && Boolean(document.clubId))}
-                canArchive={user.role === "ADMIN"}
-                canDelete={user.role === "ADMIN"}
-                canAssignGlobal={user.role === "ADMIN"}
-                isEditing={editingDocument?.id === document.id}
-                isSubmitting={isSubmitting}
-                onEdit={() => setEditingDocument(document)}
-                onCancelEdit={() => setEditingDocument(null)}
-                onSave={handleSaveDocument}
-                onStatusChange={handleStatusChange}
-                onDelete={handleDeleteDocument}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+      {!isLoading && displayedDocuments.length ? (
+        <div className="document-list-wrap">
+          <table className="document-list-table">
+            <caption className="sr-only">Documents and management actions</caption>
+            <thead>
+              <tr>
+                <th scope="col">Document Name</th>
+                <th scope="col">Program</th>
+                <th scope="col">Band</th>
+                <th scope="col">Session</th>
+                <th scope="col">Category</th>
+                <th scope="col">Status</th>
+                <th scope="col">Updated</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedDocuments.map((document) => (
+                <ManagerDocumentRow
+                  key={document.id}
+                  document={document}
+                  clubs={clubs}
+                  canEdit={user.role === "ADMIN" || (user.role === "FACILITATOR" && Boolean(document.clubId))}
+                  canArchive={user.role === "ADMIN"}
+                  canDelete={user.role === "ADMIN"}
+                  canAssignGlobal={user.role === "ADMIN"}
+                  isEditing={editingDocument?.id === document.id}
+                  isSubmitting={isSubmitting}
+                  onEdit={() => setEditingDocument(document)}
+                  onCancelEdit={() => setEditingDocument(null)}
+                  onSave={handleSaveDocument}
+                  onStatusChange={handleStatusChange}
+                  onDelete={handleDeleteDocument}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function ManagerDocumentCard({
+function ManagerDocumentRow({
   document,
   clubs,
   canEdit,
@@ -426,82 +495,94 @@ function ManagerDocumentCard({
     });
   }
 
+  const statusLabel = document.status === "ARCHIVED" ? "Archived" : "Active";
+
   return (
-    <article className={`document-card ${document.status === "ARCHIVED" ? "is-archived" : ""}`}>
-      {isEditing ? (
-        <form className="document-edit-form" onSubmit={handleSubmit}>
-          <label>Document Title<input name="title" defaultValue={document.title} required /></label>
-          <label>Description<textarea name="description" defaultValue={document.description ?? ""} rows={3} /></label>
-          <label>Document Link<input name="fileUrl" type="url" defaultValue={document.fileUrl} placeholder="Paste Google Drive, PDF, or website link" /></label>
-          <label>Session / Module<input name="sessionModule" defaultValue={document.sessionModule ?? ""} placeholder="Optional" /></label>
-          <label>
-            Program
-            <select name="programLevel" defaultValue={document.programLevel}>
-              {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-          <label>
-            Band
-            <select name="bandLevel" defaultValue={document.bandLevel}>
-              {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
-            </select>
-          </label>
-          <label>
-            Club
-            <select name="clubId" defaultValue={document.clubId ?? ""}>
-              {canAssignGlobal ? <option value="">All clubs</option> : null}
-              {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
-            </select>
-          </label>
-          <label>
-            Category
-            <select name="category" defaultValue={document.category}>
-              {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
-            </select>
-          </label>
-          <div className="document-actions">
-            <button type="submit" disabled={isSubmitting}>Save</button>
-            <button type="button" onClick={onCancelEdit} disabled={isSubmitting}>Cancel</button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <div className="document-card-header">
-            <div>
-              <span>{document.category}</span>
-              <h3>{document.title}</h3>
-            </div>
-            <em>{document.status === "ARCHIVED" ? "Archived" : "Active"}</em>
-          </div>
-          <p>{document.description || "No description provided."}</p>
-          <dl className="document-meta">
-            <div><dt>Program</dt><dd>{formatProgramLevel(document.programLevel)}</dd></div>
-            <div><dt>Band</dt><dd>{document.bandLevel}</dd></div>
-            <div><dt>Session</dt><dd>{document.sessionModule || "General"}</dd></div>
-            <div><dt>Status</dt><dd>{document.status === "ARCHIVED" ? "Archived" : "Active"}</dd></div>
-          </dl>
-          {!link ? <p className="document-link-missing">Link not added yet</p> : null}
-          <div className="document-actions">
+    <>
+      <tr className={document.status === "ARCHIVED" ? "is-archived" : ""}>
+        <td className="document-name-cell" data-label="Document Name">
+          <strong title={document.title}>{document.title}</strong>
+          <small title={document.description || "No description provided."}>{document.description || "No description provided."}</small>
+        </td>
+        <td data-label="Program">
+          <span className="document-badge program-badge">{formatProgramLevel(document.programLevel)}</span>
+        </td>
+        <td data-label="Band">
+          <span className={`document-badge band-badge ${bandBadgeClass(document.bandLevel)}`}>{document.bandLevel}</span>
+        </td>
+        <td data-label="Session">
+          <span className="document-badge secondary-badge">{documentSession(document)}</span>
+        </td>
+        <td data-label="Category">
+          <span className="document-badge secondary-badge">{document.category}</span>
+        </td>
+        <td data-label="Status">
+          <span className={`document-badge status-badge ${document.status === "ARCHIVED" ? "is-archived" : "is-active"}`}>{statusLabel}</span>
+        </td>
+        <td className="document-updated-cell" data-label="Updated">
+          <time dateTime={document.updatedAt}>{formatDate(document.updatedAt)}</time>
+        </td>
+        <td className="document-row-actions" data-label="Actions">
+          <div className="document-actions document-actions-compact">
             {link
-              ? <a href={link} target="_blank" rel="noreferrer">Open / Download</a>
-              : <span className="document-disabled-action">Open / Download</span>}
-            {canEdit ? <button type="button" onClick={onEdit}>Edit</button> : null}
+              ? <a href={link} target="_blank" rel="noreferrer" aria-label={`Open or download ${document.title}`} title="Open or download document">Open</a>
+              : <span className="document-disabled-action" title="Document link not added">No link</span>}
+            {canEdit ? <button type="button" aria-label={`Edit ${document.title}`} onClick={onEdit}>Edit</button> : null}
             {canArchive ? (
-              <button type="button" onClick={() => onStatusChange(document)} disabled={isSubmitting}>
-                {document.status === "ARCHIVED" ? "Restore" : "Archive"}
+              <button type="button" aria-label={`${document.status === "ARCHIVED" ? "Activate" : "Archive"} ${document.title}`} onClick={() => onStatusChange(document)} disabled={isSubmitting}>
+                {document.status === "ARCHIVED" ? "Activate" : "Archive"}
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button type="button" className="danger-action" aria-label={`Delete ${document.title}`} onClick={() => onDelete(document)} disabled={isSubmitting}>
+                Delete
               </button>
             ) : null}
           </div>
-          {canDelete ? (
-            <div className="member-destructive-actions">
-              <button type="button" className="text-action danger-action" onClick={() => onDelete(document)} disabled={isSubmitting}>
-                Delete
-              </button>
-            </div>
-          ) : null}
-        </>
-      )}
-    </article>
+        </td>
+      </tr>
+      {isEditing ? (
+        <tr className="document-edit-row">
+          <td colSpan={8}>
+            <form className="document-edit-form" onSubmit={handleSubmit}>
+              <label>Document Title<input name="title" defaultValue={document.title} required /></label>
+              <label>Description<textarea name="description" defaultValue={document.description ?? ""} rows={3} /></label>
+              <label>Document Link<input name="fileUrl" type="url" defaultValue={document.fileUrl} placeholder="Paste Google Drive, PDF, or website link" /></label>
+              <label>Session / Module<input name="sessionModule" defaultValue={document.sessionModule ?? ""} placeholder="Optional" /></label>
+              <label>
+                Program
+                <select name="programLevel" defaultValue={document.programLevel}>
+                  {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label>
+                Band
+                <select name="bandLevel" defaultValue={document.bandLevel}>
+                  {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
+                </select>
+              </label>
+              <label>
+                Club
+                <select name="clubId" defaultValue={document.clubId ?? ""}>
+                  {canAssignGlobal ? <option value="">All clubs</option> : null}
+                  {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Category
+                <select name="category" defaultValue={document.category}>
+                  {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>
+              <div className="document-actions">
+                <button type="submit" disabled={isSubmitting}>Save</button>
+                <button type="button" onClick={onCancelEdit} disabled={isSubmitting}>Cancel</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
@@ -636,21 +717,27 @@ function ResourceCard({ document }: { document: BandDocument }) {
   );
 }
 
-function groupDocumentsByProgramBandCategory(documents: BandDocument[]) {
-  const groups = new Map<string, { key: string; title: string; documents: BandDocument[] }>();
+function documentSession(document: BandDocument) {
+  return document.sessionModule?.trim() || "General";
+}
 
-  documents.forEach((document) => {
-    const key = `${document.programLevel}|${document.bandLevel}|${document.category}`;
-    const title = `${formatProgramLevel(document.programLevel)} - ${document.bandLevel} - ${document.category}`;
+function compareDocuments(left: BandDocument, right: BandDocument, sortOrder: DocumentSort) {
+  if (sortOrder === "name") {
+    return left.title.localeCompare(right.title);
+  }
 
-    if (!groups.has(key)) {
-      groups.set(key, { key, title, documents: [] });
-    }
+  if (sortOrder === "band") {
+    return left.bandOrder - right.bandOrder || left.title.localeCompare(right.title);
+  }
 
-    groups.get(key)!.documents.push(document);
-  });
+  const leftTime = new Date(left.updatedAt).getTime();
+  const rightTime = new Date(right.updatedAt).getTime();
+  return sortOrder === "oldest" ? leftTime - rightTime : rightTime - leftTime;
+}
 
-  return Array.from(groups.values());
+function bandBadgeClass(bandLevel: string) {
+  const colourName = bandLevel.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  return `is-${colourName || "default"}`;
 }
 
 function groupDocumentsByCategory(documents: BandDocument[]) {

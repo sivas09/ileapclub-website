@@ -26,7 +26,8 @@ const state = {
   roleUpdates: 0,
   studentRequirementUpserts: 0,
   documentCreates: 0,
-  resourceCreates: 0
+  resourceCreates: 0,
+  lastDocumentWhere: null as any
 };
 
 patchModel("user", {
@@ -165,7 +166,10 @@ patchModel("studentMeetingFeedback", {
   groupBy: () => []
 });
 patchModel("bandDocument", {
-  findMany: () => [],
+  findMany: ({ where }: any) => {
+    state.lastDocumentWhere = where;
+    return [];
+  },
   create: () => {
     state.documentCreates += 1;
     return documentRecord(assignedClubId);
@@ -253,6 +257,12 @@ try {
   await assertStatus("facilitator cannot add unassigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 403, documentPayload(otherClubId));
   await assertStatus("student cannot add documents", "POST", "/api/documents", Role.STUDENT, 403, documentPayload(assignedClubId));
   await assertStatus("facilitator cannot view unassigned-club documents", "GET", `/api/documents?clubId=${otherClubId}`, Role.FACILITATOR, 403);
+  await assertStatus("admin can view all document statuses", "GET", "/api/documents", Role.ADMIN, 200);
+  assertEqual(state.lastDocumentWhere?.status === undefined, true, "admin document list does not force active status");
+  await assertStatus("facilitator cannot request archived documents", "GET", "/api/documents?status=ARCHIVED", Role.FACILITATOR, 200);
+  assertEqual(state.lastDocumentWhere?.status === "ACTIVE", true, "facilitator document list remains active-only");
+  await assertStatus("student cannot request archived documents", "GET", "/api/documents?status=ARCHIVED", Role.STUDENT, 200);
+  assertEqual(state.lastDocumentWhere?.status === "ACTIVE", true, "student document list remains active-only");
   await assertStatus("admin can delete documents", "DELETE", "/api/documents/document-1", Role.ADMIN, 200);
   await assertStatus("facilitator cannot permanently delete documents", "DELETE", "/api/documents/document-1", Role.FACILITATOR, 403);
 
@@ -483,6 +493,7 @@ function documentRecord(clubId: string | null) {
     clubId,
     category: "Band Requirements",
     createdAt: new Date(),
+    updatedAt: new Date(),
     status: "ACTIVE",
     club: clubId ? { id: clubId, name: "Assigned Club" } : null,
     uploadedBy: { firstName: "Admin", lastName: "User" }

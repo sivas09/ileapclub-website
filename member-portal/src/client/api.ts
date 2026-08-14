@@ -265,6 +265,7 @@ export type BandDocument = {
   category: string;
   uploadedBy: string;
   createdAt: string;
+  updatedAt: string;
   status: "ACTIVE" | "ARCHIVED" | string;
 };
 
