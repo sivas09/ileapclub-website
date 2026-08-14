@@ -20,6 +20,7 @@ import {
   deleteDemoUser,
   deleteBandDocument,
   deleteBandRequirement,
+  deleteMeeting,
   deleteResourceLink,
   deleteRoleDefinition,
   deleteSampleFeedback,
@@ -123,6 +124,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedMeetingId, setSelectedMeetingId] = useState("");
   const [meetingMode, setMeetingMode] = useState<MeetingMode>("view");
+  const [meetingPendingDeletion, setMeetingPendingDeletion] = useState<Meeting | null>(null);
   const canManageMeetings = user.role === "ADMIN" || user.role === "FACILITATOR";
   const selectedMeeting = overview?.meetings.find((meeting) => meeting.id === selectedMeetingId) ?? overview?.meetings[0] ?? null;
   const selectedMeetingStudents = selectedMeeting && overview
@@ -212,6 +214,34 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
     }
   }
 
+  async function handleDeleteMeeting() {
+    if (!meetingPendingDeletion) {
+      return;
+    }
+
+    const meetingId = meetingPendingDeletion.id;
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await deleteMeeting(meetingId);
+      setOverview((current) => current ? {
+        ...current,
+        meetings: current.meetings.filter((meeting) => meeting.id !== meetingId)
+      } : current);
+      setSelectedMeetingId((current) => current === meetingId ? "" : current);
+      setMeetingMode("view");
+      setMeetingPendingDeletion(null);
+      setStatus("Meeting deleted successfully.");
+    } catch (deleteError) {
+      setMeetingPendingDeletion(null);
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete meeting.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <section className="meeting-workspace" id="meetings" aria-label="Meeting and role workspace">
       <div className="admin-heading">
@@ -272,6 +302,11 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
           setError("");
         }}
         onAgendaDownload={(meeting) => runDownload(() => downloadAgenda(meeting.id))}
+        onDeleteRequest={(meeting) => {
+          setMeetingPendingDeletion(meeting);
+          setStatus("");
+          setError("");
+        }}
       />
 
       {selectedMeeting ? (
@@ -343,6 +378,14 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
         />
       ) : null}
       <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
+      {meetingPendingDeletion ? (
+        <DeleteMeetingDialog
+          meeting={meetingPendingDeletion}
+          isSubmitting={isSubmitting}
+          onCancel={() => setMeetingPendingDeletion(null)}
+          onConfirm={handleDeleteMeeting}
+        />
+      ) : null}
     </section>
   );
 }
@@ -556,7 +599,8 @@ function MeetingList({
   isSubmitting,
   selectedMeetingId,
   onSelect,
-  onAgendaDownload
+  onAgendaDownload,
+  onDeleteRequest
 }: {
   meetings: Meeting[];
   user: PortalUser;
@@ -565,6 +609,7 @@ function MeetingList({
   selectedMeetingId: string;
   onSelect: (meeting: Meeting, mode: MeetingMode) => void;
   onAgendaDownload: (meeting: Meeting) => void;
+  onDeleteRequest: (meeting: Meeting) => void;
 }) {
   const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
 
@@ -604,6 +649,7 @@ function MeetingList({
                       {canManage ? <button type="button" onClick={() => onSelect(meeting, "edit")}>Edit Meeting</button> : null}
                       {canManage ? <button type="button" onClick={() => onSelect(meeting, "manage")}>Manage Roles</button> : null}
                       {canManage ? <button type="button" onClick={() => onSelect(meeting, "score")}>Score Feedback</button> : null}
+                      {canManage ? <button type="button" className="danger-action" onClick={() => onDeleteRequest(meeting)} disabled={isSubmitting}>Delete</button> : null}
                     </div>
                   </td>
                 </tr>
@@ -612,6 +658,49 @@ function MeetingList({
           </table>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function DeleteMeetingDialog({
+  meeting,
+  isSubmitting,
+  onCancel,
+  onConfirm
+}: {
+  meeting: Meeting;
+  isSubmitting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="resource-panel-backdrop" role="presentation" onClick={() => !isSubmitting && onCancel()}>
+      <section
+        className="resource-panel meeting-delete-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="meeting-delete-title"
+        aria-describedby="meeting-delete-description"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !isSubmitting) {
+            onCancel();
+          }
+        }}
+      >
+        <div>
+          <p className="eyebrow">Permanent deletion</p>
+          <h3 id="meeting-delete-title">Delete this meeting permanently?</h3>
+        </div>
+        <p><strong>{meeting.title}</strong> - {formatDate(meeting.meetingDate)}</p>
+        <p id="meeting-delete-description">This action cannot be undone. Any roles, assignments, feedback, agenda information, attendance, or other records associated with this meeting may also be removed.</p>
+        <div className="meeting-delete-actions">
+          <button type="button" onClick={onCancel} disabled={isSubmitting} autoFocus>Cancel</button>
+          <button type="button" className="danger-action" onClick={onConfirm} disabled={isSubmitting}>
+            {isSubmitting ? "Deleting..." : "Delete Meeting"}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

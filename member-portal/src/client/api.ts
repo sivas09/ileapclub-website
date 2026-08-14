@@ -699,6 +699,15 @@ export async function updateMeetingDetails(meetingId: string, payload: {
   });
 }
 
+export async function deleteMeeting(meetingId: string) {
+  return request<{
+    deletedMeeting: Pick<Meeting, "id" | "title" | "meetingDate">;
+    message: string;
+  }>(`/api/meetings/${meetingId}`, {
+    method: "DELETE"
+  });
+}
+
 export async function claimMeetingSlot(meetingId: string, slotId: string) {
   return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/slots/${slotId}/claim`, {
     method: "POST"

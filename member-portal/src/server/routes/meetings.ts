@@ -478,6 +478,48 @@ meetingsRouter.patch("/:meetingId", asyncRoute(async (request, response) => {
   response.json({ meeting: updatedMeeting });
 }));
 
+meetingsRouter.delete("/:meetingId", asyncRoute(async (request, response) => {
+  const user = request.user!;
+
+  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only admins and facilitators can delete meetings." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    include: { club: true }
+  });
+
+  if (!meeting) {
+    response.status(404).json({ message: "Meeting not found." });
+    return;
+  }
+
+  if (!(await canManageClubId(user.id, user.role, meeting.clubId))) {
+    response.status(403).json({ message: "You cannot delete this meeting." });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.meetingRoleScore.deleteMany({ where: { meetingId } });
+    await tx.studentMeetingFeedback.deleteMany({ where: { meetingId } });
+    await tx.meetingAttendance.deleteMany({ where: { meetingId } });
+    await tx.meetingRoleSlot.deleteMany({ where: { meetingId } });
+    await tx.meeting.delete({ where: { id: meetingId } });
+  });
+
+  response.json({
+    deletedMeeting: {
+      id: meeting.id,
+      title: meeting.title,
+      meetingDate: meeting.meetingDate
+    },
+    message: "Meeting deleted successfully."
+  });
+}));
+
 meetingsRouter.get("/:meetingId/agenda.rtf", asyncRoute(async (request, response) => {
   const user = request.user!;
   const meetingId = String(request.params.meetingId);

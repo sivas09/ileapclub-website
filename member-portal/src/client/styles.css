@@ -2111,6 +2111,61 @@ button {
   color: var(--portal-teal);
 }
 
+.meeting-row-actions button.danger-action {
+  color: #9f1239;
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+.meeting-row-actions button.danger-action:hover,
+.meeting-row-actions button.danger-action:focus-visible {
+  color: #7f1d1d;
+  border-color: #fda4af;
+}
+
+.meeting-delete-dialog {
+  width: min(560px, 100%);
+  border-top: 4px solid #be123c;
+}
+
+.meeting-delete-dialog h3 {
+  margin: 6px 0 0;
+  color: #881337;
+  font-size: 1.35rem;
+}
+
+.meeting-delete-dialog p strong {
+  color: var(--portal-ink);
+}
+
+.meeting-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.meeting-delete-actions button {
+  min-height: 40px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-weight: 900;
+}
+
+.meeting-delete-actions button.danger-action {
+  color: #ffffff;
+  border-color: #be123c;
+  background: #be123c;
+}
+
+.meeting-delete-actions button:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
 .meeting-mode-tabs {
   margin-bottom: 16px;
   padding-bottom: 14px;

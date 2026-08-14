@@ -22,6 +22,15 @@ const assignedClubId = "assigned-club";
 const otherClubId = "other-club";
 const assignedStudentId = "assigned-student";
 const otherStudentId = "other-student";
+const meetingClubIds = new Map([
+  ["assigned-meeting", assignedClubId],
+  ["other-meeting", otherClubId],
+  ["admin-delete-meeting", assignedClubId],
+  ["failure-delete-meeting", assignedClubId],
+  ["facilitator-delete-meeting", assignedClubId],
+  ["other-delete-meeting", otherClubId],
+  ["student-delete-meeting", assignedClubId]
+]);
 
 const state = {
   roleUpdates: 0,
@@ -29,6 +38,10 @@ const state = {
   documentCreates: 0,
   noticeCreates: 0,
   resourceCreates: 0,
+  meetingDeleteTransactions: 0,
+  deletedMeetingIds: new Set<string>(),
+  meetingDeletionSteps: {} as Record<string, string[]>,
+  meetingRelatedDeleteCounts: {} as Record<string, Record<string, number>>,
   lastDocumentWhere: null as any,
   lastNoticeWhere: null as any
 };
@@ -116,15 +129,27 @@ patchModel("student", {
   update: ({ where }: any) => studentRecord(where.id, users.student.id, assignedClubId),
   delete: () => ({ id: assignedStudentId })
 });
+patchModel("roleDefinition", {
+  findMany: () => []
+});
 patchModel("meeting", {
-  findMany: () => [],
-  findUnique: ({ where }: any) => where.id === "assigned-meeting"
-    ? meetingRecord(assignedClubId)
-    : where.id === "other-meeting"
-      ? meetingRecord(otherClubId)
-      : null,
+  findMany: () => Array.from(meetingClubIds.entries())
+    .filter(([meetingId]) => !state.deletedMeetingIds.has(meetingId))
+    .map(([meetingId, clubId]) => meetingRecord(clubId, meetingId)),
+  findUnique: ({ where }: any) => meetingRecordForId(where.id),
   findUniqueOrThrow: () => meetingRecord(assignedClubId),
-  update: () => meetingRecord(assignedClubId)
+  update: () => meetingRecord(assignedClubId),
+  delete: ({ where }: any) => {
+    const meeting = meetingRecordForId(where.id);
+
+    if (!meeting) {
+      throw new Error("Meeting not found in test mock.");
+    }
+
+    state.deletedMeetingIds.add(where.id);
+    recordMeetingDelete(where.id, "meeting", 1);
+    return meeting;
+  }
 });
 patchModel("meetingRoleSlot", {
   findUnique: ({ where }: any) => {
@@ -155,18 +180,28 @@ patchModel("meetingRoleSlot", {
     state.roleUpdates += 1;
     return { count: 1 };
   },
-  groupBy: () => []
+  groupBy: () => [],
+  deleteMany: ({ where }: any) => recordMeetingDelete(where.meetingId, "roleSlots", 4)
 });
 patchModel("meetingAttendance", {
-  count: () => 0
+  count: () => 0,
+  deleteMany: ({ where }: any) => recordMeetingDelete(where.meetingId, "attendance", 3)
 });
 patchModel("meetingRoleScore", {
   count: () => 0,
-  groupBy: () => []
+  groupBy: () => [],
+  deleteMany: ({ where }: any) => {
+    if (where.meetingId === "failure-delete-meeting") {
+      throw new Error("Simulated related-record deletion failure.");
+    }
+
+    return recordMeetingDelete(where.meetingId, "roleScores", 2);
+  }
 });
 patchModel("studentMeetingFeedback", {
   count: () => 0,
-  groupBy: () => []
+  groupBy: () => [],
+  deleteMany: ({ where }: any) => recordMeetingDelete(where.meetingId, "studentFeedbacks", 1)
 });
 patchModel("bandDocument", {
   findMany: ({ where }: any) => {
@@ -238,6 +273,7 @@ patchModel("studentParent", {
 
 (prisma as any).$transaction = async (callbackOrQueries: any) => {
   if (typeof callbackOrQueries === "function") {
+    state.meetingDeleteTransactions += 1;
     return callbackOrQueries(prisma);
   }
 
@@ -275,6 +311,33 @@ try {
   await assertStatus("student can claim own-club role", "POST", "/api/meetings/assigned-meeting/slots/assigned-slot/claim", Role.STUDENT, 200);
   await assertStatus("student cannot release another student's role", "POST", "/api/meetings/assigned-meeting/slots/other-student-slot/release", Role.STUDENT, 403);
   await assertStatus("student can release own claimed role", "POST", "/api/meetings/assigned-meeting/slots/student-slot/release", Role.STUDENT, 200);
+
+  const transactionsBeforeMeetingDeletes = state.meetingDeleteTransactions;
+  await assertStatus("unauthenticated meeting deletion is rejected", "DELETE", "/api/meetings/student-delete-meeting", null, 401);
+  await assertStatus("admin can delete a meeting with related records", "DELETE", "/api/meetings/admin-delete-meeting", Role.ADMIN, 200);
+  assertEqual(state.deletedMeetingIds.has("admin-delete-meeting"), true, "admin deletion removes the meeting");
+  assertEqual(
+    state.meetingDeletionSteps["admin-delete-meeting"]?.join(","),
+    "roleScores,studentFeedbacks,attendance,roleSlots,meeting",
+    "meeting records are deleted in foreign-key-safe order"
+  );
+  assertEqual(state.meetingRelatedDeleteCounts["admin-delete-meeting"]?.roleScores, 2, "meeting role scores are deleted");
+  assertEqual(state.meetingRelatedDeleteCounts["admin-delete-meeting"]?.studentFeedbacks, 1, "student feedback is deleted");
+  assertEqual(state.meetingRelatedDeleteCounts["admin-delete-meeting"]?.attendance, 3, "meeting attendance is deleted");
+  assertEqual(state.meetingRelatedDeleteCounts["admin-delete-meeting"]?.roleSlots, 4, "meeting role assignments are deleted");
+  const meetingsAfterDeleteResponse = await assertStatus("admin can list meetings after deletion", "GET", "/api/meetings", Role.ADMIN, 200);
+  const meetingsAfterDelete = await responseMeetings(meetingsAfterDeleteResponse);
+  assertEqual(meetingsAfterDelete.some((meeting) => meeting.id === "admin-delete-meeting"), false, "deleted meeting no longer appears");
+  await assertStatus("repeated meeting deletion returns not found", "DELETE", "/api/meetings/admin-delete-meeting", Role.ADMIN, 404);
+  await assertStatus("nonexistent meeting deletion returns not found", "DELETE", "/api/meetings/missing-meeting", Role.ADMIN, 404);
+  await assertStatus("facilitator can delete assigned-club meeting", "DELETE", "/api/meetings/facilitator-delete-meeting", Role.FACILITATOR, 200);
+  await assertStatus("facilitator cannot delete unassigned-club meeting", "DELETE", "/api/meetings/other-delete-meeting", Role.FACILITATOR, 403);
+  assertEqual(state.deletedMeetingIds.has("other-delete-meeting"), false, "tampered meeting id is not deleted");
+  await assertStatus("student cannot delete meeting", "DELETE", "/api/meetings/student-delete-meeting", Role.STUDENT, 403);
+  assertEqual(state.deletedMeetingIds.has("student-delete-meeting"), false, "student delete attempt leaves meeting intact");
+  assertEqual(state.meetingDeleteTransactions, transactionsBeforeMeetingDeletes + 2, "authorized meeting deletions use transactions");
+  await assertStatus("related-record deletion failure returns server error", "DELETE", "/api/meetings/failure-delete-meeting", Role.ADMIN, 500);
+  assertEqual(state.deletedMeetingIds.has("failure-delete-meeting"), false, "failed related-record deletion leaves meeting intact");
 
   await assertStatus("admin can add documents", "POST", "/api/documents", Role.ADMIN, 201, documentPayload(null));
   await assertStatus("facilitator can add assigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 201, documentPayload(assignedClubId));
@@ -376,6 +439,11 @@ async function assertStatus(label: string, method: string, path: string, role: R
 async function responseNotices(response: globalThis.Response) {
   const body = await response.json() as { notices: Array<{ id: string; clubId: string | null }> };
   return body.notices;
+}
+
+async function responseMeetings(response: globalThis.Response) {
+  const body = await response.json() as { meetings: Array<{ id: string }> };
+  return body.meetings;
 }
 
 function tokenUser(role: Role) {
@@ -528,11 +596,15 @@ function studentRecord(studentId: string, userId: string, clubId: string) {
   };
 }
 
-function meetingRecord(clubId: string) {
+function meetingRecord(clubId: string, id = clubId === assignedClubId ? "assigned-meeting" : "other-meeting") {
   return {
-    id: clubId === assignedClubId ? "assigned-meeting" : "other-meeting",
+    id,
     clubId,
     title: "Weekly Meeting",
+    templateType: "Regular Meeting",
+    meetingDate: new Date("2026-08-15T00:00:00.000Z"),
+    startTime: "14:00",
+    location: "Room 202",
     isRoleLocked: false,
     club: {
       id: clubId,
@@ -545,6 +617,26 @@ function meetingRecord(clubId: string) {
     roleScores: [],
     studentFeedbacks: []
   };
+}
+
+function meetingRecordForId(meetingId: string) {
+  const clubId = meetingClubIds.get(meetingId);
+
+  if (!clubId || state.deletedMeetingIds.has(meetingId)) {
+    return null;
+  }
+
+  return meetingRecord(clubId, meetingId);
+}
+
+function recordMeetingDelete(meetingId: string, recordType: string, count: number) {
+  state.meetingDeletionSteps[meetingId] = [...(state.meetingDeletionSteps[meetingId] ?? []), recordType];
+  state.meetingRelatedDeleteCounts[meetingId] = {
+    ...(state.meetingRelatedDeleteCounts[meetingId] ?? {}),
+    [recordType]: count
+  };
+
+  return { count };
 }
 
 function roleSlot(id: string, meetingId: string, clubId: string, assignedStudentId: string | null) {
