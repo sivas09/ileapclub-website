@@ -337,11 +337,11 @@
           <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
           <label>
             Parent Name
-            <input type="text" name="name" autocomplete="name" placeholder="Your name" required>
+            <input type="text" name="name" autocomplete="name" maxlength="120" placeholder="Your name" required>
           </label>
           <label>
             Email
-            <input type="email" name="email" autocomplete="email" placeholder="you@example.com" required>
+            <input type="email" name="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required>
           </label>
           <label>
             Child Grade
@@ -354,7 +354,7 @@
           </label>
           <label>
             Goal
-            <textarea name="message" rows="4" placeholder="Tell us what your child wants to improve"></textarea>
+            <textarea name="message" rows="4" maxlength="4000" placeholder="Tell us what your child wants to improve"></textarea>
           </label>
           <button class="button primary" type="submit">Request Demo</button>
           <p class="form-status" role="status" aria-live="polite"></p>

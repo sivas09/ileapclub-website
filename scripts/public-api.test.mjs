@@ -4,6 +4,33 @@ import { onRequestPost as submitInquiry } from "../functions/api/inquiry.js";
 
 const originalFetch = globalThis.fetch;
 
+function enrollmentForm(overrides = {}) {
+  const values = {
+    franchise_province: "Ontario",
+    franchise_city: "Ottawa",
+    centre: "Ottawa Centre",
+    student_first_name: "Test",
+    student_last_name: "Student",
+    date_of_birth: "2015-05-10",
+    street: "123 Test Street",
+    student_city: "Ottawa",
+    student_province: "Ontario",
+    postal_code: "K1A 0B1",
+    primary_mobile: "613-555-0100",
+    school_name: "Test School",
+    mother_name: "Test Mother",
+    father_name: "Test Father",
+    mother_cell: "613-555-0101",
+    father_cell: "613-555-0102",
+    email_1: "parent@example.com",
+    ...overrides,
+  };
+  const form = new FormData();
+
+  Object.entries(values).forEach(([field, value]) => form.set(field, value));
+  return form;
+}
+
 try {
   globalThis.fetch = async () => new Response("", { status: 200 });
 
@@ -31,6 +58,18 @@ try {
   });
   assert.equal(invalidInquiryResponse.status, 400);
 
+  const oversizedInquiryForm = new FormData();
+  oversizedInquiryForm.set("inquiry_type", "franchise");
+  oversizedInquiryForm.set("name", "Test Parent");
+  oversizedInquiryForm.set("email", "parent@example.com");
+  oversizedInquiryForm.set("message", "x".repeat(4001));
+
+  const oversizedInquiryResponse = await submitInquiry({
+    request: new Request("https://example.test/api/inquiry", { method: "POST", body: oversizedInquiryForm }),
+    env: {},
+  });
+  assert.equal(oversizedInquiryResponse.status, 400);
+
   const spamEnrollmentForm = new FormData();
   spamEnrollmentForm.set("website", "spam.example");
 
@@ -40,6 +79,31 @@ try {
   });
   assert.equal(spamEnrollmentResponse.status, 200);
   assert.equal((await spamEnrollmentResponse.json()).ok, true);
+
+  const invalidEnrollmentEmailResponse = await submitEnrollment({
+    request: new Request("https://example.test/api/enroll", {
+      method: "POST",
+      body: enrollmentForm({ email_1: "invalid-email" }),
+    }),
+    env: {},
+  });
+  assert.equal(invalidEnrollmentEmailResponse.status, 400);
+
+  const invalidEnrollmentDateResponse = await submitEnrollment({
+    request: new Request("https://example.test/api/enroll", {
+      method: "POST",
+      body: enrollmentForm({ date_of_birth: "2015-99-99" }),
+    }),
+    env: {},
+  });
+  assert.equal(invalidEnrollmentDateResponse.status, 400);
+
+  const enrollmentResponse = await submitEnrollment({
+    request: new Request("https://example.test/api/enroll", { method: "POST", body: enrollmentForm() }),
+    env: { RESEND_API_KEY: "test", ENROLL_FROM_EMAIL: "site@example.com" },
+  });
+  assert.equal(enrollmentResponse.status, 200);
+  assert.equal((await enrollmentResponse.json()).ok, true);
 
   console.log("Public API tests passed.");
 } finally {

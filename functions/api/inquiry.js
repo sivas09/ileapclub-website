@@ -15,6 +15,15 @@ const FIELD_LABELS = {
   message: "Message / Goal",
 };
 
+const FIELD_LIMITS = {
+  name: 120,
+  email: 254,
+  phone: 40,
+  grade: 80,
+  region: 160,
+  message: 4000,
+};
+
 export async function onRequestPost(context) {
   try {
     const { request, env } = context;
@@ -26,7 +35,7 @@ export async function onRequestPost(context) {
     }
 
     const inquiryType = String(data.inquiry_type || "");
-    const name = String(data.name || "").trim();
+    const name = singleLine(data.name);
     const email = String(data.email || "").trim();
 
     if (!INQUIRY_LABELS[inquiryType] || !name || !email) {
@@ -36,6 +45,17 @@ export async function onRequestPost(context) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return jsonResponse({ ok: false, message: "Please enter a valid email address." }, 400);
     }
+
+    const oversizedField = Object.entries(FIELD_LIMITS).find(([field, limit]) => {
+      return String(data[field] || "").length > limit;
+    });
+
+    if (oversizedField) {
+      return jsonResponse({ ok: false, message: `${FIELD_LABELS[oversizedField[0]]} is too long.` }, 400);
+    }
+
+    data.name = name;
+    data.email = email;
 
     if (!env.RESEND_API_KEY || !env.ENROLL_FROM_EMAIL) {
       return jsonResponse(
@@ -120,4 +140,8 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function singleLine(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
 }

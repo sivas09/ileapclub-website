@@ -40,10 +40,10 @@
         <form class="lead-form" method="post" action="/api/inquiry" data-ajax-form="true">
           <input type="hidden" name="inquiry_type" value="franchise">
           <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-          <label>Name<input type="text" name="name" autocomplete="name" placeholder="Your name" required></label>
-          <label>Email<input type="email" name="email" autocomplete="email" placeholder="you@example.com" required></label>
-          <label>City / Region<input type="text" name="region" placeholder="Where would you like to operate?"></label>
-          <label>Message<textarea name="message" rows="5" placeholder="Tell us about your interest in iLEAP Club"></textarea></label>
+          <label>Name<input type="text" name="name" autocomplete="name" maxlength="120" placeholder="Your name" required></label>
+          <label>Email<input type="email" name="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required></label>
+          <label>City / Region<input type="text" name="region" maxlength="160" placeholder="Where would you like to operate?"></label>
+          <label>Message<textarea name="message" rows="5" maxlength="4000" placeholder="Tell us about your interest in iLEAP Club"></textarea></label>
           <button class="button primary" type="submit">Send Franchise Inquiry</button>
           <p class="form-status" role="status" aria-live="polite"></p>
         </form>

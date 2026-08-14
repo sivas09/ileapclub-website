@@ -44,11 +44,11 @@
         <form class="lead-form" method="post" action="/api/inquiry" data-ajax-form="true">
           <input type="hidden" name="inquiry_type" value="contact">
           <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-          <label>Parent Name<input type="text" name="name" autocomplete="name" placeholder="Your name" required></label>
-          <label>Email<input type="email" name="email" autocomplete="email" placeholder="you@example.com" required></label>
-          <label>Phone<input type="tel" name="phone" autocomplete="tel" placeholder="Phone number"></label>
+          <label>Parent Name<input type="text" name="name" autocomplete="name" maxlength="120" placeholder="Your name" required></label>
+          <label>Email<input type="email" name="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required></label>
+          <label>Phone<input type="tel" name="phone" autocomplete="tel" maxlength="40" placeholder="Phone number"></label>
           <label>Child Grade<select name="grade" required><option value="">Select a level</option><option value="junior">Junior Level: Grade 2-5</option><option value="senior">Senior Level: Grade 6-10</option><option value="advanced">Advanced Track</option></select></label>
-          <label>Message<textarea name="message" rows="5" placeholder="Tell us what your child wants to improve"></textarea></label>
+          <label>Message<textarea name="message" rows="5" maxlength="4000" placeholder="Tell us what your child wants to improve"></textarea></label>
           <button class="button primary" type="submit">Request Demo</button>
           <p class="form-status" role="status" aria-live="polite"></p>
         </form>
