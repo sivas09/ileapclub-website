@@ -41,12 +41,14 @@
         <a href="mailto:info@ileapclub.com"><span>Email</span><strong>info@ileapclub.com</strong></a>
       </section>
       <section class="section contact-layout">
-        <form class="lead-form">
-          <label>Parent Name<input type="text" name="parent-name" autocomplete="name" placeholder="Your name" required></label>
-          <label>Email<input type="email" name="email" autocomplete="email" placeholder="you@example.com" required></label>
-          <label>Phone<input type="tel" name="phone" autocomplete="tel" placeholder="Phone number"></label>
+        <form class="lead-form" method="post" action="/api/inquiry" data-ajax-form="true">
+          <input type="hidden" name="inquiry_type" value="contact">
+          <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+          <label>Parent Name<input type="text" name="name" autocomplete="name" maxlength="120" placeholder="Your name" required></label>
+          <label>Email<input type="email" name="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required></label>
+          <label>Phone<input type="tel" name="phone" autocomplete="tel" maxlength="40" placeholder="Phone number"></label>
           <label>Child Grade<select name="grade" required><option value="">Select a level</option><option value="junior">Junior Level: Grade 2-5</option><option value="senior">Senior Level: Grade 6-10</option><option value="advanced">Advanced Track</option></select></label>
-          <label>Message<textarea name="message" rows="5" placeholder="Tell us what your child wants to improve"></textarea></label>
+          <label>Message<textarea name="message" rows="5" maxlength="4000" placeholder="Tell us what your child wants to improve"></textarea></label>
           <button class="button primary" type="submit">Request Demo</button>
           <p class="form-status" role="status" aria-live="polite"></p>
         </form>
@@ -57,7 +59,7 @@
           <p><strong>Phone:</strong> <a href="tel:+14169005327">(416) 900-LEAP</a></p>
           <p><strong>Phone:</strong> <a href="tel:+16138168567">613-816-8567</a></p>
           <p><strong>Email:</strong> <a href="mailto:info@ileapclub.com">info@ileapclub.com</a></p>
-          <p><strong>Social media:</strong> Add official iLEAP Club social links before launch.</p>
+          <p><strong>Response time:</strong> The team typically replies within two business days.</p>
           <a class="button secondary" href="programs.html">Compare Programs</a>
           <a class="button secondary" href="enroll.html">Enroll Now</a>
         </aside>

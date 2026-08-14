@@ -2,6 +2,18 @@ const toggle = document.querySelector(".nav-toggle");
 const nav = document.querySelector("#site-nav");
 const header = document.querySelector("[data-header]");
 const leadForms = document.querySelectorAll(".lead-form");
+const locationFinder = document.querySelector("[data-location-finder]");
+const main = document.querySelector("main");
+
+if (main) {
+  main.id ||= "main-content";
+
+  const skipLink = document.createElement("a");
+  skipLink.className = "skip-link";
+  skipLink.href = `#${main.id}`;
+  skipLink.textContent = "Skip to main content";
+  document.body.prepend(skipLink);
+}
 
 if (nav) {
   const normalizePage = (value) => {
@@ -23,10 +35,14 @@ if (nav) {
 }
 
 if (toggle && nav) {
-  const closeMenu = () => {
+  const closeMenu = (restoreFocus = false) => {
     nav.classList.remove("is-open");
     toggle.setAttribute("aria-expanded", "false");
     toggle.setAttribute("aria-label", "Open menu");
+
+    if (restoreFocus) {
+      toggle.focus();
+    }
   };
 
   toggle.addEventListener("click", () => {
@@ -42,8 +58,8 @@ if (toggle && nav) {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      closeMenu();
+    if (event.key === "Escape" && nav.classList.contains("is-open")) {
+      closeMenu(true);
     }
   });
 
@@ -74,6 +90,7 @@ leadForms.forEach((leadForm) => {
 
   leadForm.addEventListener("submit", async (event) => {
     const status = leadForm.querySelector(".form-status");
+    const submitButton = leadForm.querySelector("button[type='submit']");
 
     if (leadForm.dataset.ajaxForm === "true") {
       event.preventDefault();
@@ -81,6 +98,11 @@ leadForms.forEach((leadForm) => {
       if (status) {
         status.textContent = "Submitting...";
         status.classList.remove("is-error", "is-success");
+      }
+
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.disabled = true;
+        submitButton.setAttribute("aria-busy", "true");
       }
 
       try {
@@ -91,10 +113,10 @@ leadForms.forEach((leadForm) => {
             Accept: "application/json",
           },
         });
-        const result = await response.json().catch(() => ({}));
+        const result = await response.json().catch(() => null);
 
-        if (!response.ok || result.ok === false) {
-          throw new Error(result.message || "Submission failed.");
+        if (!response.ok || !result || result.ok === false) {
+          throw new Error(result?.message || "We could not submit the form right now. Please try again.");
         }
 
         if (status) {
@@ -110,6 +132,11 @@ leadForms.forEach((leadForm) => {
               ? error.message
               : "We could not submit the form right now. Please try again.";
           status.classList.add("is-error");
+        }
+      } finally {
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = false;
+          submitButton.removeAttribute("aria-busy");
         }
       }
 
@@ -127,11 +154,41 @@ leadForms.forEach((leadForm) => {
     event.preventDefault();
 
     if (status) {
-      status.textContent = "Thank you. Your information is ready to submit once the iLEAP Club form endpoint is connected.";
-      status.classList.remove("is-error");
-      status.classList.add("is-success");
+      status.textContent = "This form is temporarily unavailable. Please email info@ileapclub.com.";
+      status.classList.remove("is-success");
+      status.classList.add("is-error");
     }
-
-    leadForm.reset();
   });
 });
+
+if (locationFinder instanceof HTMLFormElement) {
+  const locationCards = document.querySelectorAll(".location-option-card[data-province]");
+  const status = locationFinder.querySelector(".location-finder-status");
+
+  locationFinder.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    const filters = Object.fromEntries(new FormData(locationFinder).entries());
+    let visibleCount = 0;
+
+    locationCards.forEach((card) => {
+      if (!(card instanceof HTMLElement)) {
+        return;
+      }
+
+      const matches = ["province", "city", "centre"].every((field) => {
+        const selectedValue = String(filters[field] || "");
+        return !selectedValue || card.dataset[field] === selectedValue;
+      });
+
+      card.hidden = !matches;
+      visibleCount += Number(matches);
+    });
+
+    if (status) {
+      status.textContent = visibleCount
+        ? `Showing ${visibleCount} matching ${visibleCount === 1 ? "option" : "options"}.`
+        : "No exact match found. Contact us and we will help you find the nearest option.";
+    }
+  });
+}

@@ -50,42 +50,43 @@
           <h2>Choose a location that fits your family.</h2>
           <p>Choose your province and city to view available iLEAP Club centres.</p>
         </div>
-        <form class="location-finder" aria-label="Find an iLEAP Club centre">
+        <form class="location-finder" data-location-finder aria-label="Find an iLEAP Club centre">
           <label>
             Select Province
             <select name="province">
               <option value="">Select Province</option>
-              <option>Ontario</option>
-              <option>Online</option>
-              <option>Future Province</option>
+              <option value="Ontario">Ontario</option>
+              <option value="Online">Online</option>
+              <option value="Other">Other province</option>
             </select>
           </label>
           <label>
             Select City
             <select name="city">
               <option value="">Select City</option>
-              <option>Ottawa</option>
-              <option>Toronto</option>
-              <option>Online</option>
-              <option>Future City</option>
+              <option value="Ottawa">Ottawa</option>
+              <option value="Toronto">Toronto</option>
+              <option value="Online">Online</option>
+              <option value="Other">Another city</option>
             </select>
           </label>
           <label>
             Select Centre
             <select name="centre">
               <option value="">Select Centre</option>
-              <option>Ottawa Centre</option>
-              <option>Toronto Centre</option>
-              <option>Online Program</option>
-              <option>Future Location Interest</option>
+              <option value="Ottawa Centre">Ottawa Centre</option>
+              <option value="Toronto Centre">Toronto Centre</option>
+              <option value="Online Program">Online Program</option>
+              <option value="Future Location Interest">New location interest</option>
             </select>
           </label>
-          <button class="button primary" type="button">Search Centre</button>
+          <button class="button primary" type="submit">Search Centres</button>
+          <p class="location-finder-status" role="status" aria-live="polite"></p>
         </form>
       </section>
 
       <section class="section location-card-grid" aria-label="iLEAP Club location options">
-        <article class="location-option-card">
+        <article class="location-option-card" data-province="Ontario" data-city="Ottawa" data-centre="Ottawa Centre">
           <span>Ottawa</span>
           <h2>Ottawa</h2>
           <dl>
@@ -95,7 +96,7 @@
           </dl>
           <a class="button secondary" href="contact.html">Contact Ottawa</a>
         </article>
-        <article class="location-option-card">
+        <article class="location-option-card" data-province="Ontario" data-city="Toronto" data-centre="Toronto Centre">
           <span>Toronto</span>
           <h2>Toronto</h2>
           <dl>
@@ -105,7 +106,7 @@
           </dl>
           <a class="button secondary" href="contact.html">Contact Toronto</a>
         </article>
-        <article class="location-option-card">
+        <article class="location-option-card" data-province="Online" data-city="Online" data-centre="Online Program">
           <span>Online</span>
           <h2>Online Program</h2>
           <dl>
@@ -115,7 +116,7 @@
           </dl>
           <a class="button secondary" href="contact.html">Ask About Online</a>
         </article>
-        <article class="location-option-card accent-card">
+        <article class="location-option-card accent-card" data-province="Other" data-city="Other" data-centre="Future Location Interest">
           <span>Growth</span>
           <h2>Future Locations</h2>
           <dl>

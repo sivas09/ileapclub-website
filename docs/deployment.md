@@ -27,15 +27,16 @@ Do not add portal functionality here. The future member portal belongs at `membe
 - Also configure: `www.ileapclub.com`
 - Redirect later: `ileap.club` to `https://ileapclub.com`
 
-## Enrollment Form Email Endpoint
+## Form Email Endpoints
 
-The Enroll Now form posts to a Cloudflare Pages Function:
+The Enroll Now form and the public inquiry forms post to Cloudflare Pages Functions:
 
 ```text
 /api/enroll
+/api/inquiry
 ```
 
-That function sends the submitted form data by email through Resend.
+These functions send submitted form data by email through Resend. The inquiry endpoint handles free-demo, contact, and franchise requests.
 
 ### Required External Service
 
@@ -53,22 +54,11 @@ ENROLL_FROM_EMAIL=iLEAP Club <registrations@ileapclub.com>
 
 `ENROLL_FROM_EMAIL` must be a sender that Resend allows for the verified domain.
 
-Enrollment submissions are emailed to both:
+Enrollment and inquiry submissions are emailed to both:
 
 ```text
 info@ileapclub.com
 info@ileap.club
 ```
 
-No database is used.
-
-Other non-enrollment forms still need one of:
-
-- Cloudflare Pages Functions
-- Formspree
-- HubSpot
-- Zoho
-- Airtable
-- Another static form service
-
-Until then, CTAs can use `mailto:info@ileapclub.com`.
+No database is used. Keep the form field names and `inquiry_type` values synchronized with the corresponding Pages Function when changing a form.

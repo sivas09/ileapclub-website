@@ -46,11 +46,22 @@ const FIELD_LABELS = {
   referral_details: "Reference Details",
 };
 
+const MAX_FIELD_LENGTH = 4000;
+
 export async function onRequestPost(context) {
   try {
     const { request, env } = context;
     const formData = await request.formData();
     const data = Object.fromEntries(formData.entries());
+
+    if (String(data.website || "").trim()) {
+      return jsonResponse({ ok: true, message: "Thank you. Your enrollment form has been submitted successfully." });
+    }
+
+    if (Object.values(data).some((value) => String(value).length > MAX_FIELD_LENGTH)) {
+      return jsonResponse({ ok: false, message: "One or more fields are too long." }, 400);
+    }
+
     const missingFields = REQUIRED_FIELDS.filter((field) => !String(data[field] || "").trim());
 
     if (missingFields.length) {
@@ -63,14 +74,20 @@ export async function onRequestPost(context) {
       );
     }
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date_of_birth))) {
+    if (!isValidPastDate(String(data.date_of_birth))) {
       return jsonResponse(
         {
           ok: false,
-          message: "Please enter the date of birth in yyyy-mm-dd format.",
+          message: "Please enter a valid date of birth.",
         },
         400,
       );
+    }
+
+    const replyTo = String(data.email_1).trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyTo)) {
+      return jsonResponse({ ok: false, message: "Please enter a valid primary email address." }, 400);
     }
 
     if (!env.RESEND_API_KEY || !env.ENROLL_FROM_EMAIL) {
@@ -83,11 +100,12 @@ export async function onRequestPost(context) {
       );
     }
 
-    const subject = `New iLEAP Club Enrollment: ${data.student_first_name} ${data.student_last_name}`;
+    const studentName = `${singleLine(data.student_first_name)} ${singleLine(data.student_last_name)}`;
+    const subject = `New iLEAP Club Enrollment: ${studentName}`;
     const emailPayload = {
       from: env.ENROLL_FROM_EMAIL,
       to: RECIPIENTS,
-      reply_to: data.email_1,
+      reply_to: replyTo,
       subject,
       text: buildTextEmail(data),
       html: buildHtmlEmail(data),
@@ -178,4 +196,17 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function isValidPastDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value && date <= new Date();
+}
+
+function singleLine(value) {
+  return String(value || "").replace(/[\r\n]+/g, " ").trim();
 }
