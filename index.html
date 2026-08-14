@@ -332,10 +332,12 @@
           <h2>Help your child become a confident communicator.</h2>
           <p>Send a short request and the iLEAP Club team will follow up with program options and next available demo times.</p>
         </div>
-        <form class="lead-form">
+        <form class="lead-form" method="post" action="/api/inquiry" data-ajax-form="true">
+          <input type="hidden" name="inquiry_type" value="demo">
+          <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
           <label>
             Parent Name
-            <input type="text" name="parent-name" autocomplete="name" placeholder="Your name" required>
+            <input type="text" name="name" autocomplete="name" placeholder="Your name" required>
           </label>
           <label>
             Email
@@ -352,7 +354,7 @@
           </label>
           <label>
             Goal
-            <textarea name="goal" rows="4" placeholder="Tell us what your child wants to improve"></textarea>
+            <textarea name="message" rows="4" placeholder="Tell us what your child wants to improve"></textarea>
           </label>
           <button class="button primary" type="submit">Request Demo</button>
           <p class="form-status" role="status" aria-live="polite"></p>

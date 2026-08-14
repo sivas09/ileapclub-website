@@ -37,7 +37,9 @@
       </section>
       <section class="section contact-layout">
         <div class="contact-card"><p class="eyebrow">Partner with iLEAP</p><h2>Start a franchise conversation.</h2><p>Share your city, background, and interest. The iLEAP Club team can follow up with next steps.</p></div>
-        <form class="lead-form">
+        <form class="lead-form" method="post" action="/api/inquiry" data-ajax-form="true">
+          <input type="hidden" name="inquiry_type" value="franchise">
+          <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
           <label>Name<input type="text" name="name" autocomplete="name" placeholder="Your name" required></label>
           <label>Email<input type="email" name="email" autocomplete="email" placeholder="you@example.com" required></label>
           <label>City / Region<input type="text" name="region" placeholder="Where would you like to operate?"></label>

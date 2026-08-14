@@ -51,6 +51,11 @@ export async function onRequestPost(context) {
     const { request, env } = context;
     const formData = await request.formData();
     const data = Object.fromEntries(formData.entries());
+
+    if (String(data.website || "").trim()) {
+      return jsonResponse({ ok: true, message: "Thank you. Your enrollment form has been submitted successfully." });
+    }
+
     const missingFields = REQUIRED_FIELDS.filter((field) => !String(data[field] || "").trim());
 
     if (missingFields.length) {
