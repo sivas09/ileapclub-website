@@ -20,7 +20,7 @@ import { FeedbackReportPanel } from "./components/FeedbackReportPanel";
 import { MeetingWorkspace } from "./components/MeetingWorkspace";
 import { MembersWorkspace } from "./components/MembersWorkspace";
 import { StudentClubMembersPanel, StudentProgressDashboard } from "./components/StudentProgressPanels";
-import { formatDate, formatProgramLevel, getNextBandLevel, isTodayOrFuture, roleSlotName } from "./components/portalShared";
+import { formatDate, formatProgramLevel, formatRole, getNextBandLevel, isTodayOrFuture, roleSlotName } from "./components/portalShared";
 
 const roleCopy: Record<Role, { title: string; summary: string; actions: string[]; reports: string[] }> = {
   ADMIN: {
