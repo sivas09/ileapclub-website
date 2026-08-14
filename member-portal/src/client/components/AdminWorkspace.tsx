@@ -1,106 +1,35 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   AdminOverview,
-  addMeetingRoleSlot,
   assignClubFacilitator,
-  assignMeetingSlot,
-  BandDocument,
-  BandRequirement,
-  backfillPreviousBandRequirements,
-  claimMeetingSlot,
-  createBandDocument,
-  createBandRequirement,
   createCentre,
   createClub,
-  createMeeting,
-  createMember,
-  createResourceLink,
-  createRoleDefinition,
   createUser,
   deleteDemoUser,
-  deleteBandDocument,
-  deleteBandRequirement,
-  deleteResourceLink,
-  deleteRoleDefinition,
   deleteSampleFeedback,
   deleteSampleUsers,
-  downloadAgenda,
-  editMeetingRoleSlot,
-  fetchStudentProgressForManager,
-  FeedbackReportEntry,
   getAdminOverview,
-  getBandDocuments,
-  getBandRequirements,
-  getFeedbackReport,
-  getMemberDetail,
-  getMembers,
-  getMeetingsOverview,
-  getResourceLinks,
-  getRoleDefinitions,
-  Meeting,
-  MemberDetail,
-  MemberListEntry,
-  MembersResponse,
-  MeetingsOverview,
-  permanentlyDeleteMember,
   PortalUser,
-  Role,
-  saveStudentMeetingFeedback,
-  removeMeetingRoleSlot,
   removeClubFacilitator,
-  releaseMeetingSlot,
   resetDemoMeetingData,
   resetUserPassword,
-  ResourceLink,
-  RoleDefinition,
+  Role,
   setCentreActive,
   setClubActive,
-  setMemberActive,
   setUserActive,
-  StudentProgress,
-  toggleMeetingLock,
-  updateBandDocument,
-  updateBandRequirement,
-  updateMember,
-  updateMeetingDetails,
-  updateResourceLink,
-  updateRoleDefinition,
-  updateStudentProfile,
-  updateStudentRequirement,
   updateUser
 } from "../api";
 import {
+  bandLevelOptions,
   DataPanel,
-  documentCategoryOptions,
-  documentLink,
-  formatBandLadder,
   formatCleanupSummary,
-  formatDate,
   formatProgramLevel,
-  formatResourceScope,
   formatRole,
   formatStudentClubs,
-  formatStudentName,
-  getNextBandLevel,
-  HelpLabel,
   isDemoUser,
-  isLeadershipMeetingRole,
-  isStudentInClub,
   programLevelOptions,
-  ResourceActions,
-  ResourcePanel,
-  resourceCategoryOptions,
-  resourceIdFromHash,
-  resourcesForRequirement,
-  resourcesForRole,
-  resourcesForRoleName,
-  roleDefinitionsForMeeting,
-  roleDefinitionsForSlot,
-  roleSlotName,
-  splitDisplayName,
   StatusBadge,
-  SummaryTile,
-  bandLevelOptions
+  SummaryTile
 } from "./portalShared";
 type AdminUser = AdminOverview["users"][number];
 
@@ -118,6 +47,14 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   async function refreshOverview() {
     const data = await getAdminOverview();
     setOverview(data);
+  }
+
+  function refreshOverviewSafely() {
+    setError("");
+    setIsLoading(true);
+    refreshOverview()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load admin data."))
+      .finally(() => setIsLoading(false));
   }
 
   useEffect(() => {
@@ -505,7 +442,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
           <p className="eyebrow">Admin setup</p>
           <h2>Centres, clubs, users, and assignments</h2>
         </div>
-        <button type="button" onClick={() => refreshOverview()} disabled={isLoading}>Refresh</button>
+        <button type="button" onClick={refreshOverviewSafely} disabled={isLoading}>Refresh</button>
       </div>
 
       {status ? <p className="admin-status is-success" role="status">{status}</p> : null}

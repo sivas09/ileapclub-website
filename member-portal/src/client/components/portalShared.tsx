@@ -9,6 +9,7 @@ export const programLevelOptions = programLevels.map((value) => ({
 export const bandLevelOptions = bandLevels;
 export const documentCategoryOptions = documentCategories;
 export const resourceCategoryOptions = resourceCategories;
+const leadershipRoleKeySet = new Set<string>(leadershipRoleKeys);
 
 export function HelpLabel({
   label,
@@ -196,7 +197,7 @@ export function isLeadershipMeetingRole(slot: Meeting["roleSlots"][number]) {
 }
 
 export function isLeadershipRoleName(roleName: string) {
-  return leadershipRoleKeys.includes(normalizeLeadershipRoleName(roleName));
+  return leadershipRoleKeySet.has(normalizeLeadershipRoleName(roleName));
 }
 
 function normalizeLeadershipRoleName(roleName: string) {
@@ -247,7 +248,9 @@ export function splitDisplayName(member: Pick<MemberDetail, "displayName" | "fir
 }
 
 export function dateInputValue(value: string) {
-  return new Date(value).toISOString().slice(0, 10);
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
 }
 
 export function formatProgramLevel(programLevel?: string | null) {
@@ -312,17 +315,27 @@ export function formatStudentClubs(student: MeetingsOverview["students"][number]
 }
 
 export function formatDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Date unavailable";
+  }
+
   return new Intl.DateTimeFormat("en-CA", {
     month: "short",
     day: "numeric",
     year: "numeric",
     timeZone: "UTC"
-  }).format(new Date(value));
+  }).format(date);
 }
 
 export function isTodayOrFuture(value: string) {
   const target = new Date(value);
   const today = new Date();
+
+  if (Number.isNaN(target.getTime())) {
+    return false;
+  }
 
   return Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate())
     >= Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());

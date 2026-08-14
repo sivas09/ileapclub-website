@@ -1,107 +1,56 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
-  AdminOverview,
   addMeetingRoleSlot,
-  assignClubFacilitator,
   assignMeetingSlot,
-  BandDocument,
-  BandRequirement,
   backfillPreviousBandRequirements,
+  BandRequirement,
   claimMeetingSlot,
-  createBandDocument,
   createBandRequirement,
-  createCentre,
-  createClub,
   createMeeting,
-  createMember,
-  createResourceLink,
   createRoleDefinition,
-  createUser,
-  deleteDemoUser,
-  deleteBandDocument,
   deleteBandRequirement,
   deleteMeeting,
-  deleteResourceLink,
   deleteRoleDefinition,
-  deleteSampleFeedback,
-  deleteSampleUsers,
   downloadAgenda,
   editMeetingRoleSlot,
   fetchStudentProgressForManager,
-  FeedbackReportEntry,
-  getAdminOverview,
-  getBandDocuments,
   getBandRequirements,
-  getFeedbackReport,
-  getMemberDetail,
-  getMembers,
   getMeetingsOverview,
   getResourceLinks,
   getRoleDefinitions,
   Meeting,
-  MemberDetail,
-  MemberListEntry,
-  MembersResponse,
   MeetingsOverview,
-  permanentlyDeleteMember,
   PortalUser,
-  Role,
-  saveStudentMeetingFeedback,
-  removeMeetingRoleSlot,
-  removeClubFacilitator,
   releaseMeetingSlot,
-  resetDemoMeetingData,
-  resetUserPassword,
+  removeMeetingRoleSlot,
   ResourceLink,
   RoleDefinition,
-  setCentreActive,
-  setClubActive,
-  setMemberActive,
-  setUserActive,
+  saveStudentMeetingFeedback,
   StudentProgress,
   toggleMeetingLock,
-  updateBandDocument,
   updateBandRequirement,
-  updateMember,
   updateMeetingDetails,
-  updateResourceLink,
   updateRoleDefinition,
   updateStudentProfile,
-  updateStudentRequirement,
-  updateUser
+  updateStudentRequirement
 } from "../api";
 import {
-  DataPanel,
-  documentCategoryOptions,
-  documentLink,
+  bandLevelOptions,
+  dateInputValue,
   formatBandLadder,
-  formatCleanupSummary,
   formatDate,
   formatProgramLevel,
-  formatResourceScope,
-  formatRole,
-  formatStudentClubs,
   formatStudentName,
-  getNextBandLevel,
   HelpLabel,
-  isDemoUser,
   isLeadershipMeetingRole,
   isStudentInClub,
   programLevelOptions,
-  ResourceActions,
   ResourcePanel,
-  resourceCategoryOptions,
-  resourceIdFromHash,
   resourcesForRequirement,
   resourcesForRole,
-  resourcesForRoleName,
   roleDefinitionsForMeeting,
   roleDefinitionsForSlot,
-  roleSlotName,
-  splitDisplayName,
-  StatusBadge,
-  SummaryTile,
-  bandLevelOptions
+  roleSlotName
 } from "./portalShared";
 type MeetingMode = "view" | "book" | "manage" | "score" | "edit";
 
@@ -120,6 +69,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
   const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [resourceWarning, setResourceWarning] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedMeetingId, setSelectedMeetingId] = useState("");
@@ -132,12 +82,25 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
     : [];
 
   async function refreshMeetings() {
-    const [data, resourceData] = await Promise.all([
+    const [meetingResult, resourceResult] = await Promise.allSettled([
       getMeetingsOverview(),
       getResourceLinks()
     ]);
+
+    if (meetingResult.status === "rejected") {
+      throw meetingResult.reason;
+    }
+
+    const data = meetingResult.value;
     setOverview(data);
-    setResources(resourceData.resources);
+    if (resourceResult.status === "fulfilled") {
+      setResources(resourceResult.value.resources);
+      setResourceWarning("");
+    } else {
+      console.error("Meeting help resources failed to load.", resourceResult.reason);
+      setResources([]);
+      setResourceWarning("Meeting help resources are temporarily unavailable. Meeting actions are unaffected.");
+    }
     setSelectedMeetingId((currentMeetingId) => {
       if (currentMeetingId && data.meetings.some((meeting) => meeting.id === currentMeetingId)) {
         return currentMeetingId;
@@ -152,6 +115,14 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load meetings."))
       .finally(() => setIsLoading(false));
   }, []);
+
+  function refreshMeetingsSafely() {
+    setError("");
+    setIsLoading(true);
+    refreshMeetings()
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load meetings."))
+      .finally(() => setIsLoading(false));
+  }
 
   async function handleCreateMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -249,11 +220,12 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
           <p className="eyebrow">Meetings</p>
           <h2>Meetings</h2>
         </div>
-        <button type="button" onClick={() => refreshMeetings()} disabled={isLoading}>Refresh</button>
+        <button type="button" onClick={refreshMeetingsSafely} disabled={isLoading}>Refresh</button>
       </div>
 
       {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {resourceWarning ? <p className="admin-status is-warning" role="status">{resourceWarning}</p> : null}
 
       {canManageMeetings ? (
         <form className="meeting-form" onSubmit={handleCreateMeeting}>
@@ -286,7 +258,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
       ) : null}
 
       {user.role === "ADMIN" ? (
-        <RoleDefinitionManagementPanel onChanged={() => refreshMeetings()} />
+        <RoleDefinitionManagementPanel onChanged={refreshMeetingsSafely} />
       ) : null}
 
       <MeetingList
@@ -332,7 +304,8 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
             />
           ) : null}
           {canManageMeetings && meetingMode === "edit" && overview ? (
-            <EditMeeting
+            <MeetingEditForm
+              key={selectedMeeting.id}
               meeting={selectedMeeting}
               clubs={overview.clubs}
               isSubmitting={isSubmitting}
@@ -374,7 +347,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
           students={overview.students}
           resources={resources}
           onSelectResource={setSelectedResource}
-          onUpdated={() => refreshMeetings()}
+          onUpdated={refreshMeetingsSafely}
         />
       ) : null}
       <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
@@ -646,10 +619,17 @@ function MeetingList({
                       <button type="button" onClick={() => onSelect(meeting, "view")}>View</button>
                       <button type="button" onClick={() => onSelect(meeting, "book")}>Book Roles</button>
                       <button type="button" onClick={() => onAgendaDownload(meeting)} disabled={isSubmitting}>Download Agenda</button>
-                      {canManage ? <button type="button" onClick={() => onSelect(meeting, "edit")}>Edit Meeting</button> : null}
-                      {canManage ? <button type="button" onClick={() => onSelect(meeting, "manage")}>Manage Roles</button> : null}
-                      {canManage ? <button type="button" onClick={() => onSelect(meeting, "score")}>Score Feedback</button> : null}
-                      {canManage ? <button type="button" className="danger-action" onClick={() => onDeleteRequest(meeting)} disabled={isSubmitting}>Delete</button> : null}
+                      {canManage ? (
+                        <details className="meeting-actions-menu">
+                          <summary>Manage</summary>
+                          <div className="meeting-actions-menu-panel">
+                            <button type="button" onClick={() => onSelect(meeting, "edit")}>Edit Meeting</button>
+                            <button type="button" onClick={() => onSelect(meeting, "manage")}>Manage Roles</button>
+                            <button type="button" onClick={() => onSelect(meeting, "score")}>Score Feedback</button>
+                            <button type="button" className="danger-action" onClick={() => onDeleteRequest(meeting)} disabled={isSubmitting}>Delete Meeting</button>
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -673,20 +653,53 @@ function DeleteMeetingDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(
+    typeof document !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null
+  );
+
+  useEffect(() => {
+    return () => previousFocusRef.current?.focus();
+  }, []);
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && !isSubmitting) {
+      onCancel();
+      return;
+    }
+
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), a[href]") ?? []);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (!first || !last) {
+      return;
+    }
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div className="resource-panel-backdrop" role="presentation" onClick={() => !isSubmitting && onCancel()}>
       <section
+        ref={dialogRef}
         className="resource-panel meeting-delete-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="meeting-delete-title"
         aria-describedby="meeting-delete-description"
         onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape" && !isSubmitting) {
-            onCancel();
-          }
-        }}
+        onKeyDown={handleDialogKeyDown}
       >
         <div>
           <p className="eyebrow">Permanent deletion</p>
@@ -851,6 +864,7 @@ function ManageRoles({
             roleDefinitions={roleDefinitionsForSlot(availableRoleDefinitions, slot)}
             students={students}
             resources={resources}
+            hasFeedback={meeting.studentFeedbacks.some((entry) => entry.roleSlotId === slot.id)}
             onSelectResource={onSelectResource}
             isSubmitting={isSubmitting}
             onAssign={(studentId) => onAssign(slot.id, studentId)}
@@ -860,6 +874,142 @@ function ManageRoles({
         ))}
       </div>
     </section>
+  );
+}
+
+function AddRoleSlotControls({
+  roleDefinitions,
+  isSubmitting,
+  onAddSlot
+}: {
+  roleDefinitions: MeetingsOverview["roleDefinitions"];
+  isSubmitting: boolean;
+  onAddSlot: (roleDefinitionId: string, slotLabel?: string) => void;
+}) {
+  const [roleDefinitionId, setRoleDefinitionId] = useState(roleDefinitions[0]?.id ?? "");
+  const [slotLabel, setSlotLabel] = useState("");
+
+  useEffect(() => {
+    if (!roleDefinitions.some((roleDefinition) => roleDefinition.id === roleDefinitionId)) {
+      setRoleDefinitionId(roleDefinitions[0]?.id ?? "");
+    }
+  }, [roleDefinitionId, roleDefinitions]);
+
+  function handleAddSlot() {
+    if (!roleDefinitionId) {
+      return;
+    }
+
+    onAddSlot(roleDefinitionId, slotLabel.trim() || undefined);
+    setSlotLabel("");
+  }
+
+  return (
+    <div className="slot-editor add-slot-editor">
+      <label>
+        Add Role
+        <select value={roleDefinitionId} onChange={(event) => setRoleDefinitionId(event.currentTarget.value)} disabled={isSubmitting}>
+          {roleDefinitions.map((roleDefinition) => (
+            <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Label
+        <input value={slotLabel} placeholder="Optional custom label" onChange={(event) => setSlotLabel(event.currentTarget.value)} disabled={isSubmitting} />
+      </label>
+      <button type="button" onClick={handleAddSlot} disabled={isSubmitting || !roleDefinitionId}>Add Slot</button>
+    </div>
+  );
+}
+
+function ManageRoleSlotRow({
+  slot,
+  roleDefinitions,
+  students,
+  resources,
+  hasFeedback,
+  onSelectResource,
+  isSubmitting,
+  onEditSlot,
+  onAssign,
+  onRemoveSlot
+}: {
+  slot: Meeting["roleSlots"][number];
+  roleDefinitions: MeetingsOverview["roleDefinitions"];
+  students: MeetingsOverview["students"];
+  resources: ResourceLink[];
+  hasFeedback: boolean;
+  onSelectResource: (resource: ResourceLink) => void;
+  isSubmitting: boolean;
+  onEditSlot: (payload: { roleDefinitionId?: string; slotLabel?: string; sortOrder?: number }) => void;
+  onAssign: (studentId: string | null) => void;
+  onRemoveSlot: () => void;
+}) {
+  const [roleDefinitionId, setRoleDefinitionId] = useState(slot.roleDefinition.id);
+  const [slotLabel, setSlotLabel] = useState(slot.slotLabel || slot.roleDefinition.name);
+  const [sortOrder, setSortOrder] = useState(String(slot.sortOrder));
+
+  useEffect(() => {
+    setRoleDefinitionId(slot.roleDefinition.id);
+    setSlotLabel(slot.slotLabel || slot.roleDefinition.name);
+    setSortOrder(String(slot.sortOrder));
+  }, [slot.id, slot.roleDefinition.id, slot.roleDefinition.name, slot.slotLabel, slot.sortOrder]);
+
+  function handleSaveSlot() {
+    onEditSlot({
+      roleDefinitionId,
+      slotLabel: slotLabel.trim() || undefined,
+      sortOrder: Number(sortOrder)
+    });
+  }
+
+  function handleReleaseAssignment() {
+    const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "this student";
+
+    if (window.confirm(`Release ${roleSlotName(slot)} from ${assignedName}? Another student will be able to claim it.`)) {
+      onAssign(null);
+    }
+  }
+
+  return (
+    <article className="manager-role-row">
+      <div>
+        <strong>
+          <HelpLabel label={roleSlotName(slot)} resources={resourcesForRole(resources, slot)} onSelectResource={onSelectResource} />
+        </strong>
+        <span>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
+      </div>
+      <label>
+        Assigned Member
+        <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(event.currentTarget.value || null)} disabled={isSubmitting}>
+          <option value="">None</option>
+          {students.map((student) => <option key={student.id} value={student.id}>{formatStudentName(student)}</option>)}
+        </select>
+      </label>
+      <label>
+        Role
+        <select value={roleDefinitionId} onChange={(event) => setRoleDefinitionId(event.currentTarget.value)} disabled={isSubmitting}>
+          {roleDefinitions.map((roleDefinition) => <option key={roleDefinition.id} value={roleDefinition.id}>{roleDefinition.name}</option>)}
+        </select>
+      </label>
+      <label>Label<input value={slotLabel} onChange={(event) => setSlotLabel(event.currentTarget.value)} disabled={isSubmitting} /></label>
+      <label>
+        Order
+        <input type="number" min="1" value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value)} disabled={isSubmitting} />
+      </label>
+      <button type="button" onClick={handleSaveSlot} disabled={isSubmitting || !roleDefinitionId || !sortOrder}>Update Slot</button>
+      <button type="button" className="danger-action" onClick={handleReleaseAssignment} disabled={isSubmitting || !slot.assignedStudentId}>Release Role</button>
+      <button
+        type="button"
+        className="danger-action"
+        onClick={onRemoveSlot}
+        disabled={isSubmitting || Boolean(slot.assignedStudentId || slot.score || hasFeedback)}
+        title={hasFeedback ? "Clear related feedback before removing this role slot." : undefined}
+      >
+        Remove
+      </button>
+    </article>
   );
 }
 
@@ -900,7 +1050,53 @@ function ScoreFeedback({
   );
 }
 
-function EditMeeting({
+function StudentFeedbackRow({
+  meeting,
+  student,
+  isSubmitting,
+  onScore
+}: {
+  meeting: Meeting;
+  student: MeetingsOverview["students"][number];
+  isSubmitting: boolean;
+  onScore: (studentId: string, roleSlotId: string | null, score: number, feedback?: string) => void;
+}) {
+  const existingFeedback = meeting.studentFeedbacks.find((entry) => entry.studentId === student.id);
+  const assignedSlots = meeting.roleSlots.filter((slot) => slot.assignedStudentId === student.id);
+  const [roleSlotId, setRoleSlotId] = useState(existingFeedback?.roleSlotId ?? "");
+  const [score, setScore] = useState(String(existingFeedback?.score ?? ""));
+  const [feedback, setFeedback] = useState(existingFeedback?.feedback ?? "");
+
+  useEffect(() => {
+    setRoleSlotId(existingFeedback?.roleSlotId ?? "");
+    setScore(String(existingFeedback?.score ?? ""));
+    setFeedback(existingFeedback?.feedback ?? "");
+  }, [meeting.id, existingFeedback?.id, existingFeedback?.roleSlotId, existingFeedback?.score, existingFeedback?.feedback]);
+
+  return (
+    <article className="score-feedback-row">
+      <div>
+        <strong>{formatStudentName(student)}</strong>
+        <span>Roles: {assignedSlots.map(roleSlotName).join(", ") || "No role assigned"}</span>
+      </div>
+      <label>
+        Related Role
+        <select value={roleSlotId} disabled={isSubmitting} onChange={(event) => setRoleSlotId(event.currentTarget.value)}>
+          <option value="">General meeting feedback</option>
+          {assignedSlots.map((slot) => <option key={slot.id} value={slot.id}>{roleSlotName(slot)}</option>)}
+        </select>
+      </label>
+      <label>Score<input type="number" min="0" max="100" value={score} placeholder="0-100" disabled={isSubmitting} onChange={(event) => setScore(event.currentTarget.value)} /></label>
+      <label>
+        Feedback / Comment
+        <textarea value={feedback} placeholder="Write facilitator feedback" disabled={isSubmitting} onChange={(event) => setFeedback(event.currentTarget.value)} />
+      </label>
+      <button type="button" onClick={() => onScore(student.id, roleSlotId || null, Number(score), feedback)} disabled={isSubmitting || score === ""}>Save Feedback</button>
+    </article>
+  );
+}
+
+export function MeetingEditForm({
   meeting,
   clubs,
   isSubmitting,

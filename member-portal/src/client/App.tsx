@@ -1,4 +1,4 @@
-import { Component, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import ileapClubLogoUrl from "../../../assets/images/ileap-club-logo.jpg";
 import {
   changeMyPassword,
@@ -11,6 +11,7 @@ import {
   login,
   Meeting,
   Notice,
+  onAuthenticationExpired,
   PortalUser,
   Role,
   storeToken,
@@ -22,6 +23,7 @@ import { FeedbackReportPanel } from "./components/FeedbackReportPanel";
 import { MeetingWorkspace } from "./components/MeetingWorkspace";
 import { MembersWorkspace } from "./components/MembersWorkspace";
 import { NoticesWorkspace } from "./components/NoticesWorkspace";
+import { WorkspaceErrorBoundary } from "./components/PortalErrorBoundary";
 import { StudentClubMembersPanel, StudentProgressDashboard } from "./components/StudentProgressPanels";
 import { formatDate, formatProgramLevel, formatRole, getNextBandLevel, isTodayOrFuture, roleSlotName } from "./components/portalShared";
 
@@ -91,6 +93,12 @@ export function App() {
       .catch(() => clearToken())
       .finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => onAuthenticationExpired(() => {
+    setUser(null);
+    setIsLoading(false);
+    setError("Your session expired. Please sign in again.");
+  }), []);
 
   async function handleLogin(email: string, password: string) {
     setError("");
@@ -240,7 +248,11 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
         </div>
       </section>
 
-      {user.role === "STUDENT" ? <StudentHomeSummary user={user} /> : null}
+      {user.role === "STUDENT" ? (
+        <WorkspaceErrorBoundary workspace="your dashboard summary" anchorId="student-summary-error" compact>
+          <StudentHomeSummary user={user} />
+        </WorkspaceErrorBoundary>
+      ) : null}
 
       {user.role !== "STUDENT" ? (
         <section className="dashboard-grid">
@@ -249,45 +261,43 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
         </section>
       ) : null}
 
-      {user.role === "ADMIN" ? <AdminWorkspace currentUser={user} /> : null}
-      {user.role !== "STUDENT" ? <MembersWorkspace user={user} /> : null}
-      <NoticesErrorBoundary>
+      {user.role === "ADMIN" ? (
+        <WorkspaceErrorBoundary workspace="Centres and Clubs" anchorId="admin">
+          <AdminWorkspace currentUser={user} />
+        </WorkspaceErrorBoundary>
+      ) : null}
+      {user.role !== "STUDENT" ? (
+        <WorkspaceErrorBoundary workspace="Members" anchorId="members">
+          <MembersWorkspace user={user} />
+        </WorkspaceErrorBoundary>
+      ) : null}
+      <WorkspaceErrorBoundary workspace="Notices" anchorId="notices">
         <NoticesWorkspace user={user} />
-      </NoticesErrorBoundary>
-      <DocumentsWorkspace user={user} />
-      <MeetingWorkspace user={user} />
-      {user.role !== "STUDENT" ? <FeedbackReportPanel /> : null}
-      {user.role === "STUDENT" ? <StudentClubMembersPanel /> : null}
-      {user.role === "STUDENT" ? <StudentProgressDashboard /> : null}
+      </WorkspaceErrorBoundary>
+      <WorkspaceErrorBoundary workspace={user.role === "STUDENT" ? "Resources" : "Documents"} anchorId="documents">
+        <DocumentsWorkspace user={user} />
+      </WorkspaceErrorBoundary>
+      <WorkspaceErrorBoundary workspace="Meetings" anchorId="meetings">
+        <MeetingWorkspace user={user} />
+      </WorkspaceErrorBoundary>
+      {user.role !== "STUDENT" ? (
+        <WorkspaceErrorBoundary workspace="Feedback" anchorId="feedback">
+          <FeedbackReportPanel />
+        </WorkspaceErrorBoundary>
+      ) : null}
+      {user.role === "STUDENT" ? (
+        <WorkspaceErrorBoundary workspace="My Club" anchorId="club-members">
+          <StudentClubMembersPanel />
+        </WorkspaceErrorBoundary>
+      ) : null}
+      {user.role === "STUDENT" ? (
+        <WorkspaceErrorBoundary workspace="My Progress" anchorId="progress">
+          <StudentProgressDashboard />
+        </WorkspaceErrorBoundary>
+      ) : null}
       </div>
     </main>
   );
-}
-
-class NoticesErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <section className="notices-workspace" id="notices" aria-label="Notices">
-          <div className="admin-heading">
-            <div>
-              <p className="eyebrow">Club communication</p>
-              <h2>Notices</h2>
-            </div>
-          </div>
-          <p className="admin-status is-error" role="alert">Notices are temporarily unavailable.</p>
-        </section>
-      );
-    }
-
-    return this.props.children;
-  }
 }
 
 function PortalCard({ title, items }: { title: string; items: string[] }) {

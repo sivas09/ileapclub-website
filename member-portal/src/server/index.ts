@@ -64,6 +64,14 @@ app.get("*", (request, response) => {
 
 app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
   console.error(error);
+
+  if (isRequestBodyError(error)) {
+    response.status(error.status).json({
+      message: error.status === 413 ? "Request body is too large." : "Request body must contain valid JSON."
+    });
+    return;
+  }
+
   response.status(500).json({ message: "Unexpected server error." });
 });
 
@@ -74,3 +82,13 @@ app.use((_request, response) => {
 app.listen(config.PORT, () => {
   console.log(`iLEAP Member Portal API listening on port ${config.PORT}`);
 });
+
+function isRequestBodyError(error: unknown): error is { status: 400 | 413 } {
+  if (!error || typeof error !== "object" || !("status" in error)) {
+    return false;
+  }
+
+  const status = (error as { status?: unknown }).status;
+
+  return status === 400 || status === 413;
+}

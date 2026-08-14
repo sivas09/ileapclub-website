@@ -1,108 +1,29 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
-  AdminOverview,
-  addMeetingRoleSlot,
-  assignClubFacilitator,
-  assignMeetingSlot,
-  BandDocument,
-  BandRequirement,
   backfillPreviousBandRequirements,
-  claimMeetingSlot,
-  createBandDocument,
-  createBandRequirement,
-  createCentre,
-  createClub,
-  createMeeting,
   createMember,
-  createResourceLink,
-  createRoleDefinition,
-  createUser,
-  deleteDemoUser,
-  deleteBandDocument,
-  deleteBandRequirement,
-  deleteResourceLink,
-  deleteRoleDefinition,
-  deleteSampleFeedback,
-  deleteSampleUsers,
-  downloadAgenda,
-  editMeetingRoleSlot,
-  fetchStudentProgressForManager,
-  FeedbackReportEntry,
-  getAdminOverview,
-  getBandDocuments,
-  getBandRequirements,
-  getFeedbackReport,
   getMemberDetail,
   getMembers,
-  getMeetingsOverview,
-  getResourceLinks,
-  getRoleDefinitions,
-  Meeting,
   MemberDetail,
   MemberListEntry,
   MembersResponse,
-  MeetingsOverview,
   permanentlyDeleteMember,
   PortalUser,
-  Role,
-  saveStudentMeetingFeedback,
-  removeMeetingRoleSlot,
-  removeClubFacilitator,
-  releaseMeetingSlot,
-  resetDemoMeetingData,
-  resetUserPassword,
-  ResourceLink,
-  RoleDefinition,
-  setCentreActive,
-  setClubActive,
   setMemberActive,
-  setUserActive,
-  StudentProgress,
-  toggleMeetingLock,
-  updateBandDocument,
-  updateBandRequirement,
   updateMember,
-  updateMeetingDetails,
-  updateResourceLink,
-  updateRoleDefinition,
-  updateStudentProfile,
-  updateStudentRequirement,
-  updateUser
+  updateStudentRequirement
 } from "../api";
 import {
+  bandLevelOptions,
   DataPanel,
-  documentCategoryOptions,
-  documentLink,
-  formatBandLadder,
-  formatCleanupSummary,
   formatDate,
   formatProgramLevel,
-  formatResourceScope,
-  formatRole,
-  formatStudentClubs,
-  formatStudentName,
-  getNextBandLevel,
-  HelpLabel,
-  isDemoUser,
-  isLeadershipMeetingRole,
-  isStudentInClub,
   programLevelOptions,
-  ResourceActions,
-  ResourcePanel,
-  resourceCategoryOptions,
-  resourceIdFromHash,
-  resourcesForRequirement,
-  resourcesForRole,
-  resourcesForRoleName,
-  roleDefinitionsForMeeting,
-  roleDefinitionsForSlot,
-  roleSlotName,
   splitDisplayName,
-  StatusBadge,
-  SummaryTile,
-  bandLevelOptions
+  SummaryTile
 } from "./portalShared";
 export function MembersWorkspace({ user }: { user: PortalUser }) {
+  const loadRequestId = useRef(0);
   const [data, setData] = useState<MembersResponse | null>(null);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
   const [editingMember, setEditingMember] = useState<MemberDetail | null>(null);
@@ -123,16 +44,23 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function loadMembers(nextFilters = filters) {
+    const requestId = ++loadRequestId.current;
     setError("");
     setIsLoading(true);
 
     try {
       const result = await getMembers(nextFilters);
-      setData(result);
+      if (requestId === loadRequestId.current) {
+        setData(result);
+      }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load members.");
+      if (requestId === loadRequestId.current) {
+        setError(loadError instanceof Error ? loadError.message : "Unable to load members.");
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestId.current) {
+        setIsLoading(false);
+      }
     }
   }
 

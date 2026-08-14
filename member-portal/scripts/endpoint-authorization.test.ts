@@ -169,6 +169,10 @@ patchModel("meetingRoleSlot", {
       return roleSlot("other-club-slot", "other-meeting", otherClubId, null);
     }
 
+    if (where.id === "feedback-slot") {
+      return roleSlot("feedback-slot", "assigned-meeting", assignedClubId, null);
+    }
+
     return null;
   },
   findMany: () => [],
@@ -199,7 +203,7 @@ patchModel("meetingRoleScore", {
   }
 });
 patchModel("studentMeetingFeedback", {
-  count: () => 0,
+  count: ({ where }: any = {}) => where?.roleSlotId === "feedback-slot" ? 1 : 0,
   groupBy: () => [],
   deleteMany: ({ where }: any) => recordMeetingDelete(where.meetingId, "studentFeedbacks", 1)
 });
@@ -311,6 +315,11 @@ try {
   await assertStatus("student can claim own-club role", "POST", "/api/meetings/assigned-meeting/slots/assigned-slot/claim", Role.STUDENT, 200);
   await assertStatus("student cannot release another student's role", "POST", "/api/meetings/assigned-meeting/slots/other-student-slot/release", Role.STUDENT, 403);
   await assertStatus("student can release own claimed role", "POST", "/api/meetings/assigned-meeting/slots/student-slot/release", Role.STUDENT, 200);
+  await assertStatus("facilitator can edit assigned-club meeting", "PATCH", "/api/meetings/assigned-meeting", Role.FACILITATOR, 200, { title: "Updated Saturday Meeting" });
+  await assertStatus("facilitator cannot edit another club meeting by tampering with id", "PATCH", "/api/meetings/other-meeting", Role.FACILITATOR, 403, { title: "Tampered Meeting" });
+  await assertStatus("student cannot edit meeting directly", "PATCH", "/api/meetings/assigned-meeting", Role.STUDENT, 403, { title: "Tampered Meeting" });
+  await assertStatus("invalid calendar meeting date is rejected", "POST", "/api/meetings", Role.ADMIN, 400, meetingPayload("2026-02-30"));
+  await assertStatus("role slot with meeting feedback cannot be removed", "DELETE", "/api/meetings/assigned-meeting/slots/feedback-slot", Role.ADMIN, 409);
 
   const transactionsBeforeMeetingDeletes = state.meetingDeleteTransactions;
   await assertStatus("unauthenticated meeting deletion is rejected", "DELETE", "/api/meetings/student-delete-meeting", null, 401);
@@ -498,6 +507,17 @@ function memberPayload(clubIds: string[]) {
     programLevel: "JUNIOR",
     bandLevel: "White",
     clubIds
+  };
+}
+
+function meetingPayload(meetingDate: string) {
+  return {
+    clubId: assignedClubId,
+    title: "Saturday Meeting",
+    templateType: "Senior Regular Meeting",
+    meetingDate,
+    startTime: "14:00",
+    location: "Room 202"
   };
 }
 

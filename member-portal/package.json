@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite --host 0.0.0.0",
     "dev:server": "tsx watch src/server/index.ts",
-    "build": "npm run prisma:generate && npm run build:client && npm run build:server",
+    "build": "npm run prisma:generate && npm run typecheck && npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "start": "node dist/server/index.js",
@@ -17,9 +17,14 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:setup": "npm run prisma:migrate:deploy && npm run db:seed",
     "smoke:api": "tsx scripts/smoke-api.ts",
-    "test": "npm run test:auth",
+    "test": "npm run test:client && npm run test:auth",
+    "test:client": "tsx scripts/client-reliability.test.tsx",
     "test:auth": "tsx scripts/facilitator-member-auth.test.ts && tsx scripts/endpoint-authorization.test.ts",
-    "check": "npm run prisma:generate && npm run build"
+    "typecheck": "npm run typecheck:client && npm run typecheck:server",
+    "typecheck:client": "tsc -p tsconfig.json --noEmit",
+    "typecheck:server": "tsc -p tsconfig.server.json --noEmit",
+    "check": "npm run build",
+    "verify": "npm run check && npm test && git diff --check"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

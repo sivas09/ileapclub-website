@@ -8,26 +8,28 @@ import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
 import { standardIleapRoleNames } from "../services/standardRoles.js";
 import { leadershipRoleKeys } from "../../shared/portalConstants.js";
 
+const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDateOnly);
+
 const createMeetingSchema = z.object({
   clubId: z.string().min(1),
-  title: z.string().trim().min(2),
-  templateType: z.string().trim().optional(),
-  meetingDate: z.string().min(10),
-  startTime: z.string().trim().optional(),
-  location: z.string().trim().optional()
+  title: z.string().trim().min(2).max(160),
+  templateType: z.string().trim().max(100).optional(),
+  meetingDate: dateOnlySchema,
+  startTime: z.string().trim().max(40).optional(),
+  location: z.string().trim().max(500).optional()
 });
 
 const updateMeetingSchema = createMeetingSchema.partial();
 
 const bulkMeetingSchema = z.object({
   clubId: z.string().min(1),
-  titlePrefix: z.string().trim().min(2),
-  templateType: z.string().trim().min(2),
-  startDate: z.string().min(10),
-  endDate: z.string().min(10),
+  titlePrefix: z.string().trim().min(2).max(140),
+  templateType: z.string().trim().min(2).max(100),
+  startDate: dateOnlySchema,
+  endDate: dateOnlySchema,
   dayOfWeek: z.coerce.number().int().min(0).max(6),
-  startTime: z.string().trim().min(1),
-  location: z.string().trim().optional()
+  startTime: z.string().trim().min(1).max(40),
+  location: z.string().trim().max(500).optional()
 });
 
 const assignRoleSchema = z.object({
@@ -851,8 +853,12 @@ meetingsRouter.delete("/:meetingId/slots/:slotId", asyncRoute(async (request, re
     return;
   }
 
-  if (slot.assignedStudentId || slot.score) {
-    response.status(409).json({ message: "Clear the assignment and score before removing this role slot." });
+  const feedbackCount = await prisma.studentMeetingFeedback.count({
+    where: { roleSlotId: slot.id }
+  });
+
+  if (slot.assignedStudentId || slot.score || feedbackCount > 0) {
+    response.status(409).json({ message: "Clear the assignment, scores, and feedback before removing this role slot." });
     return;
   }
 
@@ -1393,6 +1399,12 @@ async function canViewMeeting(userId: string, role: Role, clubId: string) {
   }
 
   return false;
+}
+
+function isValidDateOnly(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 function getMeetingDates(startDate: string, endDate: string, dayOfWeek: number) {

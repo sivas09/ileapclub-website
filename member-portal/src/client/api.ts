@@ -399,7 +399,9 @@ export type DemoCleanupSummary = {
 };
 
 const tokenKey = "ileap_member_portal_token";
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const authenticationExpiredEvent = "ileap:authentication-expired";
+const viteEnvironment = import.meta.env;
+const apiBaseUrl = (viteEnvironment?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
 function apiUrl(path: string) {
   return apiBaseUrl ? `${apiBaseUrl}${path}` : path;
@@ -417,6 +419,12 @@ export function clearToken() {
   window.localStorage.removeItem(tokenKey);
 }
 
+export function onAuthenticationExpired(listener: () => void) {
+  window.addEventListener(authenticationExpiredEvent, listener);
+
+  return () => window.removeEventListener(authenticationExpiredEvent, listener);
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const response = await fetch(apiUrl(path), {
@@ -427,10 +435,19 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options.headers
     }
   });
-  const data = await response.json().catch(() => ({}));
+  const data: unknown = await response.json().catch(() => undefined);
 
   if (!response.ok) {
-    throw new Error(data.message || "Request failed.");
+    if (response.status === 401 && getStoredToken()) {
+      clearToken();
+      window.dispatchEvent(new Event(authenticationExpiredEvent));
+    }
+
+    throw new Error(responseErrorMessage(data));
+  }
+
+  if (data === undefined) {
+    throw new Error("The server returned an unreadable response.");
   }
 
   return data as T;
@@ -463,14 +480,22 @@ export async function downloadAgenda(meetingId: string) {
 }
 
 export async function login(email: string, password: string) {
-  return request<LoginResponse>("/api/auth/login", {
+  const result = await request<unknown>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password })
   });
+
+  return parseLoginResponse(result);
 }
 
 export async function getCurrentUser() {
-  return request<{ user: PortalUser }>("/api/auth/me");
+  const result = expectRecord(await request<unknown>("/api/auth/me"), "session");
+
+  if (!isPortalUserResponse(result.user)) {
+    throw new Error("The session service returned an invalid user.");
+  }
+
+  return { user: result.user };
 }
 
 export async function changeMyPassword(payload: {
@@ -484,7 +509,7 @@ export async function changeMyPassword(payload: {
 }
 
 export async function getAdminOverview() {
-  return request<AdminOverview>("/api/admin/overview");
+  return parseAdminOverviewResponse(await request<unknown>("/api/admin/overview"));
 }
 
 export async function createCentre(payload: {
@@ -612,7 +637,7 @@ export async function resetDemoMeetingData() {
 }
 
 export async function getMeetingsOverview() {
-  return request<MeetingsOverview>("/api/meetings");
+  return parseMeetingsOverviewResponse(await request<unknown>("/api/meetings"));
 }
 
 export async function getRoleDefinitions() {
@@ -795,11 +820,13 @@ export async function saveStudentMeetingFeedback(meetingId: string, payload: {
 }
 
 export async function getStudentProgress() {
-  return request<StudentProgress>("/api/student/me/progress");
+  return parseStudentProgressResponse(await request<unknown>("/api/student/me/progress"));
 }
 
 export async function getStudentClubMembers() {
-  return request<{ members: StudentClubMember[] }>("/api/student/me/club-members");
+  const result = expectRecord(await request<unknown>("/api/student/me/club-members"), "club members");
+
+  return { members: expectRecordArray(result.members, "club members") as StudentClubMember[] };
 }
 
 export async function getMembers(params: {
@@ -820,7 +847,7 @@ export async function getMembers(params: {
     }
   });
 
-  return request<MembersResponse>(`/api/members${query.toString() ? `?${query.toString()}` : ""}`);
+  return parseMembersResponse(await request<unknown>(`/api/members${query.toString() ? `?${query.toString()}` : ""}`));
 }
 
 export async function getBandDocuments(params: {
@@ -839,7 +866,7 @@ export async function getBandDocuments(params: {
     }
   });
 
-  return request<DocumentsResponse>(`/api/documents${query.toString() ? `?${query.toString()}` : ""}`);
+  return parseDocumentsResponse(await request<unknown>(`/api/documents${query.toString() ? `?${query.toString()}` : ""}`));
 }
 
 export async function createBandDocument(payload: {
@@ -943,6 +970,172 @@ function isValidDateString(value: unknown): value is string {
   return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }
 
+function responseErrorMessage(value: unknown) {
+  return isRecord(value) && typeof value.message === "string" && value.message.trim()
+    ? value.message
+    : "Request failed.";
+}
+
+function expectRecord(value: unknown, service: string) {
+  if (!isRecord(value)) {
+    throw new Error(`The ${service} service returned an invalid response.`);
+  }
+
+  return value;
+}
+
+function expectRecordArray(value: unknown, service: string) {
+  if (!Array.isArray(value) || !value.every(isRecord)) {
+    throw new Error(`The ${service} service returned an invalid response.`);
+  }
+
+  return value;
+}
+
+function isPortalRole(value: unknown): value is Role {
+  return value === "ADMIN" || value === "FACILITATOR" || value === "STUDENT";
+}
+
+function isPortalUserResponse(value: unknown): value is PortalUser {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.email === "string"
+    && typeof value.firstName === "string"
+    && typeof value.lastName === "string"
+    && isPortalRole(value.role);
+}
+
+function parseLoginResponse(value: unknown): LoginResponse {
+  const result = expectRecord(value, "login");
+
+  if (typeof result.token !== "string" || !result.token || !isPortalUserResponse(result.user)) {
+    throw new Error("The login service returned an invalid response.");
+  }
+
+  return { token: result.token, user: result.user };
+}
+
+export function parseMeetingsOverviewResponse(value: unknown): MeetingsOverview {
+  const result = expectRecord(value, "meetings");
+  const meetings = expectRecordArray(result.meetings, "meetings");
+  const roleDefinitions = expectRecordArray(result.roleDefinitions, "meetings");
+  const clubs = expectRecordArray(result.clubs, "meetings");
+  const students = expectRecordArray(result.students, "meetings");
+
+  if (!meetings.every(isMeetingResponse)
+    || !clubs.every(isClubResponse)
+    || !students.every(isStudentResponse)) {
+    throw new Error("The meetings service returned an invalid response.");
+  }
+
+  return {
+    meetings,
+    roleDefinitions: roleDefinitions as RoleDefinition[],
+    clubs,
+    students
+  };
+}
+
+function isMeetingResponse(value: Record<string, unknown>): value is Meeting {
+  return typeof value.id === "string"
+    && typeof value.clubId === "string"
+    && typeof value.title === "string"
+    && typeof value.templateType === "string"
+    && isValidDateString(value.meetingDate)
+    && typeof value.startTime === "string"
+    && typeof value.isRoleLocked === "boolean"
+    && isClubResponse(value.club)
+    && Array.isArray(value.roleSlots)
+    && value.roleSlots.every((slot) => isRecord(slot) && isRecord(slot.roleDefinition))
+    && Array.isArray(value.attendance)
+    && Array.isArray(value.roleScores)
+    && Array.isArray(value.studentFeedbacks);
+}
+
+function isClubResponse(value: unknown): value is Club {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.name === "string"
+    && typeof value.program === "string"
+    && typeof value.isActive === "boolean";
+}
+
+function isStudentResponse(value: unknown): value is Student {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.bandLevel === "string"
+    && isPortalUserResponse(value.user);
+}
+
+function parseAdminOverviewResponse(value: unknown): AdminOverview {
+  const result = expectRecord(value, "administration");
+
+  return {
+    centres: expectRecordArray(result.centres, "administration") as Centre[],
+    clubs: expectRecordArray(result.clubs, "administration") as Club[],
+    users: expectRecordArray(result.users, "administration") as AdminOverview["users"],
+    students: expectRecordArray(result.students, "administration") as Student[]
+  };
+}
+
+function parseMembersResponse(value: unknown): MembersResponse {
+  const result = expectRecord(value, "members");
+
+  if (typeof result.total !== "number" || typeof result.page !== "number" || typeof result.pageSize !== "number") {
+    throw new Error("The members service returned an invalid response.");
+  }
+
+  return {
+    members: expectRecordArray(result.members, "members") as MemberListEntry[],
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+    centres: expectRecordArray(result.centres, "members") as Centre[],
+    clubs: expectRecordArray(result.clubs, "members") as Club[]
+  };
+}
+
+function parseDocumentsResponse(value: unknown): DocumentsResponse {
+  const result = expectRecord(value, "documents");
+
+  return {
+    documents: expectRecordArray(result.documents, "documents") as BandDocument[],
+    clubs: expectRecordArray(result.clubs, "documents") as Club[],
+    studentContext: isRecord(result.studentContext)
+      ? result.studentContext as DocumentsResponse["studentContext"]
+      : null
+  };
+}
+
+function parseResourcesResponse(value: unknown): ResourcesResponse {
+  const result = expectRecord(value, "resources");
+
+  return {
+    resources: expectRecordArray(result.resources, "resources") as ResourceLink[],
+    studentContext: isRecord(result.studentContext)
+      ? result.studentContext as ResourcesResponse["studentContext"]
+      : null
+  };
+}
+
+export function parseStudentProgressResponse(value: unknown): StudentProgress {
+  const result = expectRecord(value, "student progress");
+  const student = expectRecord(result.student, "student progress");
+  const summary = expectRecord(result.summary, "student progress");
+
+  if (!isPortalUserResponse(student.user)
+    || typeof summary.bandLevel !== "string") {
+    throw new Error("The student progress service returned an invalid response.");
+  }
+
+  return {
+    student: student as StudentProgress["student"],
+    feedback: expectRecordArray(result.feedback, "student progress") as StudentFeedbackEntry[],
+    requirements: expectRecordArray(result.requirements, "student progress") as StudentRequirementStatus[],
+    summary: summary as StudentProgress["summary"]
+  };
+}
+
 export async function createNotice(payload: {
   title: string;
   message: string;
@@ -992,7 +1185,7 @@ export async function getResourceLinks(params: {
     }
   });
 
-  return request<ResourcesResponse>(`/api/resources${query.toString() ? `?${query.toString()}` : ""}`);
+  return parseResourcesResponse(await request<unknown>(`/api/resources${query.toString() ? `?${query.toString()}` : ""}`));
 }
 
 export async function createResourceLink(payload: {
@@ -1105,7 +1298,7 @@ export async function permanentlyDeleteMember(studentId: string) {
 }
 
 export async function fetchStudentProgressForManager(studentId: string) {
-  return request<StudentProgress>(`/api/student/${studentId}/progress`);
+  return parseStudentProgressResponse(await request<unknown>(`/api/student/${studentId}/progress`));
 }
 
 export async function updateStudentProfile(studentId: string, payload: {
@@ -1136,7 +1329,9 @@ export async function backfillPreviousBandRequirements(studentId: string) {
 }
 
 export async function getBandRequirements() {
-  return request<{ requirements: BandRequirement[] }>("/api/student/requirements");
+  const result = expectRecord(await request<unknown>("/api/student/requirements"), "band requirements");
+
+  return { requirements: expectRecordArray(result.requirements, "band requirements") as BandRequirement[] };
 }
 
 export async function createBandRequirement(payload: {
@@ -1178,5 +1373,7 @@ export async function deleteBandRequirement(requirementId: string) {
 }
 
 export async function getFeedbackReport() {
-  return request<{ feedback: FeedbackReportEntry[] }>("/api/reports/facilitator-feedback");
+  const result = expectRecord(await request<unknown>("/api/reports/facilitator-feedback"), "feedback");
+
+  return { feedback: expectRecordArray(result.feedback, "feedback") as FeedbackReportEntry[] };
 }
