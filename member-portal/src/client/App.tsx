@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Component, FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import ileapClubLogoUrl from "../../../assets/images/ileap-club-logo.jpg";
 import {
   changeMyPassword,
@@ -251,7 +251,9 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 
       {user.role === "ADMIN" ? <AdminWorkspace currentUser={user} /> : null}
       {user.role !== "STUDENT" ? <MembersWorkspace user={user} /> : null}
-      <NoticesWorkspace user={user} />
+      <NoticesErrorBoundary>
+        <NoticesWorkspace user={user} />
+      </NoticesErrorBoundary>
       <DocumentsWorkspace user={user} />
       <MeetingWorkspace user={user} />
       {user.role !== "STUDENT" ? <FeedbackReportPanel /> : null}
@@ -260,6 +262,32 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
       </div>
     </main>
   );
+}
+
+class NoticesErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <section className="notices-workspace" id="notices" aria-label="Notices">
+          <div className="admin-heading">
+            <div>
+              <p className="eyebrow">Club communication</p>
+              <h2>Notices</h2>
+            </div>
+          </div>
+          <p className="admin-status is-error" role="alert">Notices are temporarily unavailable.</p>
+        </section>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 function PortalCard({ title, items }: { title: string; items: string[] }) {

@@ -884,7 +884,54 @@ export async function getNotices(params: { clubId?: string; status?: string } = 
     }
   });
 
-  return request<NoticesResponse>(`/api/notices${query.toString() ? `?${query.toString()}` : ""}`);
+  const result = await request<unknown>(`/api/notices${query.toString() ? `?${query.toString()}` : ""}`);
+  return parseNoticesResponse(result);
+}
+
+function parseNoticesResponse(value: unknown): NoticesResponse {
+  if (!isRecord(value) || !Array.isArray(value.notices) || !Array.isArray(value.clubs)) {
+    throw new Error("The notices service returned an invalid response.");
+  }
+
+  if (!value.notices.every(isNoticeResponse) || !value.clubs.every(isNoticeClubResponse)) {
+    throw new Error("The notices service returned an invalid response.");
+  }
+
+  return {
+    notices: value.notices,
+    clubs: value.clubs as Club[]
+  };
+}
+
+function isNoticeResponse(value: unknown): value is Notice {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return typeof value.id === "string"
+    && typeof value.title === "string"
+    && typeof value.message === "string"
+    && (typeof value.clubId === "string" || value.clubId === null || value.clubId === undefined)
+    && typeof value.clubName === "string"
+    && typeof value.createdBy === "string"
+    && typeof value.status === "string"
+    && (typeof value.expiresAt === "string" || value.expiresAt === null || value.expiresAt === undefined)
+    && typeof value.isPinned === "boolean"
+    && isValidDateString(value.createdAt)
+    && isValidDateString(value.updatedAt)
+    && (value.expiresAt == null || isValidDateString(value.expiresAt));
+}
+
+function isNoticeClubResponse(value: unknown) {
+  return isRecord(value) && typeof value.id === "string" && typeof value.name === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isValidDateString(value: unknown): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }
 
 export async function createNotice(payload: {

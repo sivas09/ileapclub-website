@@ -37,6 +37,7 @@ import {
   getMeetingsOverview,
   getResourceLinks,
   getRoleDefinitions,
+  getStudentProgress,
   Meeting,
   MemberDetail,
   MemberListEntry,
