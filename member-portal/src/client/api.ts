@@ -269,6 +269,25 @@ export type BandDocument = {
   status: "ACTIVE" | "ARCHIVED" | string;
 };
 
+export type Notice = {
+  id: string;
+  title: string;
+  message: string;
+  clubId?: string | null;
+  clubName: string;
+  createdBy: string;
+  status: "ACTIVE" | "ARCHIVED" | string;
+  expiresAt?: string | null;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NoticesResponse = {
+  notices: Notice[];
+  clubs: Club[];
+};
+
 export type ResourceCategory = "Role Guide" | "Speech Guide" | "Presentation Guide" | "Video" | "Sample" | "Other";
 
 export type ResourceLink = {
@@ -852,6 +871,52 @@ export async function updateBandDocument(documentId: string, payload: Partial<{
 
 export async function deleteBandDocument(documentId: string) {
   return request<{ deletedDocument: BandDocument }>(`/api/documents/${documentId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function getNotices(params: { clubId?: string; status?: string } = {}) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value)) {
+      query.set(key, String(value));
+    }
+  });
+
+  return request<NoticesResponse>(`/api/notices${query.toString() ? `?${query.toString()}` : ""}`);
+}
+
+export async function createNotice(payload: {
+  title: string;
+  message: string;
+  clubId?: string | null;
+  expiresAt?: string | null;
+  isPinned?: boolean;
+  status?: string;
+}) {
+  return request<{ notice: Notice }>("/api/notices", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateNotice(noticeId: string, payload: Partial<{
+  title: string;
+  message: string;
+  clubId: string | null;
+  expiresAt: string | null;
+  isPinned: boolean;
+  status: string;
+}>) {
+  return request<{ notice: Notice }>(`/api/notices/${noticeId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteNotice(noticeId: string) {
+  return request<{ deletedNotice: Notice }>(`/api/notices/${noticeId}`, {
     method: "DELETE"
   });
 }

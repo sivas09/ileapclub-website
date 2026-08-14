@@ -6,6 +6,7 @@ import { prisma } from "../src/server/db.js";
 import { documentsRouter } from "../src/server/routes/documents.js";
 import { meetingsRouter } from "../src/server/routes/meetings.js";
 import { membersRouter } from "../src/server/routes/members.js";
+import { noticesRouter } from "../src/server/routes/notices.js";
 import { resourcesRouter } from "../src/server/routes/resources.js";
 import { studentRouter } from "../src/server/routes/student.js";
 
@@ -26,8 +27,10 @@ const state = {
   roleUpdates: 0,
   studentRequirementUpserts: 0,
   documentCreates: 0,
+  noticeCreates: 0,
   resourceCreates: 0,
-  lastDocumentWhere: null as any
+  lastDocumentWhere: null as any,
+  lastNoticeWhere: null as any
 };
 
 patchModel("user", {
@@ -179,6 +182,26 @@ patchModel("bandDocument", {
   count: () => 0,
   deleteMany: () => ({ count: 0 })
 });
+patchModel("notice", {
+  findMany: ({ where }: any) => {
+    state.lastNoticeWhere = where;
+    return filterNoticeRecords(where);
+  },
+  create: ({ data }: any) => {
+    state.noticeCreates += 1;
+    return noticeRecord("created-notice", data.clubId, data.status, data.expiresAt, data.isPinned);
+  },
+  findUnique: ({ where }: any) => noticeRecords().find((notice) => notice.id === where.id) ?? null,
+  update: ({ where, data }: any) => {
+    const existing = noticeRecords().find((notice) => notice.id === where.id) ?? noticeRecord(where.id, assignedClubId);
+    return {
+      ...existing,
+      ...withoutUndefined(data),
+      club: data.clubId === undefined ? existing.club : clubRecord(data.clubId)
+    };
+  },
+  delete: ({ where }: any) => noticeRecords().find((notice) => notice.id === where.id) ?? noticeRecord(where.id, assignedClubId)
+});
 patchModel("resourceLink", {
   findMany: () => [],
   create: () => {
@@ -226,6 +249,7 @@ app.use(express.json());
 app.use("/api/members", membersRouter);
 app.use("/api/meetings", meetingsRouter);
 app.use("/api/documents", documentsRouter);
+app.use("/api/notices", noticesRouter);
 app.use("/api/resources", resourcesRouter);
 app.use("/api/student", studentRouter);
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
@@ -266,6 +290,49 @@ try {
   await assertStatus("admin can delete documents", "DELETE", "/api/documents/document-1", Role.ADMIN, 200);
   await assertStatus("facilitator cannot permanently delete documents", "DELETE", "/api/documents/document-1", Role.FACILITATOR, 403);
 
+  await assertStatus("admin can create Club A notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(assignedClubId));
+  await assertStatus("admin can create Club B notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(otherClubId));
+  await assertStatus("admin can create all-clubs notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(null));
+  await assertStatus("notice title maximum is enforced", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), title: "x".repeat(121) });
+  await assertStatus("notice message is required", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), message: "" });
+  await assertStatus("notice expiry must be a valid timestamp", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), expiresAt: "not-a-date" });
+  await assertStatus("notice status must be valid", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), status: "PUBLISHED" });
+  const adminNoticesResponse = await assertStatus("admin can view notices across clubs", "GET", "/api/notices", Role.ADMIN, 200);
+  const adminNotices = await responseNotices(adminNoticesResponse);
+  assertEqual(adminNotices.some((notice) => notice.clubId === assignedClubId), true, "admin sees Club A notice");
+  assertEqual(adminNotices.some((notice) => notice.clubId === otherClubId), true, "admin sees Club B notice");
+  await assertStatus("admin can edit and archive notice", "PATCH", "/api/notices/notice-a", Role.ADMIN, 200, { title: "Updated reminder", status: "ARCHIVED" });
+
+  await assertStatus("facilitator can create assigned-club notice", "POST", "/api/notices", Role.FACILITATOR, 201, noticePayload(assignedClubId));
+  await assertStatus("facilitator cannot create unassigned-club notice", "POST", "/api/notices", Role.FACILITATOR, 403, noticePayload(otherClubId));
+  await assertStatus("facilitator cannot submit all-clubs notice", "POST", "/api/notices", Role.FACILITATOR, 403, noticePayload(null));
+  await assertStatus("facilitator cannot move notice to unassigned club", "PATCH", "/api/notices/notice-a", Role.FACILITATOR, 403, { clubId: otherClubId });
+  await assertStatus("facilitator cannot edit unauthorized Club B notice", "PATCH", "/api/notices/notice-b", Role.FACILITATOR, 403, { message: "Tampered request" });
+  await assertStatus("facilitator can edit assigned-club notice", "PATCH", "/api/notices/notice-a", Role.FACILITATOR, 200, { message: "Bring your workbook." });
+  await assertStatus("facilitator can archive assigned-club notice", "PATCH", "/api/notices/notice-a", Role.FACILITATOR, 200, { status: "ARCHIVED" });
+  const facilitatorNoticesResponse = await assertStatus("facilitator sees only appropriate notices", "GET", "/api/notices?status=ACTIVE", Role.FACILITATOR, 200);
+  const facilitatorNotices = await responseNotices(facilitatorNoticesResponse);
+  assertEqual(facilitatorNotices.some((notice) => notice.clubId === otherClubId), false, "facilitator cannot see Club B notice");
+  await assertStatus("facilitator cannot request unassigned club notices", "GET", `/api/notices?clubId=${otherClubId}`, Role.FACILITATOR, 403);
+
+  const studentNoticesResponse = await assertStatus("student sees active own-club notices", "GET", "/api/notices", Role.STUDENT, 200);
+  const studentNotices = await responseNotices(studentNoticesResponse);
+  assertEqual(studentNotices.some((notice) => notice.id === "notice-a"), true, "student sees active Club A notice");
+  assertEqual(studentNotices.some((notice) => notice.id === "notice-global"), true, "student sees active all-clubs notice");
+  assertEqual(studentNotices.some((notice) => notice.id === "notice-b"), false, "student cannot see Club B notice");
+  assertEqual(studentNotices.some((notice) => notice.id === "notice-archived"), false, "student cannot see archived notice");
+  assertEqual(studentNotices.some((notice) => notice.id === "notice-expired"), false, "student cannot see expired notice");
+  const studentArchivedResponse = await assertStatus("student archived filter still returns active notices only", "GET", "/api/notices?status=ARCHIVED", Role.STUDENT, 200);
+  const studentArchivedNotices = await responseNotices(studentArchivedResponse);
+  assertEqual(studentArchivedNotices.some((notice) => notice.id === "notice-archived"), false, "student cannot force archived notice visibility");
+  await assertStatus("student cannot request arbitrary club notice scope", "GET", `/api/notices?clubId=${otherClubId}`, Role.STUDENT, 403);
+  await assertStatus("student cannot create notice", "POST", "/api/notices", Role.STUDENT, 403, noticePayload(assignedClubId));
+  await assertStatus("student cannot update notice", "PATCH", "/api/notices/notice-a", Role.STUDENT, 403, { message: "Tampered" });
+  await assertStatus("student cannot archive notice", "PATCH", "/api/notices/notice-a", Role.STUDENT, 403, { status: "ARCHIVED" });
+  await assertStatus("student cannot delete notice", "DELETE", "/api/notices/notice-a", Role.STUDENT, 403);
+  await assertStatus("facilitator cannot permanently delete notice", "DELETE", "/api/notices/notice-a", Role.FACILITATOR, 403);
+  await assertStatus("admin can permanently delete notice", "DELETE", "/api/notices/notice-a", Role.ADMIN, 200);
+
   await assertStatus("admin can add resources", "POST", "/api/resources", Role.ADMIN, 201, resourcePayload());
   await assertStatus("facilitator cannot add resources", "POST", "/api/resources", Role.FACILITATOR, 403, resourcePayload());
   await assertStatus("student cannot delete resources", "DELETE", "/api/resources/resource-1", Role.STUDENT, 403);
@@ -280,6 +347,7 @@ try {
 
   assertEqual(state.roleUpdates > 0, true, "role claim/release tests executed update paths");
   assertEqual(state.documentCreates > 0, true, "document create tests executed create path");
+  assertEqual(state.noticeCreates > 0, true, "notice create tests executed create path");
   assertEqual(state.resourceCreates > 0, true, "resource create tests executed create path");
   assertEqual(state.studentRequirementUpserts > 0, true, "band progress tests executed upsert path");
 
@@ -301,6 +369,13 @@ async function assertStatus(label: string, method: string, path: string, role: R
   if (response.status !== expectedStatus) {
     throw new Error(`${label}: expected ${expectedStatus}, received ${response.status}: ${await response.text()}`);
   }
+
+  return response;
+}
+
+async function responseNotices(response: globalThis.Response) {
+  const body = await response.json() as { notices: Array<{ id: string; clubId: string | null }> };
+  return body.notices;
 }
 
 function tokenUser(role: Role) {
@@ -367,6 +442,16 @@ function documentPayload(clubId: string | null) {
     bandLevel: "White",
     clubId,
     category: "Band Requirements"
+  };
+}
+
+function noticePayload(clubId: string | null) {
+  return {
+    title: "Saturday Meeting Reminder",
+    message: "Please bring your workbook this Saturday.",
+    clubId,
+    expiresAt: "2026-08-22T23:59:59.999Z",
+    isPinned: true
   };
 }
 
@@ -498,6 +583,96 @@ function documentRecord(clubId: string | null) {
     club: clubId ? { id: clubId, name: "Assigned Club" } : null,
     uploadedBy: { firstName: "Admin", lastName: "User" }
   };
+}
+
+function noticeRecords() {
+  return [
+    noticeRecord("notice-a", assignedClubId),
+    noticeRecord("notice-b", otherClubId),
+    noticeRecord("notice-archived", assignedClubId, "ARCHIVED"),
+    noticeRecord("notice-expired", assignedClubId, "ACTIVE", new Date("2020-01-01T00:00:00.000Z")),
+    noticeRecord("notice-global", null, "ACTIVE", null, true)
+  ];
+}
+
+function noticeRecord(id: string, clubId: string | null, status = "ACTIVE", expiresAt: Date | null = null, isPinned = false) {
+  return {
+    id,
+    title: id === "notice-global" ? "All Clubs Reminder" : "Saturday Meeting Reminder",
+    message: "Please bring your workbook this Saturday.",
+    clubId,
+    createdByUserId: users.admin.id,
+    status,
+    expiresAt,
+    isPinned,
+    createdAt: new Date("2026-08-14T12:00:00.000Z"),
+    updatedAt: new Date("2026-08-14T12:00:00.000Z"),
+    club: clubRecord(clubId),
+    createdBy: { firstName: "Admin", lastName: "User" }
+  };
+}
+
+function clubRecord(clubId: string | null) {
+  if (!clubId) {
+    return null;
+  }
+
+  return {
+    id: clubId,
+    name: clubId === assignedClubId ? "Assigned Club" : "Other Club"
+  };
+}
+
+function filterNoticeRecords(where: any) {
+  return noticeRecords().filter((notice) => matchesNoticeWhere(notice, where));
+}
+
+function matchesNoticeWhere(notice: ReturnType<typeof noticeRecord>, where: any): boolean {
+  if (where.status && notice.status !== where.status) {
+    return false;
+  }
+
+  if (where.clubId !== undefined && notice.clubId !== where.clubId) {
+    return false;
+  }
+
+  if (Array.isArray(where.OR) && !where.OR.some((clause: any) => matchesNoticeClause(notice, clause))) {
+    return false;
+  }
+
+  if (Array.isArray(where.AND) && !where.AND.every((clause: any) => matchesNoticeClause(notice, clause))) {
+    return false;
+  }
+
+  return true;
+}
+
+function matchesNoticeClause(notice: ReturnType<typeof noticeRecord>, clause: any): boolean {
+  if (Array.isArray(clause.OR)) {
+    return clause.OR.some((nestedClause: any) => matchesNoticeClause(notice, nestedClause));
+  }
+
+  if (clause.clubId === null) {
+    return notice.clubId === null;
+  }
+
+  if (clause.clubId?.in) {
+    return Boolean(notice.clubId && clause.clubId.in.includes(notice.clubId));
+  }
+
+  if (clause.expiresAt === null) {
+    return notice.expiresAt === null;
+  }
+
+  if (clause.expiresAt?.gte) {
+    return Boolean(notice.expiresAt && notice.expiresAt >= clause.expiresAt.gte);
+  }
+
+  return true;
+}
+
+function withoutUndefined(value: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 function resourceRecord() {

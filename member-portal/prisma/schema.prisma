@@ -32,6 +32,7 @@ model User {
   uploadedBandDocuments BandDocument[] @relation("BandDocumentUploadedBy")
   createdResourceLinks ResourceLink[] @relation("ResourceLinkCreatedBy")
   updatedResourceLinks ResourceLink[] @relation("ResourceLinkUpdatedBy")
+  createdNotices Notice[] @relation("NoticeCreatedBy")
 }
 
 model Centre {
@@ -62,6 +63,7 @@ model Club {
   facilitators ClubFacilitator[]
   meetings     Meeting[]
   bandDocuments BandDocument[]
+  notices      Notice[]
 }
 
 model Student {
@@ -351,4 +353,24 @@ model BandDocument {
   @@index([clubId])
   @@index([status])
   @@index([category])
+}
+
+model Notice {
+  id              String   @id @default(cuid())
+  title           String
+  message         String
+  clubId          String?
+  createdByUserId String
+  status          String   @default("ACTIVE")
+  expiresAt       DateTime?
+  isPinned        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  club      Club? @relation(fields: [clubId], references: [id])
+  createdBy User  @relation("NoticeCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([clubId, status])
+  @@index([status, expiresAt])
+  @@index([isPinned, createdAt])
 }

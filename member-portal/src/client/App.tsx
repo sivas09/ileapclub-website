@@ -5,10 +5,12 @@ import {
   clearToken,
   getCurrentUser,
   getMeetingsOverview,
+  getNotices,
   getStoredToken,
   getStudentProgress,
   login,
   Meeting,
+  Notice,
   PortalUser,
   Role,
   storeToken,
@@ -19,6 +21,7 @@ import { DocumentsWorkspace } from "./components/DocumentsWorkspace";
 import { FeedbackReportPanel } from "./components/FeedbackReportPanel";
 import { MeetingWorkspace } from "./components/MeetingWorkspace";
 import { MembersWorkspace } from "./components/MembersWorkspace";
+import { NoticesWorkspace } from "./components/NoticesWorkspace";
 import { StudentClubMembersPanel, StudentProgressDashboard } from "./components/StudentProgressPanels";
 import { formatDate, formatProgramLevel, formatRole, getNextBandLevel, isTodayOrFuture, roleSlotName } from "./components/portalShared";
 
@@ -48,6 +51,7 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
     { href: "#overview", label: "Overview" },
     { href: "#admin", label: "Setup" },
     { href: "#members", label: "Members" },
+    { href: "#notices", label: "Notices" },
     { href: "#documents", label: "Documents" },
     { href: "#meetings", label: "Meetings" },
     { href: "#feedback", label: "Feedback" },
@@ -56,6 +60,7 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
   FACILITATOR: [
     { href: "#overview", label: "Overview" },
     { href: "#members", label: "Members" },
+    { href: "#notices", label: "Notices" },
     { href: "#documents", label: "Documents" },
     { href: "#meetings", label: "Meetings" },
     { href: "#feedback", label: "Feedback" },
@@ -63,6 +68,7 @@ const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
   ],
   STUDENT: [
     { href: "#overview", label: "Overview" },
+    { href: "#notices", label: "Notices" },
     { href: "#meetings", label: "Meetings" },
     { href: "#club-members", label: "My Club" },
     { href: "#resources", label: "Resources" },
@@ -245,6 +251,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 
       {user.role === "ADMIN" ? <AdminWorkspace currentUser={user} /> : null}
       {user.role !== "STUDENT" ? <MembersWorkspace user={user} /> : null}
+      <NoticesWorkspace user={user} />
       <DocumentsWorkspace user={user} />
       <MeetingWorkspace user={user} />
       {user.role !== "STUDENT" ? <FeedbackReportPanel /> : null}
@@ -269,8 +276,11 @@ function PortalCard({ title, items }: { title: string; items: string[] }) {
 function StudentHomeSummary({ user }: { user: PortalUser }) {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [notices, setNotices] = useState<Notice[]>([]);
   const [error, setError] = useState("");
+  const [noticeError, setNoticeError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [areNoticesLoading, setAreNoticesLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([getStudentProgress(), getMeetingsOverview()])
@@ -280,6 +290,13 @@ function StudentHomeSummary({ user }: { user: PortalUser }) {
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load your dashboard summary."))
       .finally(() => setIsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getNotices()
+      .then((result) => setNotices(result.notices.slice(0, 3)))
+      .catch((loadError) => setNoticeError(loadError instanceof Error ? loadError.message : "Unable to load notices."))
+      .finally(() => setAreNoticesLoading(false));
   }, []);
 
   const upcomingMeetings = meetings
@@ -334,7 +351,31 @@ function StudentHomeSummary({ user }: { user: PortalUser }) {
         </article>
       </div>
 
+      <section className="student-dashboard-notices" aria-labelledby="student-dashboard-notices-title">
+        <div className="student-dashboard-notices-header">
+          <h4 id="student-dashboard-notices-title">Notices</h4>
+          <a href="#notices">View All Notices</a>
+        </div>
+        {areNoticesLoading ? <p>Loading notices...</p> : null}
+        {noticeError ? <p className="form-error" role="alert">{noticeError}</p> : null}
+        {!areNoticesLoading && !noticeError && !notices.length ? <p>No new notices.</p> : null}
+        {notices.length ? (
+          <div className="student-dashboard-notice-list">
+            {notices.map((notice) => (
+              <article key={notice.id}>
+                <div>
+                  <strong>{notice.title}</strong>
+                  {notice.isPinned ? <span className="notice-important-badge">Important</span> : null}
+                </div>
+                <p>{notice.message}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
       <nav className="student-quick-links" aria-label="Student quick links">
+        <a href="#notices">Notices</a>
         <a href="#meetings">Meetings</a>
         <a href="#resources">Resources</a>
         <a href="#progress">Band Progress</a>

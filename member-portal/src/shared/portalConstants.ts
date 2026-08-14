@@ -47,4 +47,11 @@ export const resourceCategories = [
   "Other"
 ] as const;
 
+export const noticeStatuses = ["ACTIVE", "ARCHIVED"] as const;
+
+export const noticeLimits = {
+  title: 120,
+  message: 2000
+} as const;
+
 export const leadershipRoleKeys = ["ichair", "igrammarian", "ifinesmaster", "ifillercounter", "itimer"] as const;
