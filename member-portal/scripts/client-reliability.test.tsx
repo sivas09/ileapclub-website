@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseMeetingsOverviewResponse, type Meeting } from "../src/client/api";
+import { parseMeetingsOverviewResponse, type Meeting, type ResourceLink } from "../src/client/api";
 import { MeetingEditForm } from "../src/client/components/MeetingWorkspace";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
-import { dateInputValue, formatDate } from "../src/client/components/portalShared";
+import {
+  dateInputValue,
+  formatDate,
+  groupResourceLinks,
+  overviewLinksForRole,
+  resourceGroupFor,
+  sectionHrefForHash
+} from "../src/client/components/portalShared";
 
 const meeting = meetingFixture();
 const editMarkup = renderToStaticMarkup(
@@ -52,7 +59,58 @@ const rootFallback = renderToStaticMarkup(rootBoundary.render());
 assert.match(rootFallback, /unexpected error/, "Catastrophic render failures produce a visible portal fallback.");
 assert.match(rootFallback, /Reload Portal/, "The portal fallback offers a reload action.");
 
+assert.deepEqual(
+  overviewLinksForRole("ADMIN").map((item) => item.label),
+  ["Setup", "Members", "Meetings", "Documents", "Feedback", "Band Progress"],
+  "Admin Overview exposes the requested management sections."
+);
+assert.deepEqual(
+  overviewLinksForRole("FACILITATOR").map((item) => item.label),
+  ["Members", "Meetings", "Documents", "Feedback", "Band Progress"],
+  "Facilitator Overview remains scoped to facilitator sections."
+);
+assert.deepEqual(
+  overviewLinksForRole("STUDENT").map((item) => item.label),
+  ["My Club", "Meetings", "My Progress", "Resources"],
+  "Student Overview exposes only member-facing sections."
+);
+assert.equal(sectionHrefForHash("ADMIN", "#meetings"), "#meetings", "Direct meeting links open the Meetings workspace.");
+assert.equal(sectionHrefForHash("ADMIN", "#resources/resource-1"), "#documents", "Nested manager resource links stay in Documents.");
+assert.equal(sectionHrefForHash("STUDENT", "#admin"), "#overview", "Student navigation rejects unauthorized workspace hashes.");
+
+const groupedResources = groupResourceLinks([
+  resourceFixture("leadership", "iChair Guide", "Role Guide", "iChair"),
+  resourceFixture("speaking", "Prepared Speech Help", "Role Guide", "Prepared Speech"),
+  resourceFixture("evaluation", "Speech Evaluator Help", "Role Guide", "Speech Evaluator"),
+  resourceFixture("speech-guide", "Writing a Speech", "Speech Guide"),
+  resourceFixture("presentation-guide", "Presentation Planning", "Presentation Guide"),
+  { ...resourceFixture("band", "Brown I Requirements", "Document"), bandLevel: "Brown I" }
+]);
+assert.deepEqual(
+  groupedResources.map((group) => group.label),
+  ["Leadership Roles", "Speaking Roles", "Evaluator Roles", "Speech Guides", "Presentation Guides", "Band Resources"],
+  "Resources are grouped in the stable navigation order."
+);
+assert.equal(
+  resourceGroupFor(resourceFixture("support", "Timer Report", "Report Guide", "Timer Report")),
+  "Support Roles",
+  "Unmatched role and report guides remain available under Support Roles."
+);
+
 console.log("Client reliability regression tests passed.");
+
+function resourceFixture(id: string, title: string, category: string, roleKey: string | null = null): ResourceLink {
+  return {
+    id,
+    title,
+    explanation: `${title} explanation`,
+    category,
+    roleKey,
+    status: "ACTIVE",
+    createdAt: "2026-08-16T12:00:00.000Z",
+    createdBy: "Admin"
+  };
+}
 
 function meetingFixture(): Meeting {
   return {

@@ -3827,3 +3827,215 @@ body {
     justify-content: center;
   }
 }
+
+.overview-intro,
+.overview-launch-grid,
+.student-home-summary {
+  width: min(1240px, 100%);
+}
+
+.portal-nav a.is-active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 3px 0 0 var(--portal-orange);
+}
+
+.overview-intro {
+  display: grid;
+  gap: 7px;
+  padding: 4px 0 2px;
+}
+
+.overview-intro h2 {
+  margin: 0;
+  color: var(--portal-blue);
+  font-size: 1.65rem;
+  line-height: 1.2;
+}
+
+.overview-intro p,
+.overview-intro small {
+  margin: 0;
+  color: var(--portal-muted);
+  line-height: 1.5;
+}
+
+.overview-intro small {
+  margin-top: 3px;
+  font-weight: 750;
+}
+
+.overview-launch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.overview-launch-grid a {
+  min-width: 0;
+  min-height: 118px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 7px;
+  padding: 17px;
+  border: 1px solid #d6e0eb;
+  border-left: 4px solid var(--portal-teal);
+  border-radius: 8px;
+  color: var(--portal-ink);
+  background: #ffffff;
+  box-shadow: 0 7px 20px rgba(18, 34, 56, 0.05);
+  text-decoration: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.overview-launch-grid a:hover,
+.overview-launch-grid a:focus-visible {
+  border-color: var(--portal-teal);
+  box-shadow: 0 11px 26px rgba(0, 41, 107, 0.1);
+  transform: translateY(-1px);
+}
+
+.overview-launch-grid strong {
+  color: var(--portal-blue);
+  font-size: 1.05rem;
+}
+
+.overview-launch-grid span {
+  color: var(--portal-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.overview-launch-grid small {
+  color: var(--portal-teal);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.student-home-summary {
+  margin-top: 16px;
+  padding: 16px;
+  box-shadow: 0 7px 20px rgba(18, 34, 56, 0.05);
+}
+
+.student-home-grid article {
+  min-height: 104px;
+}
+
+.student-home-grid .student-band-highlight {
+  border-color: #7eabc0;
+  background: #eaf7f9;
+}
+
+.student-home-grid .student-band-highlight strong {
+  color: #004f62;
+  font-size: 1.45rem;
+}
+
+.student-resource-groups,
+.resource-link-groups {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.resource-link-group {
+  overflow: hidden;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.resource-link-group summary {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 15px;
+  color: var(--portal-blue);
+  background: #f7fafc;
+  cursor: pointer;
+  list-style: none;
+}
+
+.resource-link-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.resource-link-group summary::after {
+  width: 22px;
+  color: var(--portal-teal);
+  content: "+";
+  font-size: 1.35rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.resource-link-group[open] summary::after {
+  content: "-";
+}
+
+.resource-link-group summary span {
+  min-width: 0;
+  font-weight: 900;
+}
+
+.resource-link-group summary small {
+  color: var(--portal-muted);
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.resource-link-group summary:hover,
+.resource-link-group summary:focus-visible {
+  background: #eef6f8;
+}
+
+.resource-link-group-content {
+  display: grid;
+  gap: 14px;
+  padding: 15px;
+  border-top: 1px solid #e0e8f1;
+}
+
+.resource-link-group-content > p {
+  margin: 0;
+  color: var(--portal-muted);
+}
+
+.resource-link-group-content .resource-table-wrap,
+.resource-link-group-content .resource-chip-list {
+  margin-top: 0;
+}
+
+@media (max-width: 860px) {
+  .overview-launch-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .overview-launch-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-launch-grid a {
+    min-height: 104px;
+  }
+
+  .resource-link-group summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .resource-link-group summary small {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .resource-link-group summary::after {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}

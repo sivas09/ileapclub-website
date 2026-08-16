@@ -4,13 +4,9 @@ import {
   changeMyPassword,
   clearToken,
   getCurrentUser,
-  getMeetingsOverview,
-  getNotices,
   getStoredToken,
   getStudentProgress,
   login,
-  Meeting,
-  Notice,
   onAuthenticationExpired,
   PortalUser,
   Role,
@@ -25,57 +21,27 @@ import { MembersWorkspace } from "./components/MembersWorkspace";
 import { NoticesWorkspace } from "./components/NoticesWorkspace";
 import { WorkspaceErrorBoundary } from "./components/PortalErrorBoundary";
 import { StudentClubMembersPanel, StudentProgressDashboard } from "./components/StudentProgressPanels";
-import { formatDate, formatProgramLevel, formatRole, getNextBandLevel, isTodayOrFuture, roleSlotName } from "./components/portalShared";
+import {
+  formatProgramLevel,
+  formatRole,
+  overviewLinksForRole,
+  portalNavigationItems,
+  sectionHrefForHash
+} from "./components/portalShared";
 
-const roleCopy: Record<Role, { title: string; summary: string; actions: string[]; reports: string[] }> = {
+const roleCopy: Record<Role, { title: string; summary: string }> = {
   ADMIN: {
-    title: "Operations Control",
-    summary: "Manage centres, clubs, members, facilitators, and portal configuration.",
-    actions: ["Create centres and clubs", "Create facilitators and students", "Review enrollment and activity"],
-    reports: ["Centre growth", "Club roster health", "Attendance and band progress"]
+    title: "Admin Overview",
+    summary: "Choose a section to manage club operations and member progress."
   },
   FACILITATOR: {
-    title: "Club Meeting Workspace",
-    summary: "Prepare meetings, manage role claims, override assignments, and track performance.",
-    actions: ["Create upcoming meetings", "Lock or reopen roles", "Record attendance and scores"],
-    reports: ["Meeting readiness", "Role participation", "Student progress"]
+    title: "Facilitator Overview",
+    summary: "Choose a section to prepare meetings and support your assigned members."
   },
   STUDENT: {
-    title: "Student Dashboard",
-    summary: "Claim open roles, prepare for upcoming meetings, and follow personal progress.",
-    actions: ["Claim up to two open roles per meeting", "Download meeting agenda", "Review scores and feedback"],
-    reports: ["Upcoming roles", "Band level status", "Role performance"]
+    title: "My Overview",
+    summary: "See your current level, then open the section you need."
   }
-};
-
-const roleNavItems: Record<Role, Array<{ href: string; label: string }>> = {
-  ADMIN: [
-    { href: "#overview", label: "Overview" },
-    { href: "#admin", label: "Setup" },
-    { href: "#members", label: "Members" },
-    { href: "#notices", label: "Notices" },
-    { href: "#documents", label: "Documents" },
-    { href: "#meetings", label: "Meetings" },
-    { href: "#feedback", label: "Feedback" },
-    { href: "#requirements", label: "Band Progress" }
-  ],
-  FACILITATOR: [
-    { href: "#overview", label: "Overview" },
-    { href: "#members", label: "Members" },
-    { href: "#notices", label: "Notices" },
-    { href: "#documents", label: "Documents" },
-    { href: "#meetings", label: "Meetings" },
-    { href: "#feedback", label: "Feedback" },
-    { href: "#requirements", label: "Band Progress" }
-  ],
-  STUDENT: [
-    { href: "#overview", label: "Overview" },
-    { href: "#notices", label: "Notices" },
-    { href: "#meetings", label: "Meetings" },
-    { href: "#club-members", label: "My Club" },
-    { href: "#resources", label: "Resources" },
-    { href: "#progress", label: "My Progress" }
-  ]
 };
 
 export function App() {
@@ -190,6 +156,31 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
   const displayName = `${user.firstName} ${user.lastName}`;
   const initials = useMemo(() => `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase(), [user.firstName, user.lastName]);
   const [isPasswordPanelOpen, setIsPasswordPanelOpen] = useState(false);
+  const [activeHash, setActiveHash] = useState(() => window.location.hash);
+  const activeHref = sectionHrefForHash(user.role, activeHash);
+  const activeTitle = portalNavigationItems[user.role].find((item) => item.href === activeHref)?.label ?? "Overview";
+
+  useEffect(() => {
+    function syncPortalSection() {
+      setActiveHash(window.location.hash);
+    }
+
+    window.addEventListener("hashchange", syncPortalSection);
+    return () => window.removeEventListener("hashchange", syncPortalSection);
+  }, []);
+
+  useEffect(() => {
+    const hashRoot = window.location.hash.split("/")[0];
+    const targetId = hashRoot === "#resource-links" || (hashRoot === "#resources" && user.role !== "STUDENT")
+      ? "resource-links"
+      : hashRoot?.replace(/^#/, "");
+    if (!targetId || activeHref === "#overview") {
+      window.scrollTo({ top: 0 });
+      return;
+    }
+
+    window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView());
+  }, [activeHash, activeHref, user.role]);
 
   return (
     <main className="portal-shell">
@@ -204,8 +195,15 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
           </div>
         </a>
         <nav className="portal-nav">
-          {roleNavItems[user.role].map((item) => (
-            <a href={item.href} key={item.href}>{item.label}</a>
+          {portalNavigationItems[user.role].map((item) => (
+            <a
+              href={item.href}
+              key={item.href}
+              className={item.href === activeHref ? "is-active" : undefined}
+              aria-current={item.href === activeHref ? "page" : undefined}
+            >
+              {item.label}
+            </a>
           ))}
         </nav>
         <div className="portal-sidebar-footer">
@@ -218,7 +216,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
       <header className="portal-header" id="overview">
         <div>
           <p>member.ileapclub.com</p>
-          <h1>{copy.title}</h1>
+          <h1>{activeHref === "#overview" ? copy.title : activeTitle}</h1>
         </div>
         <div className="user-menu">
           <span>{initials}</span>
@@ -235,131 +233,111 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 
       {isPasswordPanelOpen ? <ChangePasswordPanel /> : null}
 
-      <section className="dashboard-hero">
-        <div>
-          <p className="eyebrow">{user.role.replace("_", " ")}</p>
-          <h2>Welcome back, {user.firstName}.</h2>
-          <p>{copy.summary}</p>
-        </div>
-        <div className="status-card">
-          <span>Today</span>
-          <strong>Ready</strong>
-          <p>Review meetings, assignments, attendance, scores, and band progress from one place.</p>
-        </div>
-      </section>
+      {activeHref === "#overview" ? (
+        <>
+          <section className="overview-intro" aria-labelledby="overview-title">
+            <p className="eyebrow">{formatRole(user.role)}</p>
+            <h2 id="overview-title">Welcome back, {user.firstName}.</h2>
+            <p>{copy.summary}</p>
+            {user.role === "ADMIN" ? <small>To preview member experience, use a student test account.</small> : null}
+          </section>
 
-      {user.role === "STUDENT" ? (
-        <WorkspaceErrorBoundary workspace="your dashboard summary" anchorId="student-summary-error" compact>
-          <StudentHomeSummary user={user} />
-        </WorkspaceErrorBoundary>
-      ) : null}
+          {user.role === "STUDENT" ? (
+            <WorkspaceErrorBoundary workspace="your dashboard summary" anchorId="student-summary-error" compact>
+              <StudentHomeSummary user={user} />
+            </WorkspaceErrorBoundary>
+          ) : null}
 
-      {user.role !== "STUDENT" ? (
-        <section className="dashboard-grid">
-          <PortalCard title="Primary Actions" items={copy.actions} />
-          <PortalCard title="Important Reports" items={copy.reports} />
-        </section>
-      ) : null}
-
-      {user.role === "ADMIN" ? (
-        <WorkspaceErrorBoundary workspace="Centres and Clubs" anchorId="admin">
-          <AdminWorkspace currentUser={user} />
-        </WorkspaceErrorBoundary>
-      ) : null}
-      {user.role !== "STUDENT" ? (
-        <WorkspaceErrorBoundary workspace="Members" anchorId="members">
-          <MembersWorkspace user={user} />
-        </WorkspaceErrorBoundary>
-      ) : null}
-      <WorkspaceErrorBoundary workspace="Notices" anchorId="notices">
-        <NoticesWorkspace user={user} />
-      </WorkspaceErrorBoundary>
-      <WorkspaceErrorBoundary workspace={user.role === "STUDENT" ? "Resources" : "Documents"} anchorId="documents">
-        <DocumentsWorkspace user={user} />
-      </WorkspaceErrorBoundary>
-      <WorkspaceErrorBoundary workspace="Meetings" anchorId="meetings">
-        <MeetingWorkspace user={user} />
-      </WorkspaceErrorBoundary>
-      {user.role !== "STUDENT" ? (
-        <WorkspaceErrorBoundary workspace="Feedback" anchorId="feedback">
-          <FeedbackReportPanel />
-        </WorkspaceErrorBoundary>
-      ) : null}
-      {user.role === "STUDENT" ? (
-        <WorkspaceErrorBoundary workspace="My Club" anchorId="club-members">
-          <StudentClubMembersPanel />
-        </WorkspaceErrorBoundary>
-      ) : null}
-      {user.role === "STUDENT" ? (
-        <WorkspaceErrorBoundary workspace="My Progress" anchorId="progress">
-          <StudentProgressDashboard />
-        </WorkspaceErrorBoundary>
-      ) : null}
+          <OverviewLaunchGrid role={user.role} />
+        </>
+      ) : <ActiveWorkspace activeHref={activeHref} user={user} />}
       </div>
     </main>
   );
 }
 
-function PortalCard({ title, items }: { title: string; items: string[] }) {
+function ActiveWorkspace({ activeHref, user }: { activeHref: string; user: PortalUser }) {
+  if (activeHref === "#admin" && user.role === "ADMIN") {
+    return <WorkspaceErrorBoundary workspace="Centres and Clubs" anchorId="admin"><AdminWorkspace currentUser={user} /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#members" && user.role !== "STUDENT") {
+    return <WorkspaceErrorBoundary workspace="Members" anchorId="members"><MembersWorkspace user={user} /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#notices") {
+    return <WorkspaceErrorBoundary workspace="Notices" anchorId="notices"><NoticesWorkspace user={user} /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#documents" || activeHref === "#resources") {
+    const workspaceName = user.role === "STUDENT" ? "Resources" : "Documents";
+    return <WorkspaceErrorBoundary workspace={workspaceName} anchorId={activeHref.slice(1)}><DocumentsWorkspace user={user} /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#meetings" || activeHref === "#requirements") {
+    const workspaceName = activeHref === "#requirements" ? "Band Progress" : "Meetings";
+    return <WorkspaceErrorBoundary workspace={workspaceName} anchorId={activeHref.slice(1)}><MeetingWorkspace user={user} /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#feedback" && user.role !== "STUDENT") {
+    return <WorkspaceErrorBoundary workspace="Feedback" anchorId="feedback"><FeedbackReportPanel /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#club-members" && user.role === "STUDENT") {
+    return <WorkspaceErrorBoundary workspace="My Club" anchorId="club-members"><StudentClubMembersPanel /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#progress" && user.role === "STUDENT") {
+    return <WorkspaceErrorBoundary workspace="My Progress" anchorId="progress"><StudentProgressDashboard /></WorkspaceErrorBoundary>;
+  }
+
+  return null;
+}
+
+function OverviewLaunchGrid({ role }: { role: Role }) {
   return (
-    <article className="portal-card">
-      <h3>{title}</h3>
-      <ul>
-        {items.map((item) => <li key={item}>{item}</li>)}
-      </ul>
-    </article>
+    <nav className="overview-launch-grid" aria-label="Portal sections">
+      {overviewLinksForRole(role).map((item) => (
+        <a href={item.href} key={item.href}>
+          <strong>{item.label}</strong>
+          <span>{item.description}</span>
+          <small>Open</small>
+        </a>
+      ))}
+    </nav>
   );
 }
 
 function StudentHomeSummary({ user }: { user: PortalUser }) {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [notices, setNotices] = useState<Notice[]>([]);
   const [error, setError] = useState("");
-  const [noticeError, setNoticeError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [areNoticesLoading, setAreNoticesLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getStudentProgress(), getMeetingsOverview()])
-      .then(([progressResult, meetingsResult]) => {
-        setProgress(progressResult);
-        setMeetings(meetingsResult.meetings);
-      })
+    getStudentProgress()
+      .then(setProgress)
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load your dashboard summary."))
       .finally(() => setIsLoading(false));
   }, []);
 
-  useEffect(() => {
-    getNotices()
-      .then((result) => setNotices(result.notices.slice(0, 3)))
-      .catch((loadError) => setNoticeError(loadError instanceof Error ? loadError.message : "Unable to load notices."))
-      .finally(() => setAreNoticesLoading(false));
-  }, []);
-
-  const upcomingMeetings = meetings
-    .filter((meeting) => isTodayOrFuture(meeting.meetingDate))
-    .sort((first, second) => new Date(first.meetingDate).getTime() - new Date(second.meetingDate).getTime());
-  const nextMeeting = upcomingMeetings[0] ?? null;
-  const bookedSlots = upcomingMeetings.flatMap((meeting) =>
-    meeting.roleSlots
-      .filter((slot) => slot.assignedStudent?.user.id === user.id)
-      .map((slot) => ({ meeting, slot }))
-  );
   const currentBand = progress?.summary.bandLevel ?? "Not set";
-  const nextBand = getNextBandLevel(currentBand);
-  const currentBandRequirements = progress?.requirements.filter((entry) => entry.requirement.bandLevel === currentBand) ?? [];
-  const completedCurrentBandRequirements = currentBandRequirements.filter((entry) => entry.isCompleted).length;
-  const progressText = currentBandRequirements.length
-    ? `${completedCurrentBandRequirements}/${currentBandRequirements.length} requirements`
-    : "No requirements yet";
+  const nextRequirement = progress?.requirements
+    .filter((entry) => !entry.isCompleted)
+    .sort((left, right) => {
+      const leftIsCurrentBand = left.requirement.bandLevel === currentBand ? 0 : 1;
+      const rightIsCurrentBand = right.requirement.bandLevel === currentBand ? 0 : 1;
+      return leftIsCurrentBand - rightIsCurrentBand
+        || left.requirement.bandOrder - right.requirement.bandOrder
+        || left.requirement.sortOrder - right.requirement.sortOrder;
+    })[0];
+  const studentName = `${user.firstName} ${user.lastName}`;
 
   return (
-    <section className="student-home-summary" aria-label="Student home summary">
+    <section className="student-home-summary" aria-labelledby="student-summary-title">
       <div className="student-home-summary-header">
         <div>
-          <p className="eyebrow">My snapshot</p>
-          <h3>What matters now</h3>
+          <p className="eyebrow">Member summary</p>
+          <h3 id="student-summary-title">{studentName}</h3>
         </div>
         {isLoading ? <span>Loading...</span> : null}
       </div>
@@ -367,58 +345,24 @@ function StudentHomeSummary({ user }: { user: PortalUser }) {
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
 
       <div className="student-home-grid">
-        <article>
+        <article className="student-band-highlight">
           <span>Current Band</span>
           <strong>{currentBand}</strong>
-          <small>{nextBand ? `Next band: ${nextBand}` : formatProgramLevel(progress?.summary.programLevel)}</small>
         </article>
         <article>
-          <span>Progress Toward Next Band</span>
-          <strong>{progressText}</strong>
-          <small>{currentBandRequirements.length ? "Current band requirements" : "Ask your facilitator for setup"}</small>
+          <span>Club</span>
+          <strong>{progress?.summary.clubName || "Not assigned"}</strong>
         </article>
         <article>
-          <span>Next Meeting</span>
-          <strong>{nextMeeting ? nextMeeting.title : "No upcoming meeting"}</strong>
-          <small>{nextMeeting ? `${formatDate(nextMeeting.meetingDate)}${nextMeeting.startTime ? ` at ${nextMeeting.startTime}` : ""}` : "Check back soon"}</small>
+          <span>Program Level</span>
+          <strong>{formatProgramLevel(progress?.summary.programLevel)}</strong>
         </article>
         <article>
-          <span>Booked Roles</span>
-          <strong>{bookedSlots.length ? `${bookedSlots.length} booked` : "None booked"}</strong>
-          <small>{bookedSlots[0] ? `${roleSlotName(bookedSlots[0].slot)} - ${bookedSlots[0].meeting.title}` : "Open Meetings to choose roles"}</small>
+          <span>Next Requirement</span>
+          <strong>{nextRequirement?.requirement.name || "No pending requirement"}</strong>
+          {nextRequirement ? <small>{nextRequirement.requirement.bandLevel}</small> : null}
         </article>
       </div>
-
-      <section className="student-dashboard-notices" aria-labelledby="student-dashboard-notices-title">
-        <div className="student-dashboard-notices-header">
-          <h4 id="student-dashboard-notices-title">Notices</h4>
-          <a href="#notices">View All Notices</a>
-        </div>
-        {areNoticesLoading ? <p>Loading notices...</p> : null}
-        {noticeError ? <p className="form-error" role="alert">{noticeError}</p> : null}
-        {!areNoticesLoading && !noticeError && !notices.length ? <p>No new notices.</p> : null}
-        {notices.length ? (
-          <div className="student-dashboard-notice-list">
-            {notices.map((notice) => (
-              <article key={notice.id}>
-                <div>
-                  <strong>{notice.title}</strong>
-                  {notice.isPinned ? <span className="notice-important-badge">Important</span> : null}
-                </div>
-                <p>{notice.message}</p>
-              </article>
-            ))}
-          </div>
-        ) : null}
-      </section>
-
-      <nav className="student-quick-links" aria-label="Student quick links">
-        <a href="#notices">Notices</a>
-        <a href="#meetings">Meetings</a>
-        <a href="#resources">Resources</a>
-        <a href="#progress">Band Progress</a>
-        <a href="#club-members">My Club</a>
-      </nav>
     </section>
   );
 }

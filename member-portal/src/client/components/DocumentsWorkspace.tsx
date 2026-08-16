@@ -15,15 +15,16 @@ import {
 } from "../api";
 import {
   bandLevelOptions,
-  DataPanel,
   documentCategoryOptions,
   documentLink,
   formatBandLadder,
   formatDate,
   formatProgramLevel,
   formatResourceScope,
+  groupResourceLinks,
   programLevelOptions,
   ResourceActions,
+  resourceGroupFor,
   resourceCategoryOptions,
   resourceIdFromHash,
   ResourcePanel,
@@ -519,6 +520,7 @@ function StudentResourcesPanel() {
   const [resources, setResources] = useState<ResourceLink[]>([]);
   const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
   const [studentContext, setStudentContext] = useState<Awaited<ReturnType<typeof getBandDocuments>>["studentContext"]>(null);
+  const [resourceContext, setResourceContext] = useState<Awaited<ReturnType<typeof getResourceLinks>>["studentContext"]>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -528,6 +530,7 @@ function StudentResourcesPanel() {
         setDocuments(documentResult.documents);
         setResources(resourceResult.resources);
         setStudentContext(documentResult.studentContext ?? null);
+        setResourceContext(resourceResult.studentContext ?? null);
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load resources."))
       .finally(() => setIsLoading(false));
@@ -535,6 +538,28 @@ function StudentResourcesPanel() {
 
   const currentBandResources = documents.filter((document) => document.bandLevel === studentContext?.currentBandLevel);
   const previousBandResources = documents.filter((document) => document.bandLevel !== studentContext?.currentBandLevel);
+  const currentBandResourceLinks = resources.filter((resource) =>
+    resource.bandLevel === studentContext?.currentBandLevel
+    || (resource.bandOrder != null
+      && studentContext?.currentBandOrder != null
+      && resource.bandOrder === studentContext.currentBandOrder)
+    || Boolean(resource.requirementId && resourceContext?.requirementIds.includes(resource.requirementId))
+  );
+  const currentBandResourceIds = new Set(currentBandResourceLinks.map((resource) => resource.id));
+  const previousBandResourceLinks = resources.filter((resource) =>
+    !currentBandResourceIds.has(resource.id)
+    && resource.bandOrder != null
+    && studentContext?.currentBandOrder != null
+    && resource.bandOrder < studentContext.currentBandOrder
+  );
+  const bandResourceIds = new Set([...currentBandResourceLinks, ...previousBandResourceLinks].map((resource) => resource.id));
+  const remainingResources = resources.filter((resource) => !bandResourceIds.has(resource.id));
+  const guideResources = remainingResources.filter((resource) => {
+    const group = resourceGroupFor(resource);
+    return group === "Speech Guides" || group === "Presentation Guides";
+  });
+  const guideResourceIds = new Set(guideResources.map((resource) => resource.id));
+  const roleHelpResources = remainingResources.filter((resource) => !guideResourceIds.has(resource.id));
 
   return (
     <section className="documents-workspace" id="resources" aria-label="Student band resources">
@@ -560,62 +585,122 @@ function StudentResourcesPanel() {
         <p className="admin-status is-error" role="alert">Program level not set. Please ask Admin or Facilitator to set Junior or Senior.</p>
       ) : null}
 
-      <ResourceGroup title="Current Band Resources" documents={currentBandResources} emptyText="No resources for your current band yet." />
-      <ResourceGroup title="Previous Band Resources" documents={previousBandResources} emptyText="No previous band resources available yet." />
-      <ResourceHelpGroup resources={resources} onSelectResource={setSelectedResource} />
+      <div className="student-resource-groups">
+        <ResourceGroup
+          title="Current Band Resources"
+          documents={currentBandResources}
+          resources={currentBandResourceLinks}
+          emptyText="No resources for your current band yet."
+          onSelectResource={setSelectedResource}
+        />
+        <ResourceGroup
+          title="Previous Band Resources"
+          documents={previousBandResources}
+          resources={previousBandResourceLinks}
+          emptyText="No previous band resources available yet."
+          onSelectResource={setSelectedResource}
+        />
+        <ResourceHelpGroup title="Role Help" resources={roleHelpResources} onSelectResource={setSelectedResource} />
+        <ResourceHelpGroup title="Speech / Presentation Guides" resources={guideResources} onSelectResource={setSelectedResource} />
+      </div>
       <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
   );
 }
 
 function ResourceHelpGroup({
+  title,
   resources,
   onSelectResource
 }: {
+  title: string;
   resources: ResourceLink[];
   onSelectResource: (resource: ResourceLink) => void;
 }) {
   return (
-    <DataPanel title="Role & Requirement Help">
-      {resources.length ? (
-        <div className="resource-chip-list">
-          {resources.map((resource) => (
-            <button
-              key={resource.id}
-              type="button"
-              className="resource-chip"
-              title={resource.explanation}
-              onClick={() => onSelectResource(resource)}
-            >
-              {resource.title}
-            </button>
-          ))}
-        </div>
-      ) : <p>No help links available yet.</p>}
-    </DataPanel>
+    <details className="resource-link-group">
+      <summary>
+        <span>{title}</span>
+        <small>{formatResourceCount(resources.length)}</small>
+      </summary>
+      <div className="resource-link-group-content">
+        <ResourceChipList resources={resources} onSelectResource={onSelectResource} />
+        {!resources.length ? <p>No resources available in this group yet.</p> : null}
+      </div>
+    </details>
   );
 }
 
-function ResourceGroup({ title, documents, emptyText }: { title: string; documents: BandDocument[]; emptyText: string }) {
+function ResourceGroup({
+  title,
+  documents,
+  resources,
+  emptyText,
+  onSelectResource
+}: {
+  title: string;
+  documents: BandDocument[];
+  resources: ResourceLink[];
+  emptyText: string;
+  onSelectResource: (resource: ResourceLink) => void;
+}) {
   const groupedDocuments = groupDocumentsByCategory(documents);
+  const totalResources = documents.length + resources.length;
 
   return (
-    <DataPanel title={title}>
-      {documents.length ? groupedDocuments.map((group) => (
-        <section key={group.key} className="student-document-category">
-          <div className="document-group-heading compact">
-            <h3>{group.title}</h3>
-            <span>{group.documents.length}</span>
-          </div>
-          <div className="document-card-grid compact">
-            {group.documents.map((document) => (
-              <ResourceCard key={document.id} document={document} />
-            ))}
-          </div>
-        </section>
-      )) : <p>{emptyText}</p>}
-    </DataPanel>
+    <details className="resource-link-group">
+      <summary>
+        <span>{title}</span>
+        <small>{formatResourceCount(totalResources)}</small>
+      </summary>
+      <div className="resource-link-group-content">
+        {documents.length ? groupedDocuments.map((group) => (
+          <section key={group.key} className="student-document-category">
+            <div className="document-group-heading compact">
+              <h3>{group.title}</h3>
+              <span>{group.documents.length}</span>
+            </div>
+            <div className="document-card-grid compact">
+              {group.documents.map((document) => (
+                <ResourceCard key={document.id} document={document} />
+              ))}
+            </div>
+          </section>
+        )) : null}
+        <ResourceChipList resources={resources} onSelectResource={onSelectResource} />
+        {!totalResources ? <p>{emptyText}</p> : null}
+      </div>
+    </details>
   );
+}
+
+function ResourceChipList({ resources, onSelectResource }: {
+  resources: ResourceLink[];
+  onSelectResource: (resource: ResourceLink) => void;
+}) {
+  if (!resources.length) {
+    return null;
+  }
+
+  return (
+    <div className="resource-chip-list">
+      {resources.map((resource) => (
+        <button
+          key={resource.id}
+          type="button"
+          className="resource-chip"
+          title={resource.explanation}
+          onClick={() => onSelectResource(resource)}
+        >
+          {resource.title}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function formatResourceCount(count: number) {
+  return `${count} ${count === 1 ? "resource" : "resources"}`;
 }
 
 function ResourceCard({ document }: { document: BandDocument }) {
@@ -891,13 +976,25 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
           {!isLoading && !resources.length ? <p className="loading-state">No resource links found.</p> : null}
 
           {!isLoading && resources.length ? (
-            <ResourceLinksTable
-              resources={resources}
-              canDelete={canEdit}
-              isSubmitting={isSubmitting}
-              onOpenResource={openResourceDetails}
-              onDeleteResource={handleDeleteResource}
-            />
+            <div className="resource-link-groups">
+              {groupResourceLinks(resources).map((group) => (
+                <details className="resource-link-group" key={group.label}>
+                  <summary>
+                    <span>{group.label}</span>
+                    <small>{formatResourceCount(group.resources.length)}</small>
+                  </summary>
+                  <div className="resource-link-group-content">
+                    <ResourceLinksTable
+                      resources={group.resources}
+                      canDelete={canEdit}
+                      isSubmitting={isSubmitting}
+                      onOpenResource={openResourceDetails}
+                      onDeleteResource={handleDeleteResource}
+                    />
+                  </div>
+                </details>
+              ))}
+            </div>
           ) : null}
         </>
       )}

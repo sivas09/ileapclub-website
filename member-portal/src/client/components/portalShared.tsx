@@ -11,6 +11,141 @@ export const documentCategoryOptions = documentCategories;
 export const resourceCategoryOptions = resourceCategories;
 const leadershipRoleKeySet = new Set<string>(leadershipRoleKeys);
 
+export type OverviewLink = {
+  href: string;
+  label: string;
+  description: string;
+};
+
+export const portalNavigationItems: Record<Role, Array<{ href: string; label: string }>> = {
+  ADMIN: [
+    { href: "#overview", label: "Overview" },
+    { href: "#admin", label: "Setup" },
+    { href: "#members", label: "Members" },
+    { href: "#notices", label: "Notices" },
+    { href: "#documents", label: "Documents" },
+    { href: "#meetings", label: "Meetings" },
+    { href: "#feedback", label: "Feedback" },
+    { href: "#requirements", label: "Band Progress" }
+  ],
+  FACILITATOR: [
+    { href: "#overview", label: "Overview" },
+    { href: "#members", label: "Members" },
+    { href: "#notices", label: "Notices" },
+    { href: "#documents", label: "Documents" },
+    { href: "#meetings", label: "Meetings" },
+    { href: "#feedback", label: "Feedback" },
+    { href: "#requirements", label: "Band Progress" }
+  ],
+  STUDENT: [
+    { href: "#overview", label: "Overview" },
+    { href: "#notices", label: "Notices" },
+    { href: "#meetings", label: "Meetings" },
+    { href: "#club-members", label: "My Club" },
+    { href: "#resources", label: "Resources" },
+    { href: "#progress", label: "My Progress" }
+  ]
+};
+
+export function sectionHrefForHash(role: Role, hash: string) {
+  const hashRoot = hash.split("/")[0] || "#overview";
+  const normalizedHash = hashRoot === "#resource-links" || hashRoot === "#resources"
+    ? role === "STUDENT" ? "#resources" : "#documents"
+    : hashRoot;
+
+  return portalNavigationItems[role].some((item) => item.href === normalizedHash) ? normalizedHash : "#overview";
+}
+
+const overviewLinks: Record<Role, OverviewLink[]> = {
+  ADMIN: [
+    { href: "#admin", label: "Setup", description: "Centres, clubs, and portal setup" },
+    { href: "#members", label: "Members", description: "Member accounts and club access" },
+    { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
+    { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
+    { href: "#feedback", label: "Feedback", description: "Scores and facilitator feedback" },
+    { href: "#requirements", label: "Band Progress", description: "Requirements and student advancement" }
+  ],
+  FACILITATOR: [
+    { href: "#members", label: "Members", description: "Members in your assigned clubs" },
+    { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
+    { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
+    { href: "#feedback", label: "Feedback", description: "Scores and student feedback" },
+    { href: "#requirements", label: "Band Progress", description: "Requirements and student advancement" }
+  ],
+  STUDENT: [
+    { href: "#club-members", label: "My Club", description: "Members in your club" },
+    { href: "#meetings", label: "Meetings", description: "Upcoming meetings, agendas, and role booking" },
+    { href: "#progress", label: "My Progress", description: "Band requirements, scores, and feedback" },
+    { href: "#resources", label: "Resources", description: "Band materials and role guides" }
+  ]
+};
+
+export function overviewLinksForRole(role: Role) {
+  return overviewLinks[role];
+}
+
+export const resourceGroupLabels = [
+  "Leadership Roles",
+  "Support Roles",
+  "Speaking Roles",
+  "Evaluator Roles",
+  "Speech Guides",
+  "Presentation Guides",
+  "Band Resources",
+  "Other"
+] as const;
+
+export type ResourceGroupLabel = typeof resourceGroupLabels[number];
+
+export function resourceGroupFor(resource: ResourceLink): ResourceGroupLabel {
+  const category = normalizeResourceKey(resource.category);
+  const descriptor = normalizeResourceKey([
+    resource.roleKey,
+    resource.title,
+    resource.requirementName
+  ].filter(Boolean).join(" "));
+
+  if (category.includes("speech guide")) {
+    return "Speech Guides";
+  }
+
+  if (category.includes("presentation guide")) {
+    return "Presentation Guides";
+  }
+
+  if (resource.bandLevel || resource.requirementId || resource.requirementName) {
+    return "Band Resources";
+  }
+
+  if (descriptor.includes("evaluator") || descriptor.includes("evaluation")) {
+    return "Evaluator Roles";
+  }
+
+  const compactDescriptor = descriptor.replace(/\s+/g, "");
+  if (leadershipRoleKeys.some((roleKey) => compactDescriptor.includes(roleKey))) {
+    return "Leadership Roles";
+  }
+
+  if (["prepared speech", "speaker", "story", "joke", "think on feet", "table topic"].some((term) => descriptor.includes(term))) {
+    return "Speaking Roles";
+  }
+
+  if (resource.roleKey || category.includes("role guide") || category.includes("report guide")) {
+    return "Support Roles";
+  }
+
+  return "Other";
+}
+
+export function groupResourceLinks(resources: ResourceLink[]) {
+  return resourceGroupLabels
+    .map((label) => ({
+      label,
+      resources: resources.filter((resource) => resourceGroupFor(resource) === label)
+    }))
+    .filter((group) => group.resources.length > 0);
+}
+
 export function HelpLabel({
   label,
   resources,
