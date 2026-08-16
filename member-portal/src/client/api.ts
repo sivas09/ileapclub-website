@@ -599,9 +599,13 @@ export async function updateUser(userId: string, payload: {
 }
 
 export async function setUserActive(userId: string, isActive: boolean) {
-  return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}/active`, {
+  const path = isActive
+    ? `/api/admin/users/${userId}/active`
+    : `/api/admin/users/${userId}/deactivate`;
+
+  return request<{ user: PortalUser & { isActive: boolean } }>(path, {
     method: "PATCH",
-    body: JSON.stringify({ isActive })
+    ...(isActive ? { body: JSON.stringify({ isActive: true }) } : {})
   });
 }
 

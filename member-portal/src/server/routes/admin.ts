@@ -460,6 +460,11 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (data.isActive !== existingUser.isActive) {
+    response.status(400).json({ message: "Use the dedicated deactivate or reactivate action to change account status." });
+    return;
+  }
+
   try {
     const user = await prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({
@@ -560,10 +565,9 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
 
 adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) => {
   const userId = String(request.params.userId);
-  const isActive = request.body?.isActive === true;
 
-  if (userId === request.user?.id && !isActive) {
-    response.status(400).json({ message: "You cannot deactivate your own admin account." });
+  if (request.body?.isActive !== true) {
+    response.status(400).json({ message: "Use the dedicated deactivate action to deactivate an account." });
     return;
   }
 
@@ -572,7 +576,7 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
       id: userId,
       role: { in: [Role.ADMIN, Role.FACILITATOR, Role.STUDENT] }
     },
-    data: { isActive },
+    data: { isActive: true },
     select: {
       id: true,
       email: true,
@@ -633,6 +637,97 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
 
   response.json({ user: updatedUser });
 }));
+
+adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, response) => {
+  const userId = String(request.params.userId);
+
+  if (userId === request.user?.id) {
+    response.status(400).json({ message: "You cannot deactivate your own account." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { studentProfile: true }
+  });
+
+  if (!user || !editableRoles.has(user.role)) {
+    response.status(404).json({ message: "User not found." });
+    return;
+  }
+
+  if (user.role === Role.ADMIN) {
+    response.status(400).json({ message: "Admin users cannot be deactivated." });
+    return;
+  }
+
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  const result = await prisma.$transaction(async (tx) => {
+    let deactivatedMemberships = 0;
+    let clearedUpcomingRoleSlots = 0;
+
+    if (user.role === Role.STUDENT && user.studentProfile) {
+      const memberships = await tx.studentClubMembership.updateMany({
+        where: {
+          studentId: user.studentProfile.id,
+          status: "ACTIVE"
+        },
+        data: {
+          status: "INACTIVE",
+          endDate: today
+        }
+      });
+      const roleSlots = await tx.meetingRoleSlot.updateMany({
+        where: {
+          assignedStudentId: user.studentProfile.id,
+          score: null,
+          meeting: {
+            meetingDate: {
+              gte: today
+            }
+          }
+        },
+        data: {
+          assignedStudentId: null,
+          assignedByUserId: null,
+          assignedAt: null
+        }
+      });
+
+      deactivatedMemberships = memberships.count;
+      clearedUpcomingRoleSlots = roleSlots.count;
+    }
+
+    if (user.role === Role.FACILITATOR) {
+      await tx.clubFacilitator.deleteMany({ where: { facilitatorId: user.id } });
+      await tx.centreFacilitator.deleteMany({ where: { facilitatorId: user.id } });
+    }
+
+    const updatedUser = await tx.user.update({
+      where: { id: user.id },
+      data: { isActive: false },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isActive: true
+      }
+    });
+
+    return {
+      user: updatedUser,
+      deactivatedMemberships,
+      clearedUpcomingRoleSlots
+    };
+  });
+
+  response.json(result);
+}));
+
 adminRouter.delete("/users/:userId/demo", asyncRoute(async (request, response) => {
   const userId = String(request.params.userId);
   const result = await deleteSampleUser(userId, request.user!.id);

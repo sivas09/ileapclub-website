@@ -269,7 +269,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         lastName: String(formData.get("lastName") || ""),
         email: String(formData.get("email") || ""),
         role,
-        isActive: String(formData.get("isActive") || "true") === "true",
+        isActive: editingUser.isActive,
         grade: String(formData.get("grade") || ""),
         programLevel: String(formData.get("programLevel") || "SENIOR"),
         bandLevel: String(formData.get("bandLevel") || "White"),
@@ -349,17 +349,9 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               <option value="ADMIN">Admin</option>
             </select>
           </label>
-          <label>
-            Account Status
-            <select name="isActive" defaultValue={String(portalUser.isActive)} disabled={isCurrentAdmin}>
-              <option value="true">Active</option>
-              <option value="false">Inactive</option>
-            </select>
-          </label>
           {isCurrentAdmin ? (
             <>
               <input type="hidden" name="role" value="ADMIN" />
-              <input type="hidden" name="isActive" value="true" />
             </>
           ) : null}
           {editingUserRole === "STUDENT" ? (
