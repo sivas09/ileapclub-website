@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import { rateLimit } from "express-rate-limit";
 import { Role } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db.js";
@@ -22,13 +23,26 @@ export function isValidNewPassword(password: string) {
 
 export const authRouter = Router();
 
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: (_request, response) => {
+    response.status(429).json({
+      message: "Too many login attempts. Please wait 15 minutes and try again."
+    });
+  }
+});
+
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
   return (request: Request, response: Response, next: NextFunction) => {
     handler(request, response, next).catch(next);
   };
 }
 
-authRouter.post("/login", asyncRoute(async (request, response) => {
+authRouter.post("/login", loginRateLimiter, asyncRoute(async (request, response) => {
   const parsed = loginSchema.safeParse(request.body);
 
   if (!parsed.success) {

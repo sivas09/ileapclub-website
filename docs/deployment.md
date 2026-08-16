@@ -1,64 +1,65 @@
-# iLEAP Club Public Website Deployment
+# iLEAP Production Deployment
 
-## Current Scope
+This repository contains two separately deployed systems. Keep their build roots and settings separate.
 
-This repository is for the public website at `ileapclub.com`.
+## Public Website
 
-Do not add portal functionality here. The future member portal belongs at `memberportal.ileap.club` and will be deployed separately on Render.
+The public marketing site for `ileapclub.com` lives at the repository root.
 
-## Cloudflare Pages Settings
-
+- Source: root HTML files, `css/`, `js/`, `assets/`, and `functions/`
+- Hosting: Cloudflare Pages
+- Pages root directory: repository root
 - Framework preset: None
 - Build command: leave empty
 - Build output directory: `/`
 - Production branch: `main`
+- Security headers: repository-root `_headers`
 
-## Deployment Flow
+Public enrollment and inquiry forms call the root Cloudflare Pages Functions at `/api/enroll` and `/api/inquiry`. Their Resend configuration is independent of the Member Portal API.
 
-1. Edit locally in VS Code.
-2. Test by opening `index.html` in a browser.
-3. Commit changes to Git.
-4. Push to GitHub.
-5. Cloudflare Pages deploys automatically.
-
-## Domains
-
-- Primary: `ileapclub.com`
-- Also configure: `www.ileapclub.com`
-- Redirect later: `ileap.club` to `https://ileapclub.com`
-
-## Form Email Endpoints
-
-The Enroll Now form and the public inquiry forms post to Cloudflare Pages Functions:
-
-```text
-/api/enroll
-/api/inquiry
-```
-
-These functions send submitted form data by email through Resend. The inquiry endpoint handles free-demo, contact, and franchise requests.
-
-### Required External Service
-
-Configure Resend:
-
-1. Create or use a Resend account.
-2. Verify the sending domain or sender email for `ileapclub.com`.
-3. Create a Resend API key.
-4. In Cloudflare Pages, add these production environment variables:
+Required public-site environment variables:
 
 ```text
 RESEND_API_KEY=your_resend_api_key
 ENROLL_FROM_EMAIL=iLEAP Club <registrations@ileapclub.com>
 ```
 
-`ENROLL_FROM_EMAIL` must be a sender that Resend allows for the verified domain.
+## Member Portal
 
-Enrollment and inquiry submissions are emailed to both:
+The authenticated portal for `member.ileapclub.com` is isolated under `member-portal/`.
 
-```text
-info@ileapclub.com
-info@ileap.club
-```
+### Cloudflare Pages Frontend
 
-No database is used. Keep the form field names and `inquiry_type` values synchronized with the corresponding Pages Function when changing a form.
+- Pages root directory: `member-portal`
+- Build command: `npm run build:client`
+- Build output directory: `dist/client`
+- Production branch: `main`
+- Security headers source: `member-portal/public/_headers`
+- Required build variable: `VITE_API_BASE_URL=https://ileap-member-portal-api.onrender.com`
+
+Vite copies `member-portal/public/_headers` into `dist/client/_headers` during the frontend build.
+
+### Render API
+
+The repository-root `render.yaml` defines the Express API deployment.
+
+- Render root directory: `member-portal`
+- Build command: `npm install && npm run build && npm run prisma:migrate:deploy`
+- Start command: `npm run start`
+- Health check: `/api/health`
+- Database: Render PostgreSQL through `DATABASE_URL`
+
+Required API variables include `DATABASE_URL`, `JWT_SECRET`, `CLIENT_ORIGIN`, and `CLIENT_ORIGINS`. Production migrations run only through the documented Render deployment command; do not run destructive database commands from a local machine.
+
+## Security Headers
+
+Both Cloudflare Pages frontends define basic response headers through `_headers`. CSP is intentionally omitted for now because the public forms and Member Portal API use separate origins. Add CSP only after testing every production script, image, form, and API origin.
+
+## Deployment Flow
+
+1. Run the relevant local checks.
+2. Commit only changes belonging to the intended system.
+3. Push to GitHub.
+4. GitHub Actions validates `member-portal/` but does not deploy.
+5. Cloudflare Pages deploys the affected frontend from `main`.
+6. Render deploys the Member Portal API according to `render.yaml`.

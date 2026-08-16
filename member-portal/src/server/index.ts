@@ -15,6 +15,7 @@ import { resourcesRouter } from "./routes/resources.js";
 import { studentRouter } from "./routes/student.js";
 
 const app = express();
+app.set("trust proxy", 1);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const clientDistPath = path.resolve(__dirname, "../client");
 const allowedOrigins = new Set(config.CLIENT_ORIGINS);
