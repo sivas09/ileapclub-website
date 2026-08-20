@@ -43,7 +43,8 @@ const state = {
   meetingDeletionSteps: {} as Record<string, string[]>,
   meetingRelatedDeleteCounts: {} as Record<string, Record<string, number>>,
   lastDocumentWhere: null as any,
-  lastNoticeWhere: null as any
+  lastNoticeWhere: null as any,
+  lastStudentUpdate: null as any
 };
 
 patchModel("user", {
@@ -126,7 +127,10 @@ patchModel("student", {
     return null;
   },
   create: () => studentRecord(assignedStudentId, users.student.id, assignedClubId),
-  update: ({ where }: any) => studentRecord(where.id, users.student.id, assignedClubId),
+  update: ({ where, data }: any) => {
+    state.lastStudentUpdate = data;
+    return studentRecord(where.id, users.student.id, assignedClubId);
+  },
   delete: () => ({ id: assignedStudentId })
 });
 patchModel("roleDefinition", {
@@ -307,6 +311,11 @@ try {
   await assertStatus("facilitator cannot view unassigned club members", "GET", `/api/members?clubId=${otherClubId}`, Role.FACILITATOR, 403);
   await assertStatus("student cannot create members", "POST", "/api/members", Role.STUDENT, 403, memberPayload([assignedClubId]));
   await assertStatus("facilitator cannot assign student to unassigned club", "POST", "/api/members", Role.FACILITATOR, 403, memberPayload([otherClubId]));
+  await assertStatus("facilitator can update assigned student learning levels", "PATCH", `/api/members/${assignedStudentId}`, Role.FACILITATOR, 200, { programLevel: "JUNIOR", bandLevel: "Yellow" });
+  assertEqual(Object.keys(state.lastStudentUpdate ?? {}).sort().join(","), "bandLevel,programLevel", "member update changes only facilitator-safe fields");
+  await assertStatus("facilitator cannot update member identity fields", "PATCH", `/api/members/${assignedStudentId}`, Role.FACILITATOR, 400, { programLevel: "JUNIOR", bandLevel: "Yellow", email: "tampered@example.com" });
+  await assertStatus("facilitator cannot update unassigned student learning levels", "PATCH", `/api/members/${otherStudentId}`, Role.FACILITATOR, 403, { programLevel: "JUNIOR", bandLevel: "Yellow" });
+  await assertStatus("student cannot update member learning levels", "PATCH", `/api/members/${assignedStudentId}`, Role.STUDENT, 403, { programLevel: "JUNIOR", bandLevel: "Yellow" });
 
   await assertStatus("admin can assign a meeting role", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.ADMIN, 200, { studentId: assignedStudentId });
   await assertStatus("facilitator can assign a role in assigned club", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.FACILITATOR, 200, { studentId: assignedStudentId });

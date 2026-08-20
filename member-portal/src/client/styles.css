@@ -1981,8 +1981,56 @@ button {
   line-height: 1.6;
 }
 
-.members-table {
-  min-width: 1180px;
+.feedback-table.members-table {
+  min-width: 820px;
+  table-layout: fixed;
+}
+
+.members-table th:nth-child(1) { width: 16%; }
+.members-table th:nth-child(2) { width: 21%; }
+.members-table th:nth-child(3) { width: 14%; }
+.members-table th:nth-child(4) { width: 12%; }
+.members-table th:nth-child(5) { width: 10%; }
+.members-table th:nth-child(6) { width: 27%; }
+
+.members-table th,
+.members-table td {
+  padding: 10px;
+  overflow-wrap: anywhere;
+}
+
+.members-actions-cell {
+  min-width: 220px;
+}
+
+.member-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.member-row-actions button {
+  min-height: 32px;
+  border: 1px solid #cbd7e6;
+  border-radius: 7px;
+  padding: 3px 7px;
+  color: var(--portal-blue);
+  background: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.member-row-actions button:hover,
+.member-row-actions button:focus-visible {
+  border-color: var(--portal-teal);
+  color: var(--portal-teal);
+}
+
+.member-row-actions button.danger-action {
+  border-color: #fecdd3;
+  color: #9f1239;
+  background: #fff1f2;
 }
 
 .pagination-row {
@@ -2025,6 +2073,11 @@ button {
   gap: 16px;
   padding-top: 20px;
   border-top: 1px solid #d6e0eb;
+}
+
+.member-detail-anchor,
+.member-detail-anchor > .data-panel {
+  height: 100%;
 }
 
 .meeting-list-panel h3 {

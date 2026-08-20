@@ -9,8 +9,10 @@ import {
   MembersResponse,
   permanentlyDeleteMember,
   PortalUser,
-  setMemberActive,
+  Role,
+  setUserActive,
   updateMember,
+  updateUser,
   updateStudentRequirement
 } from "../api";
 import {
@@ -74,7 +76,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     loadMembers(nextFilters);
   }
 
-  async function openDetail(studentId: string) {
+  async function openDetail(studentId: string, targetId = "member-detail") {
     setError("");
     setStatus("");
     setIsSubmitting(true);
@@ -83,7 +85,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       const result = await getMemberDetail(studentId);
       setDetail(result.member);
       window.setTimeout(() => {
-        document.getElementById("member-detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
     } catch (detailError) {
       setError(detailError instanceof Error ? detailError.message : "Unable to load member detail.");
@@ -98,7 +100,11 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     setIsSubmitting(true);
 
     try {
-      await setMemberActive(member.id, isActive);
+      if (!member.userId) {
+        throw new Error("This member account cannot be activated or deactivated from the Members page.");
+      }
+
+      await setUserActive(member.userId, isActive);
       await loadMembers();
       if (detail?.id === member.id) {
         const result = await getMemberDetail(member.id);
@@ -153,11 +159,27 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       };
 
       if (editingMember) {
-        await updateMember(editingMember.id, {
-          ...payload,
-          isActive: editingMember.isActive !== false
-        });
+        if (user.role === "ADMIN") {
+          if (!editingMember.userId) {
+            throw new Error("This member account cannot be edited from the Members page.");
+          }
+
+          const role = String(formData.get("role") || "STUDENT") as Role;
+          await updateUser(editingMember.userId, {
+            ...payload,
+            role,
+            isActive: editingMember.isActive !== false,
+            clubIds: role === "STUDENT" ? clubIds : [],
+            facilitatorClubIds: role === "FACILITATOR" ? clubIds : []
+          });
+        } else {
+          await updateMember(editingMember.id, {
+            programLevel: payload.programLevel,
+            bandLevel: payload.bandLevel
+          });
+        }
         setEditingMember(null);
+        setDetail(null);
         setStatus("Member updated.");
       } else {
         await createMember({
@@ -226,8 +248,10 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
 
       {isAddFormOpen || editingMember ? (
         <MemberForm
+          key={editingMember?.id ?? "new-member"}
           member={editingMember}
           clubs={assignableClubs}
+          viewerRole={user.role}
           isSubmitting={isSubmitting}
           onSubmit={handleMemberFormSubmit}
           onCancel={() => {
@@ -304,10 +328,6 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                   <th>Club</th>
                   <th>Program Level</th>
                   <th>Current Band</th>
-                  <th>Roles Completed</th>
-                  <th>Average Score</th>
-                  <th>Last Feedback Date</th>
-                  <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -319,30 +339,23 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                     <td>{member.clubName}</td>
                     <td>{formatProgramLevel(member.programLevel)}</td>
                     <td>{member.currentBandLevel}</td>
-                    <td>{member.rolesCompleted ?? 0}</td>
-                    <td>{member.averageScore === null || member.averageScore === undefined ? "N/A" : `${member.averageScore}/100`}</td>
-                    <td>{member.lastFeedbackDate ? formatDate(member.lastFeedbackDate) : "None"}</td>
-                    <td>{member.isActive === false ? "Inactive" : "Active"}</td>
-                    <td>
-                      <div className="meeting-row-actions">
+                    <td className="members-actions-cell">
+                      <div className="member-row-actions">
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Details</button>
-                        <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Progress</button>
-                        <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Feedback</button>
-                        <button type="button" onClick={() => startEditingMember(member.id)} disabled={isSubmitting}>Edit</button>
-                        <button type="button" className="text-action danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
-                          {member.isActive === false ? "Reactivate" : "Deactivate"}
-                        </button>
+                        <button type="button" onClick={() => startEditingMember(member.id)} disabled={isSubmitting}>Edit Member</button>
+                        <button type="button" onClick={() => openDetail(member.id, "member-progress")} disabled={isSubmitting}>View Progress</button>
+                        <button type="button" onClick={() => openDetail(member.id, "member-feedback")} disabled={isSubmitting}>View Feedback</button>
                         {user.role === "ADMIN" ? (
-                          <a className="text-action" href="#admin">Admin User Setup</a>
+                          <button type="button" className="danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
+                            {member.isActive === false ? "Reactivate" : "Deactivate"}
+                          </button>
                         ) : null}
-                      </div>
-                      {user.role === "ADMIN" ? (
-                        <div className="member-destructive-actions">
-                          <button type="button" className="text-action danger-action" onClick={() => deleteMember(member)} disabled={isSubmitting}>
+                        {user.role === "ADMIN" ? (
+                          <button type="button" className="danger-action" onClick={() => deleteMember(member)} disabled={isSubmitting}>
                             Delete Member
                           </button>
-                        </div>
-                      ) : null}
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -374,12 +387,14 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
 function MemberForm({
   member,
   clubs,
+  viewerRole,
   isSubmitting,
   onSubmit,
   onCancel
 }: {
   member: MemberDetail | null;
   clubs: MembersResponse["clubs"];
+  viewerRole: Role;
   isSubmitting: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel: () => void;
@@ -387,6 +402,11 @@ function MemberForm({
   const nameParts = splitDisplayName(member);
   const defaultClubIds = member?.clubs.map((club) => club.id).filter(Boolean) as string[] | undefined;
   const singleClub = clubs.length === 1 ? clubs[0] : null;
+  const [selectedRole, setSelectedRole] = useState<Role>(member?.role ?? "STUDENT");
+  const isFacilitatorEdit = Boolean(member) && viewerRole === "FACILITATOR";
+  const showIdentityFields = !member || viewerRole === "ADMIN";
+  const showStudentFields = !member || isFacilitatorEdit || selectedRole === "STUDENT";
+  const showClubAssignment = !member || (viewerRole === "ADMIN" && selectedRole !== "ADMIN");
 
   return (
     <form id="member-form" className="admin-form wide member-editor-form" onSubmit={onSubmit}>
@@ -397,47 +417,68 @@ function MemberForm({
         </div>
       </div>
       <div className="form-two-column">
-        <label>First Name<input name="firstName" defaultValue={nameParts.firstName} placeholder="First name" required /></label>
-        <label>Last Name<input name="lastName" defaultValue={nameParts.lastName} placeholder="Last name" required /></label>
-        <label>Email<input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="name@example.com" required /></label>
+        {showIdentityFields ? (
+          <>
+            <label>First Name<input name="firstName" defaultValue={nameParts.firstName} placeholder="First name" required /></label>
+            <label>Last Name<input name="lastName" defaultValue={nameParts.lastName} placeholder="Last name" required /></label>
+            <label>Email<input name="email" type="email" defaultValue={member?.email ?? ""} placeholder="name@example.com" required /></label>
+          </>
+        ) : null}
         {!member ? <label>Password<input name="password" type="password" placeholder="Minimum 8 characters" required minLength={8} /></label> : null}
-        <label>Grade<input name="grade" defaultValue={member?.grade ?? ""} placeholder="Grade 6" /></label>
-        <label>
-          Program Level
-          <select name="programLevel" defaultValue={member?.programLevel ?? "SENIOR"}>
-            {programLevelOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Current Band Level
-          <select name="bandLevel" defaultValue={member?.currentBandLevel ?? "White"}>
-            {bandLevelOptions.map((bandLevel) => (
-              <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Club
-          {singleClub ? (
-            <>
-              <input type="hidden" name="clubIds" value={singleClub.id} />
-              <select value={singleClub.id} disabled>
-                <option value={singleClub.id}>{singleClub.name}</option>
-              </select>
-            </>
-          ) : (
-            <select name="clubIds" multiple defaultValue={defaultClubIds ?? []} required>
-              {clubs.map((club) => (
-                <option key={club.id} value={club.id}>{club.name}</option>
-              ))}
+        {member && viewerRole === "ADMIN" ? (
+          <label>
+            Role
+            <select name="role" value={selectedRole} onChange={(event) => setSelectedRole(event.currentTarget.value as Role)} required>
+              <option value="STUDENT">Student</option>
+              <option value="FACILITATOR">Facilitator</option>
+              <option value="ADMIN">Admin</option>
             </select>
-          )}
-        </label>
+          </label>
+        ) : null}
+        {showStudentFields ? (
+          <>
+            {!isFacilitatorEdit ? <label>Grade<input name="grade" defaultValue={member?.grade ?? ""} placeholder="Grade 6" /></label> : null}
+            <label>
+              Program Level
+              <select name="programLevel" defaultValue={member?.programLevel ?? "SENIOR"}>
+                {programLevelOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Current Band Level
+              <select name="bandLevel" defaultValue={member?.currentBandLevel ?? "White"}>
+                {bandLevelOptions.map((bandLevel) => (
+                  <option key={bandLevel} value={bandLevel}>{bandLevel}</option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
+        {showClubAssignment ? (
+          <label>
+            {selectedRole === "FACILITATOR" ? "Assigned Clubs" : "Club"}
+            {singleClub ? (
+              <>
+                <input type="hidden" name="clubIds" value={singleClub.id} />
+                <select value={singleClub.id} disabled>
+                  <option value={singleClub.id}>{singleClub.name}</option>
+                </select>
+              </>
+            ) : (
+              <select name="clubIds" multiple defaultValue={defaultClubIds ?? []} required>
+                {clubs.map((club) => (
+                  <option key={club.id} value={club.id}>{club.name}</option>
+                ))}
+              </select>
+            )}
+          </label>
+        ) : null}
       </div>
+      {isFacilitatorEdit ? <p className="field-note">You can update program and band levels here. Use View Progress to manage band sign-off.</p> : null}
       <div className="edit-user-actions">
-        <button type="submit" disabled={isSubmitting || !clubs.length}>{member ? "Save Member" : "Add Member"}</button>
+        <button type="submit" disabled={isSubmitting || ((!member || showClubAssignment) && !clubs.length)}>{member ? "Save Member" : "Add Member"}</button>
         <button type="button" className="text-action" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
       </div>
     </form>
@@ -516,6 +557,10 @@ function MemberDetailPanel({
         <SummaryTile label="Current Band" valueText={member.currentBandLevel} />
         <SummaryTile label="Status" valueText={member.isActive === false ? "Inactive" : "Active"} />
         <SummaryTile label="Clubs" valueText={member.clubs.map((club) => club.name).join(", ") || "No club"} />
+        <SummaryTile label="Roles Completed" value={member.summary?.rolesCompleted ?? 0} />
+        <SummaryTile label="Average Score" valueText={member.summary?.averageScore == null ? "N/A" : `${member.summary.averageScore}/100`} />
+        <SummaryTile label="Last Feedback Date" valueText={member.summary?.lastFeedbackDate ? formatDate(member.summary.lastFeedbackDate) : "None"} />
+        <SummaryTile label="Attendance" valueText={`${member.summary?.attendancePresent ?? 0}/${member.summary?.attendanceTotal ?? 0} present`} />
       </div>
 
       <div className="student-progress-grid">
@@ -529,30 +574,35 @@ function MemberDetailPanel({
           </ul>
         </DataPanel>
 
-        <DataPanel title="Personal Tracking Summary">
-          {member.trackingSummary ? (
-            <>
-              <ul className="record-list">
-                <li><strong>Completed requirements</strong><span>{member.trackingSummary.completedRequirements}</span></li>
-                <li><strong>Remaining requirements</strong><span>{member.trackingSummary.remainingRequirements}</span></li>
-              </ul>
-              {canManage ? <button type="button" className="text-action" onClick={backfillBands} disabled={isSubmitting}>Backfill Previous Bands</button> : null}
-            </>
-          ) : <p>Private progress details are not available.</p>}
-        </DataPanel>
+        <div className="member-detail-anchor" id="member-progress">
+          <DataPanel title="Personal Tracking Details">
+            {member.trackingSummary ? (
+              <>
+                <ul className="record-list">
+                  <li><strong>Current band</strong><span>{member.trackingSummary.currentBand}</span></li>
+                  <li><strong>Completed requirements</strong><span>{member.trackingSummary.completedRequirements}</span></li>
+                  <li><strong>Remaining requirements</strong><span>{member.trackingSummary.remainingRequirements}</span></li>
+                </ul>
+                {canManage ? <button type="button" className="text-action" onClick={backfillBands} disabled={isSubmitting}>Backfill Previous Bands</button> : null}
+              </>
+            ) : <p>Private progress details are not available.</p>}
+          </DataPanel>
+        </div>
 
-        <DataPanel title="Scores & Feedback">
-          {member.feedback?.length ? (
-            <ul className="record-list">
-              {member.feedback.slice(0, 8).map((entry) => (
-                <li key={entry.id}>
-                  <strong>{formatDate(entry.meetingDate)} - {entry.score}/100</strong>
-                  <span>{entry.meetingTitle} - {entry.roleName} - {entry.feedback || "No feedback entered."} - {entry.facilitatorName}</span>
-                </li>
-              ))}
-            </ul>
-          ) : <p>No facilitator feedback yet.</p>}
-        </DataPanel>
+        <div className="member-detail-anchor" id="member-feedback">
+          <DataPanel title="Scores & Feedback">
+            {member.feedback?.length ? (
+              <ul className="record-list">
+                {member.feedback.slice(0, 8).map((entry) => (
+                  <li key={entry.id}>
+                    <strong>{formatDate(entry.meetingDate)} - {entry.score}/100</strong>
+                    <span>{entry.meetingTitle} - {entry.roleName} - {entry.feedback || "No feedback entered."} - {entry.facilitatorName}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p>No facilitator feedback yet.</p>}
+          </DataPanel>
+        </div>
       </div>
 
       {member.requirements?.length ? (
@@ -581,6 +631,18 @@ function MemberDetailPanel({
       ) : null}
 
       <div className="student-progress-grid">
+        <DataPanel title="Attendance">
+          {member.attendance?.length ? (
+            <ul className="record-list">
+              {member.attendance.slice(0, 12).map((entry) => (
+                <li key={entry.id}>
+                  <strong>{formatDate(entry.meetingDate)} - {entry.status}</strong>
+                  <span>{entry.meetingTitle} - {entry.clubName}{entry.notes ? ` - ${entry.notes}` : ""}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p>No attendance records yet.</p>}
+        </DataPanel>
         <DataPanel title="Role History">
           {member.roleHistory?.length ? (
             <ul className="record-list">

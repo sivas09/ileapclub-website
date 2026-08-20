@@ -22,13 +22,10 @@ const memberCreateSchema = z.object({
   clubIds: z.array(z.string().min(1)).min(1)
 });
 
-const memberUpdateSchema = memberCreateSchema.omit({ password: true }).extend({
-  isActive: z.boolean().optional()
-});
-
-const memberActiveSchema = z.object({
-  isActive: z.boolean()
-});
+const memberUpdateSchema = z.object({
+  programLevel: z.enum(programLevels),
+  bandLevel: z.enum(bandLevels)
+}).strict();
 
 const historicalDependencyLabels = {
   clubMemberships: "club memberships",
@@ -173,46 +170,22 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
     return;
   }
 
-  const studentIds = [...new Set(memberships.map((membership) => membership.studentId))];
-  const [roleCounts, feedbackStats] = await Promise.all([
-    prisma.meetingRoleSlot.groupBy({
-      by: ["assignedStudentId"],
-      where: { assignedStudentId: { in: studentIds } },
-      _count: { _all: true }
-    }),
-    prisma.studentMeetingFeedback.groupBy({
-      by: ["studentId"],
-      where: { studentId: { in: studentIds } },
-      _avg: { score: true },
-      _max: { scoredAt: true }
-    })
-  ]);
-  const roleCountByStudentId = new Map(roleCounts.map((entry) => [entry.assignedStudentId, entry._count._all]));
-  const feedbackByStudentId = new Map(feedbackStats.map((entry) => [entry.studentId, entry]));
-
   response.json({
-    members: memberships.map((membership) => {
-      const feedback = feedbackByStudentId.get(membership.studentId);
-
-      return {
-        id: membership.student.id,
-        userId: membership.student.userId,
-        displayName: displayName(membership.student.user),
-        firstName: membership.student.user.firstName,
-        lastName: membership.student.user.lastName,
-        email: membership.student.user.email,
-        programLevel: membership.student.programLevel ?? inferProgramLevel(membership.club.program),
-        currentBandLevel: membership.student.bandLevel,
-        clubId: membership.clubId,
-        clubName: membership.club.name,
-        centreId: membership.club.centreId,
-        centreName: membership.club.centre.name,
-        rolesCompleted: roleCountByStudentId.get(membership.studentId) ?? 0,
-        averageScore: feedback?._avg.score === null || feedback?._avg.score === undefined ? null : Math.round(feedback._avg.score),
-        lastFeedbackDate: feedback?._max.scoredAt ?? null,
-        isActive: membership.student.user.isActive && membership.status === "ACTIVE"
-      };
-    }),
+    members: memberships.map((membership) => ({
+      id: membership.student.id,
+      userId: membership.student.userId,
+      displayName: displayName(membership.student.user),
+      firstName: membership.student.user.firstName,
+      lastName: membership.student.user.lastName,
+      email: membership.student.user.email,
+      programLevel: membership.student.programLevel ?? inferProgramLevel(membership.club.program),
+      currentBandLevel: membership.student.bandLevel,
+      clubId: membership.clubId,
+      clubName: membership.club.name,
+      centreId: membership.club.centreId,
+      centreName: membership.club.centre.name,
+      isActive: membership.student.user.isActive && membership.status === "ACTIVE"
+    })),
     total,
     page,
     pageSize,
@@ -383,6 +356,9 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
   const visibleFeedback = visibleClubIdSet === null
     ? student.meetingFeedbacks
     : student.meetingFeedbacks.filter((feedback) => visibleClubIdSet.has(feedback.meeting.clubId));
+  const visibleAttendance = visibleClubIdSet === null
+    ? student.attendance
+    : student.attendance.filter((attendance) => visibleClubIdSet.has(attendance.meeting.clubId));
   const selectedProgramLevel = getStudentProgramLevel({
     ...student,
     clubMemberships: visibleMemberships
@@ -397,6 +373,11 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
   const scorerById = new Map(scorers.map((scorer) => [scorer.id, scorer]));
   const requirements = await buildRequirementProgress(student.id, selectedProgramLevel);
   const completedRequirements = requirements.filter((entry) => entry.isCompleted).length;
+  const averageScore = visibleFeedback.length
+    ? Math.round(visibleFeedback.reduce((total, entry) => total + entry.score, 0) / visibleFeedback.length)
+    : null;
+  const lastFeedbackDate = visibleFeedback[0]?.scoredAt ?? null;
+  const presentAttendance = visibleAttendance.filter((entry) => entry.status === "PRESENT").length;
 
   response.json({
     member: {
@@ -406,6 +387,7 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
         firstName: student.user.firstName,
         lastName: student.user.lastName,
         email: student.user.email,
+        role: student.user.role,
         grade: student.grade,
         programLevel: selectedProgramLevel,
         currentBandLevel: student.bandLevel,
@@ -421,7 +403,22 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
         completedRequirements,
         remainingRequirements: requirements.length - completedRequirements
       },
+      summary: {
+        rolesCompleted: visibleRoleSlots.length,
+        averageScore,
+        lastFeedbackDate,
+        attendancePresent: presentAttendance,
+        attendanceTotal: visibleAttendance.length
+      },
       requirements,
+      attendance: visibleAttendance.map((entry) => ({
+        id: entry.id,
+        meetingDate: entry.meeting.meetingDate,
+        meetingTitle: entry.meeting.title,
+        clubName: entry.meeting.club.name,
+        status: entry.status,
+        notes: entry.notes
+      })),
       roleHistory: visibleRoleSlots.map((slot) => {
         const attendance = student.attendance.find((entry) => entry.meetingId === slot.meetingId);
 
@@ -472,122 +469,6 @@ membersRouter.patch("/:studentId", asyncRoute(async (request, response) => {
 
   const studentId = String(request.params.studentId);
   const data = parsed.data;
-  const clubIds = [...new Set(data.clubIds)];
-  const student = await prisma.student.findUnique({
-    where: { id: studentId },
-    include: {
-      user: true,
-      clubMemberships: true
-    }
-  });
-
-  if (!student || student.user.role !== Role.STUDENT) {
-    response.status(404).json({ message: "Member not found." });
-    return;
-  }
-
-  if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
-    response.status(403).json({ message: "You cannot update this member." });
-    return;
-  }
-
-  if (!(await canManageRequestedClubs(user.id, user.role, clubIds))) {
-    response.status(403).json({ message: "You can only assign students to clubs you manage." });
-    return;
-  }
-
-  const email = data.email.toLowerCase();
-  const assignableClubIds = user.role === Role.ADMIN ? null : await getVisibleClubIds(user.id, Role.FACILITATOR);
-
-  try {
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      await tx.student.update({
-        where: { id: student.id },
-        data: {
-          grade: data.grade || "Not set",
-          programLevel: data.programLevel ?? null,
-          bandLevel: data.bandLevel || "White"
-        }
-      });
-
-      await tx.user.update({
-        where: { id: student.userId },
-        data: {
-          email,
-          firstName: data.firstName,
-          lastName: data.lastName,
-          ...(user.role === Role.ADMIN && data.isActive !== undefined ? { isActive: data.isActive } : {})
-        }
-      });
-
-      await tx.studentClubMembership.deleteMany({
-        where: assignableClubIds === null
-          ? { studentId: student.id, clubId: { notIn: clubIds } }
-          : { studentId: student.id, clubId: { in: assignableClubIds, notIn: clubIds } }
-      });
-
-      await tx.studentClubMembership.createMany({
-        data: clubIds.map((clubId) => ({
-          clubId,
-          studentId: student.id,
-          status: "ACTIVE"
-        })),
-        skipDuplicates: true
-      });
-
-      await tx.studentClubMembership.updateMany({
-        where: {
-          studentId: student.id,
-          clubId: { in: clubIds }
-        },
-        data: {
-          status: "ACTIVE",
-          endDate: null
-        }
-      });
-
-      return tx.user.findUniqueOrThrow({
-        where: { id: student.userId },
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-          role: true,
-          isActive: true
-        }
-      });
-    });
-
-    response.json({ user: updatedUser });
-  } catch (error) {
-    const prismaError = error as { code?: string };
-
-    if (prismaError.code === "P2002") {
-      response.status(409).json({ message: "A user with this email already exists." });
-      return;
-    }
-
-    throw error;
-  }
-}));
-
-membersRouter.patch("/:studentId/active", asyncRoute(async (request, response) => {
-  const user = request.user!;
-
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can update student member status." });
-    return;
-  }
-
-  const parsed = memberActiveSchema.safeParse(request.body);
-
-  if (!parsed.success) {
-    response.status(400).json({ message: "Choose an active status." });
-    return;
-  }
-
-  const studentId = String(request.params.studentId);
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: { user: true }
@@ -598,52 +479,29 @@ membersRouter.patch("/:studentId/active", asyncRoute(async (request, response) =
     return;
   }
 
-  if (user.role === Role.FACILITATOR) {
-    const clubIds = await getVisibleClubIds(user.id, Role.FACILITATOR);
-
-    if (!clubIds?.length || !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
-      response.status(403).json({ message: "You cannot update this member status." });
-      return;
-    }
-
-    const result = await prisma.studentClubMembership.updateMany({
-      where: {
-        studentId: student.id,
-        clubId: { in: clubIds }
-      },
-      data: parsed.data.isActive
-        ? { status: "ACTIVE", endDate: null }
-        : { status: "INACTIVE", endDate: startOfTodayUtc() }
-    });
-
-    response.json({
-      user: {
-        id: student.user.id,
-        email: student.user.email,
-        firstName: student.user.firstName,
-        lastName: student.user.lastName,
-        role: student.user.role,
-        isActive: student.user.isActive
-      },
-      updatedMemberships: result.count
-    });
+  if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
+    response.status(403).json({ message: "You cannot update this member." });
     return;
   }
 
-  const updatedUser = await prisma.user.update({
-    where: { id: student.userId },
-    data: { isActive: parsed.data.isActive },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      isActive: true
+  await prisma.student.update({
+    where: { id: student.id },
+    data: {
+      programLevel: data.programLevel,
+      bandLevel: data.bandLevel
     }
   });
 
-  response.json({ user: updatedUser, updatedMemberships: 0 });
+  response.json({
+    user: {
+      id: student.user.id,
+      email: student.user.email,
+      firstName: student.user.firstName,
+      lastName: student.user.lastName,
+      role: student.user.role,
+      isActive: student.user.isActive
+    }
+  });
 }));
 
 membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
@@ -926,13 +784,6 @@ export async function deleteStudentMemberRecords(studentId: string, userId: stri
       deletedCreatedResourceLinks: createdResourceLinks.count
     };
   });
-}
-
-function startOfTodayUtc() {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-
-  return today;
 }
 
 async function buildRequirementProgress(studentId: string, programLevel: ProgramLevel | null) {

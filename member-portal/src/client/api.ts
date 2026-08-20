@@ -206,9 +206,6 @@ export type MemberListEntry = {
   clubName: string;
   centreId?: string;
   centreName?: string;
-  rolesCompleted?: number;
-  averageScore?: number | null;
-  lastFeedbackDate?: string | null;
   isActive?: boolean;
 };
 
@@ -219,6 +216,7 @@ export type MemberDetail = {
   firstName?: string;
   lastName?: string;
   email?: string;
+  role?: Role;
   grade?: string;
   programLevel?: string | null;
   currentBandLevel: string;
@@ -229,7 +227,22 @@ export type MemberDetail = {
     completedRequirements: number;
     remainingRequirements: number;
   };
+  summary?: {
+    rolesCompleted: number;
+    averageScore: number | null;
+    lastFeedbackDate: string | null;
+    attendancePresent: number;
+    attendanceTotal: number;
+  };
   requirements?: StudentRequirementStatus[];
+  attendance?: Array<{
+    id: string;
+    meetingDate: string;
+    meetingTitle: string;
+    clubName: string;
+    status: string;
+    notes?: string | null;
+  }>;
   roleHistory?: Array<{
     id: string;
     meetingDate: string;
@@ -1255,25 +1268,12 @@ export async function createMember(payload: {
 }
 
 export async function updateMember(studentId: string, payload: {
-  email: string;
-  firstName: string;
-  lastName: string;
-  grade?: string;
-  programLevel?: string;
-  bandLevel?: string;
-  clubIds: string[];
-  isActive?: boolean;
+  programLevel: string;
+  bandLevel: string;
 }) {
   return request<{ user: PortalUser & { isActive: boolean } }>(`/api/members/${studentId}`, {
     method: "PATCH",
     body: JSON.stringify(payload)
-  });
-}
-
-export async function setMemberActive(studentId: string, isActive: boolean) {
-  return request<{ user: PortalUser & { isActive: boolean }; updatedMemberships: number }>(`/api/members/${studentId}/active`, {
-    method: "PATCH",
-    body: JSON.stringify({ isActive })
   });
 }
 
