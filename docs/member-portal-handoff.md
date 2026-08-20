@@ -11,6 +11,8 @@ Last updated: July 30, 2026
 - Repository root: `C:\ileap-new-website`
 - Member portal app: `C:\ileap-new-website\member-portal`
 
+Render dashboard is the source of truth for current billing/plan. The Hobby workspace plan does not identify the API or database instance type; inspect each resource separately. The production API must use a paid instance. The repository-root `render.yaml` omits `plan` so an existing service retains its dashboard-configured type, but any other declared fields can override dashboard changes when a connected Blueprint syncs.
+
 ## Current Test Accounts
 
 Seeded demo password:
@@ -276,7 +278,7 @@ Frontend:
 Deployment:
 
 - `member-portal/package.json`
-- `member-portal/render.yaml`
+- `render.yaml` (repository root; there is no `member-portal/render.yaml`)
 - `member-portal/.env.example`
 
 ## Recent Commits

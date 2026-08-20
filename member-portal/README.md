@@ -83,6 +83,10 @@ $env:SEED_DEMO_PASSWORD="your-local-demo-password"; npm run db:seed
 
 Use the repository-root `render.yaml` as the starting blueprint. See `docs/render-deployment-checklist.md` before deploying.
 
+Render dashboard is the source of truth for current billing/plan. A Hobby workspace can contain separately billed API and database resources, so do not use the workspace name or an old Blueprint value to identify a live resource's instance type. Production must use a paid API instance.
+
+The root Blueprint intentionally omits `plan`: an existing service retains its dashboard-configured instance type and a new service defaults to Starter. First confirm whether the service is connected to a Render Blueprint. Blueprint syncs apply fields declared in `render.yaml`; a manually configured service that is not Blueprint-managed continues to use its dashboard settings. There is no `member-portal/render.yaml`.
+
 Configure:
 
 - `DATABASE_URL` from Render PostgreSQL

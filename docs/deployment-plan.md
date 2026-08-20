@@ -39,6 +39,8 @@ Create:
 - Render Web Service for app
 - Render PostgreSQL database
 
+Render dashboard is the source of truth for current billing/plan. Workspace plan, web-service instance type, and database compute/storage are separate settings. Check each production resource in the dashboard, and do not run the production API on a Free instance. The repository-root `render.yaml` intentionally leaves `plan` unspecified so an existing service retains its current dashboard-configured instance type.
+
 Example future Render settings:
 
 ```text
@@ -112,4 +114,3 @@ memberportal.ileapclub.com -> Render service
 ```
 
 Exact DNS target depends on Render custom domain setup.
-

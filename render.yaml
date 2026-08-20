@@ -2,7 +2,9 @@ services:
   - type: web
     name: ileap-member-portal-api
     env: node
-    plan: free
+    # Keep the existing instance type configured in Render. With plan omitted,
+    # an existing service retains its current type and a new service defaults to Starter.
+    # Production must not use a Free instance; verify the current plan in the dashboard.
     rootDir: member-portal
     buildCommand: npm install && npm run build && npm run prisma:migrate:deploy
     startCommand: npm run start

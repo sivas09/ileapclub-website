@@ -12,6 +12,14 @@ Use this checklist before testing `member.ileapclub.com` online.
 
 Create from the repository-root `render.yaml` or configure manually:
 
+- Render dashboard is the source of truth for current billing/plan.
+- Confirm whether `ileap-member-portal-api` is attached to a Blueprint before relying on `render.yaml`.
+- Check the API instance type and PostgreSQL instance/storage plan separately; the Hobby workspace plan is not either resource's plan.
+- Confirm the production API uses a paid instance. Do not use Render Free for production.
+- The root Blueprint intentionally omits `plan`: existing services retain their current type and newly created services default to Starter.
+- If the service is Blueprint-managed, declared Blueprint fields override conflicting dashboard changes at the next sync. If it is manually managed, the dashboard settings remain authoritative.
+- There is no `member-portal/render.yaml`.
+
 - Web service: `ileap-member-portal-api`
 - Database: `ileap-member-portal-db`
 - Root directory: `member-portal`
