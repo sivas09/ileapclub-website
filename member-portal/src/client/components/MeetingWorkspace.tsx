@@ -36,6 +36,7 @@ import {
 } from "../api";
 import {
   bandLevelOptions,
+  claimableMeetingRoleSlots,
   dateInputValue,
   formatBandLadder,
   formatDate,
@@ -43,6 +44,7 @@ import {
   formatStudentName,
   HelpLabel,
   isLeadershipMeetingRole,
+  isReportMeetingRole,
   isStudentInClub,
   programLevelOptions,
   ResourcePanel,
@@ -754,13 +756,14 @@ function BookRoles({
   onClaim: (slotId: string) => void;
   onRelease: (slotId: string) => void;
 }) {
+  const claimableSlots = claimableMeetingRoleSlots(meeting);
   const claimedCount = user.role === "STUDENT"
-    ? meeting.roleSlots.filter((slot) => slot.assignedStudent?.user.id === user.id).length
+    ? claimableSlots.filter((slot) => slot.assignedStudent?.user.id === user.id).length
     : 0;
   const hasClaimedLeadershipRole = user.role === "STUDENT"
-    ? meeting.roleSlots.some((slot) => slot.assignedStudent?.user.id === user.id && isLeadershipMeetingRole(slot))
+    ? claimableSlots.some((slot) => slot.assignedStudent?.user.id === user.id && isLeadershipMeetingRole(slot))
     : false;
-  const openSlots = meeting.roleSlots.filter((slot) => !slot.assignedStudentId);
+  const openSlots = claimableSlots.filter((slot) => !slot.assignedStudentId);
   const canBook = user.role === "STUDENT" && !meeting.isRoleLocked;
 
   return (
@@ -770,7 +773,7 @@ function BookRoles({
       {meeting.isRoleLocked ? <p className="admin-status is-error">Role booking is locked for this meeting.</p> : null}
       {user.role !== "STUDENT" ? <p className="loading-state">Managers can review booking availability here. Use Manage Roles to assign students.</p> : null}
       <ul className="booking-list">
-        {meeting.roleSlots.map((slot) => {
+        {claimableSlots.map((slot) => {
           const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "";
           const isOwnRole = slot.assignedStudent?.user.id === user.id;
           const isLeadershipRole = isLeadershipMeetingRole(slot);
@@ -949,6 +952,7 @@ function ManageRoleSlotRow({
   const [roleDefinitionId, setRoleDefinitionId] = useState(slot.roleDefinition.id);
   const [slotLabel, setSlotLabel] = useState(slot.slotLabel || slot.roleDefinition.name);
   const [sortOrder, setSortOrder] = useState(String(slot.sortOrder));
+  const isAutoAssignedReport = isReportMeetingRole(slot);
 
   useEffect(() => {
     setRoleDefinitionId(slot.roleDefinition.id);
@@ -980,13 +984,20 @@ function ManageRoleSlotRow({
         </strong>
         <span>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</span>
       </div>
-      <label>
-        Assigned Member
-        <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(event.currentTarget.value || null)} disabled={isSubmitting}>
-          <option value="">None</option>
-          {students.map((student) => <option key={student.id} value={student.id}>{formatStudentName(student)}</option>)}
-        </select>
-      </label>
+      {isAutoAssignedReport ? (
+        <div className="manager-role-auto-assignment">
+          <strong>Automatic assignment</strong>
+          <span>Managed by the matching main role</span>
+        </div>
+      ) : (
+        <label>
+          Assigned Member
+          <select value={slot.assignedStudentId ?? ""} onChange={(event) => onAssign(event.currentTarget.value || null)} disabled={isSubmitting}>
+            <option value="">None</option>
+            {students.map((student) => <option key={student.id} value={student.id}>{formatStudentName(student)}</option>)}
+          </select>
+        </label>
+      )}
       <label>
         Role
         <select value={roleDefinitionId} onChange={(event) => setRoleDefinitionId(event.currentTarget.value)} disabled={isSubmitting}>
@@ -999,7 +1010,9 @@ function ManageRoleSlotRow({
         <input type="number" min="1" value={sortOrder} onChange={(event) => setSortOrder(event.currentTarget.value)} disabled={isSubmitting} />
       </label>
       <button type="button" onClick={handleSaveSlot} disabled={isSubmitting || !roleDefinitionId || !sortOrder}>Update Slot</button>
-      <button type="button" className="danger-action" onClick={handleReleaseAssignment} disabled={isSubmitting || !slot.assignedStudentId}>Release Role</button>
+      {!isAutoAssignedReport ? (
+        <button type="button" className="danger-action" onClick={handleReleaseAssignment} disabled={isSubmitting || !slot.assignedStudentId}>Release Role</button>
+      ) : null}
       <button
         type="button"
         className="danger-action"

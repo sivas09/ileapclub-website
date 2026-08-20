@@ -55,3 +55,29 @@ export const noticeLimits = {
 } as const;
 
 export const leadershipRoleKeys = ["ichair", "igrammarian", "ifinesmaster", "ifillercounter", "itimer"] as const;
+
+export const mainReportRolePairs = [
+  ["iChair", "iChair Report"],
+  ["iGrammarian", "iGrammarian Report"],
+  ["iFiller Counter", "iFiller Counter Report"],
+  ["iFinesMaster", "iFinesMaster Report"],
+  ["iTimer", "iTimer Report"]
+] as const;
+
+export function reportRoleNameForMainRole(roleName: string) {
+  const normalizedRoleName = normalizePairedRoleName(roleName);
+  return mainReportRolePairs.find(([mainRole]) => normalizePairedRoleName(mainRole) === normalizedRoleName)?.[1] ?? null;
+}
+
+export function mainRoleNameForReportRole(roleName: string) {
+  const normalizedRoleName = normalizePairedRoleName(roleName);
+  return mainReportRolePairs.find(([, reportRole]) => normalizePairedRoleName(reportRole) === normalizedRoleName)?.[0] ?? null;
+}
+
+export function isReportRoleName(roleName: string) {
+  return mainRoleNameForReportRole(roleName) !== null;
+}
+
+function normalizePairedRoleName(roleName: string) {
+  return roleName.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}

@@ -5,6 +5,7 @@ import { parseMeetingsOverviewResponse, type Meeting, type ResourceLink } from "
 import { MeetingEditForm } from "../src/client/components/MeetingWorkspace";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import {
+  claimableMeetingRoleSlots,
   dateInputValue,
   formatDate,
   groupResourceLinks,
@@ -97,6 +98,21 @@ assert.equal(
   "Unmatched role and report guides remain available under Support Roles."
 );
 
+const bookingMeeting: Meeting = {
+  ...meeting,
+  roleSlots: [
+    meetingRoleSlotFixture("chair", "iChair"),
+    meetingRoleSlotFixture("chair-report", "iChair Report"),
+    meetingRoleSlotFixture("grammarian-report", "iGrammarian Report"),
+    meetingRoleSlotFixture("speech", "Prepared Speech 1")
+  ]
+};
+assert.deepEqual(
+  claimableMeetingRoleSlots(bookingMeeting).map((slot) => slot.roleDefinition.name),
+  ["iChair", "Prepared Speech 1"],
+  "Book Roles hides paired report roles from student claiming."
+);
+
 console.log("Client reliability regression tests passed.");
 
 function resourceFixture(id: string, title: string, category: string, roleKey: string | null = null): ResourceLink {
@@ -133,5 +149,21 @@ function meetingFixture(): Meeting {
     attendance: [],
     roleScores: [],
     studentFeedbacks: []
+  };
+}
+
+function meetingRoleSlotFixture(id: string, roleName: string): Meeting["roleSlots"][number] {
+  return {
+    id,
+    slotLabel: roleName,
+    sortOrder: 1,
+    assignedStudentId: null,
+    assignedStudent: null,
+    roleDefinition: {
+      id: `${id}-definition`,
+      name: roleName,
+      isActive: true
+    },
+    score: null
   };
 }

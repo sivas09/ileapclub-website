@@ -11,6 +11,12 @@ import {
 } from "../src/server/routes/members.js";
 import { canPermanentlyDeleteResourceLink } from "../src/server/routes/resources.js";
 import { canManageBandRequirementDefinitions } from "../src/server/routes/student.js";
+import { buildAgendaRtf } from "../src/server/services/agenda.js";
+import {
+  isReportRoleName,
+  mainRoleNameForReportRole,
+  reportRoleNameForMainRole
+} from "../src/shared/portalConstants.js";
 import {
   canManageRoleDefinitions,
   canReleaseMeetingRole,
@@ -212,6 +218,61 @@ assertEqual(
   ),
   null,
   "one leadership role plus one regular role is allowed"
+);
+assertEqual(
+  roleAssignmentLimitViolation(
+    [roleSlot("iChair"), roleSlot("iChair Report")],
+    roleSlot("Prepared Speech 1")
+  ),
+  null,
+  "auto-assigned report role does not count toward the two-role limit"
+);
+assertEqual(
+  roleAssignmentLimitViolation(
+    [roleSlot("iChair"), roleSlot("iChair Report")],
+    roleSlot("iTimer")
+  ) !== null,
+  true,
+  "student cannot claim two leadership main roles when a report is also assigned"
+);
+assertEqual(
+  roleAssignmentLimitViolation([], roleSlot("iTimer Report")) !== null,
+  true,
+  "report roles cannot be claimed separately"
+);
+assertEqual(reportRoleNameForMainRole("iChair"), "iChair Report", "iChair maps to its report role");
+assertEqual(reportRoleNameForMainRole("iGrammarian"), "iGrammarian Report", "iGrammarian maps to its report role");
+assertEqual(mainRoleNameForReportRole("iTimer Report"), "iTimer", "report role maps back to its main role");
+assertEqual(isReportRoleName("iFiller Counter Report"), true, "paired report roles are recognized");
+
+const pairedAgenda = buildAgendaRtf({
+  title: "Paired Roles Meeting",
+  templateType: "Senior Regular Meeting",
+  meetingDate: new Date("2026-08-22T00:00:00.000Z"),
+  startTime: "10:00",
+  location: "Club Room",
+  club: { name: "Test Club", centre: { name: "Test Centre" } },
+  roleSlots: [
+    {
+      id: "chair-main",
+      sortOrder: 1,
+      slotLabel: "iChair",
+      roleDefinition: { name: "iChair" },
+      assignedStudent: { user: { firstName: "Main", lastName: "Student" } }
+    },
+    {
+      id: "chair-report",
+      sortOrder: 2,
+      slotLabel: "iChair Report",
+      roleDefinition: { name: "iChair Report" },
+      assignedStudent: null
+    }
+  ]
+} as any);
+assertEqual(
+  pairedAgenda.includes("iChair Report: Main Student"),
+  true,
+  "agenda report rows use the matching main-role student"
 );
 assertEqual(
   JSON.stringify(sanitizeMeetingsForUser([meetingWithPrivateStudentData()] as any, "student-user", Role.STUDENT)).includes("other@example.com"),

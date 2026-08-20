@@ -29,7 +29,10 @@ const meetingClubIds = new Map([
   ["failure-delete-meeting", assignedClubId],
   ["facilitator-delete-meeting", assignedClubId],
   ["other-delete-meeting", otherClubId],
-  ["student-delete-meeting", assignedClubId]
+  ["student-delete-meeting", assignedClubId],
+  ["paired-chair-meeting", assignedClubId],
+  ["paired-grammarian-meeting", assignedClubId],
+  ["paired-manager-meeting", assignedClubId]
 ]);
 
 const state = {
@@ -44,7 +47,8 @@ const state = {
   meetingRelatedDeleteCounts: {} as Record<string, Record<string, number>>,
   lastDocumentWhere: null as any,
   lastNoticeWhere: null as any,
-  lastStudentUpdate: null as any
+  lastStudentUpdate: null as any,
+  roleAssignmentUpdates: [] as Array<{ where: any; data: any }>
 };
 
 patchModel("user", {
@@ -157,6 +161,12 @@ patchModel("meeting", {
 });
 patchModel("meetingRoleSlot", {
   findUnique: ({ where }: any) => {
+    const pairedSlot = pairedRoleSlots().find((slot) => slot.id === where.id);
+
+    if (pairedSlot) {
+      return pairedSlot;
+    }
+
     if (where.id === "assigned-slot") {
       return roleSlot("assigned-slot", "assigned-meeting", assignedClubId, null);
     }
@@ -179,13 +189,15 @@ patchModel("meetingRoleSlot", {
 
     return null;
   },
-  findMany: () => [],
-  update: () => {
+  findMany: ({ where }: any = {}) => where?.meetingId ? pairedRoleSlots(where.meetingId) : [],
+  update: ({ where, data }: any) => {
     state.roleUpdates += 1;
-    return roleSlot("assigned-slot", "assigned-meeting", assignedClubId, assignedStudentId);
+    state.roleAssignmentUpdates.push({ where, data });
+    return roleSlot(where.id, "assigned-meeting", assignedClubId, data.assignedStudentId ?? assignedStudentId);
   },
-  updateMany: () => {
+  updateMany: ({ where, data }: any) => {
     state.roleUpdates += 1;
+    state.roleAssignmentUpdates.push({ where, data });
     return { count: 1 };
   },
   groupBy: () => [],
@@ -322,6 +334,19 @@ try {
   await assertStatus("facilitator cannot assign a role in unassigned club", "PUT", "/api/meetings/other-meeting/slots/other-club-slot", Role.FACILITATOR, 403, { studentId: otherStudentId });
   await assertStatus("student cannot use manager role assignment endpoint", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.STUDENT, 403, { studentId: assignedStudentId });
   await assertStatus("student can claim own-club role", "POST", "/api/meetings/assigned-meeting/slots/assigned-slot/claim", Role.STUDENT, 200);
+  await assertStatus("claiming iChair assigns the main role", "POST", "/api/meetings/paired-chair-meeting/slots/chair-main-slot/claim", Role.STUDENT, 200);
+  assertEqual(wasRoleAssigned("chair-main-slot", assignedStudentId), true, "iChair is assigned to the claiming student");
+  assertEqual(wasRoleAssigned("chair-report-slot", assignedStudentId), true, "claiming iChair auto-assigns iChair Report");
+  await assertStatus("claiming iGrammarian assigns its report", "POST", "/api/meetings/paired-grammarian-meeting/slots/grammarian-main-slot/claim", Role.STUDENT, 200);
+  assertEqual(wasRoleAssigned("grammarian-main-slot", assignedStudentId), true, "iGrammarian is assigned to the claiming student");
+  assertEqual(wasRoleAssigned("grammarian-report-slot", assignedStudentId), true, "claiming iGrammarian auto-assigns iGrammarian Report");
+  await assertStatus("student cannot claim a report role directly", "POST", "/api/meetings/paired-chair-meeting/slots/chair-report-slot/claim", Role.STUDENT, 409);
+  await assertStatus("manager assignment pairs iChair Report", "PUT", "/api/meetings/paired-manager-meeting/slots/manager-chair-main-slot", Role.ADMIN, 200, { studentId: assignedStudentId });
+  assertEqual(wasRoleAssigned("manager-chair-main-slot", assignedStudentId), true, "manager assigns the iChair main role");
+  assertEqual(wasRoleAssigned("manager-chair-report-slot", assignedStudentId), true, "manager assignment auto-assigns iChair Report");
+  await assertStatus("manager cannot assign a report role directly", "PUT", "/api/meetings/paired-manager-meeting/slots/manager-chair-report-slot", Role.ADMIN, 409, { studentId: assignedStudentId });
+  await assertStatus("manager clearing iChair also clears its report", "PUT", "/api/meetings/paired-manager-meeting/slots/manager-chair-main-slot", Role.ADMIN, 200, { studentId: null });
+  assertEqual(wasRoleCleared("manager-chair-report-slot"), true, "clearing a main role clears its report role");
   await assertStatus("student cannot release another student's role", "POST", "/api/meetings/assigned-meeting/slots/other-student-slot/release", Role.STUDENT, 403);
   await assertStatus("student can release own claimed role", "POST", "/api/meetings/assigned-meeting/slots/student-slot/release", Role.STUDENT, 200);
   await assertStatus("facilitator can edit assigned-club meeting", "PATCH", "/api/meetings/assigned-meeting", Role.FACILITATOR, 200, { title: "Updated Saturday Meeting" });
@@ -486,6 +511,20 @@ function includesClub(value: string | { in?: string[] } | undefined, clubId: str
   }
 
   return Boolean(value?.in?.includes(clubId));
+}
+
+function wasRoleAssigned(slotId: string, studentId: string) {
+  return state.roleAssignmentUpdates.some(({ where, data }) => {
+    const targetsSlot = where.id === slotId || where.id?.in?.includes(slotId);
+    return targetsSlot && data.assignedStudentId === studentId;
+  });
+}
+
+function wasRoleCleared(slotId: string) {
+  return state.roleAssignmentUpdates.some(({ where, data }) => {
+    const targetsSlot = where.id === slotId || where.id?.in?.includes(slotId);
+    return targetsSlot && data.assignedStudentId === null;
+  });
 }
 
 function listen(expressApp: express.Express) {
@@ -668,17 +707,32 @@ function recordMeetingDelete(meetingId: string, recordType: string, count: numbe
   return { count };
 }
 
-function roleSlot(id: string, meetingId: string, clubId: string, assignedStudentId: string | null) {
+function pairedRoleSlots(meetingId?: string) {
+  const slots = [
+    roleSlot("chair-main-slot", "paired-chair-meeting", assignedClubId, null, "iChair"),
+    roleSlot("chair-report-slot", "paired-chair-meeting", assignedClubId, null, "iChair Report"),
+    roleSlot("grammarian-main-slot", "paired-grammarian-meeting", assignedClubId, null, "iGrammarian"),
+    roleSlot("grammarian-report-slot", "paired-grammarian-meeting", assignedClubId, null, "iGrammarian Report"),
+    roleSlot("manager-chair-main-slot", "paired-manager-meeting", assignedClubId, null, "iChair"),
+    roleSlot("manager-chair-report-slot", "paired-manager-meeting", assignedClubId, null, "iChair Report")
+  ];
+
+  return meetingId ? slots.filter((slot) => slot.meetingId === meetingId) : slots;
+}
+
+function roleSlot(id: string, meetingId: string, clubId: string, assignedStudentId: string | null, roleName = "Prepared Speech") {
   return {
     id,
     meetingId,
+    slotLabel: roleName,
+    sortOrder: 1,
     assignedStudentId,
     assignedByUserId: null,
     assignedAt: null,
-    meeting: meetingRecord(clubId),
+    meeting: meetingRecord(clubId, meetingId),
     roleDefinition: {
-      id: "role-definition-1",
-      name: "Prepared Speech",
+      id: `${id}-role-definition`,
+      name: roleName,
       isActive: true
     },
     score: null

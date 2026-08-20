@@ -6,7 +6,11 @@ import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
 import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
 import { standardIleapRoleNames } from "../services/standardRoles.js";
-import { leadershipRoleKeys } from "../../shared/portalConstants.js";
+import {
+  isReportRoleName,
+  leadershipRoleKeys,
+  reportRoleNameForMainRole
+} from "../../shared/portalConstants.js";
 
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isValidDateOnly);
 
@@ -650,6 +654,11 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
     return;
   }
 
+  if (isReportRoleSlot(slot)) {
+    response.status(409).json({ message: "Report roles are assigned automatically with their matching main role." });
+    return;
+  }
+
   if (slot.assignedStudentId && slot.assignedStudentId !== student.id) {
     response.status(409).json({ message: "This role has already been claimed." });
     return;
@@ -662,13 +671,11 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    const claimedRoles = await tx.meetingRoleSlot.findMany({
-      where: {
-        meetingId,
-        assignedStudentId: student.id
-      },
+    const meetingSlots = await tx.meetingRoleSlot.findMany({
+      where: { meetingId },
       include: { roleDefinition: true }
     });
+    const claimedRoles = meetingSlots.filter((meetingSlot) => meetingSlot.assignedStudentId === student.id);
 
     const limitViolation = roleAssignmentLimitViolation(claimedRoles, slot);
 
@@ -687,6 +694,10 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
         assignedAt: new Date()
       }
     });
+
+    if (updateResult.count > 0) {
+      await syncPairedReportAssignment(tx, meetingSlots, slot, student.id, user.id);
+    }
 
     return { updateResult };
   });
@@ -744,6 +755,11 @@ meetingsRouter.post("/:meetingId/slots/:slotId/release", asyncRoute(async (reque
     return;
   }
 
+  if (isReportRoleSlot(slot)) {
+    response.status(409).json({ message: "Release the matching main role to clear its report role." });
+    return;
+  }
+
   if (!slot.assignedStudentId) {
     response.status(409).json({ message: "This role is already available." });
     return;
@@ -754,7 +770,15 @@ meetingsRouter.post("/:meetingId/slots/:slotId/release", asyncRoute(async (reque
     return;
   }
 
-  await clearRoleAssignment(slot.id);
+  await prisma.$transaction(async (tx) => {
+    const meetingSlots = await tx.meetingRoleSlot.findMany({
+      where: { meetingId },
+      include: { roleDefinition: true }
+    });
+
+    await setRoleAssignment(tx, slot.id, null, null);
+    await syncPairedReportAssignment(tx, meetingSlots, slot, null, null);
+  });
 
   const meeting = await getMeeting(meetingId);
   response.json({ meeting });
@@ -902,6 +926,11 @@ meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, respo
     return;
   }
 
+  if (isReportRoleSlot(slot)) {
+    response.status(409).json({ message: "Assign or release the matching main role; its report role is managed automatically." });
+    return;
+  }
+
   if (parsed.data.studentId) {
     const student = await prisma.student.findUnique({ where: { id: parsed.data.studentId } });
 
@@ -910,35 +939,40 @@ meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, respo
       return;
     }
 
-    if (user.role === Role.FACILITATOR) {
-      const assignedRoles = await prisma.meetingRoleSlot.findMany({
-        where: {
-          meetingId,
-          assignedStudentId: student.id,
-          id: { not: slot.id }
-        },
-        include: { roleDefinition: true }
-      });
+  }
+
+  const assignmentResult = await prisma.$transaction(async (tx) => {
+    const meetingSlots = await tx.meetingRoleSlot.findMany({
+      where: { meetingId },
+      include: { roleDefinition: true }
+    });
+
+    if (parsed.data.studentId) {
+      const assignedRoles = meetingSlots.filter((meetingSlot) => (
+        meetingSlot.id !== slot.id && meetingSlot.assignedStudentId === parsed.data.studentId
+      ));
       const limitViolation = roleAssignmentLimitViolation(assignedRoles, slot);
 
       if (limitViolation) {
-        response.status(409).json({ message: limitViolation });
-        return;
+        return { error: limitViolation };
       }
     }
-  }
 
-  if (parsed.data.studentId) {
-    await prisma.meetingRoleSlot.update({
-      where: { id: slot.id },
-      data: {
-        assignedStudentId: parsed.data.studentId,
-        assignedByUserId: user.id,
-        assignedAt: new Date()
-      }
-    });
-  } else {
-    await clearRoleAssignment(slot.id);
+    await setRoleAssignment(tx, slot.id, parsed.data.studentId ?? null, parsed.data.studentId ? user.id : null);
+    await syncPairedReportAssignment(
+      tx,
+      meetingSlots,
+      slot,
+      parsed.data.studentId ?? null,
+      parsed.data.studentId ? user.id : null
+    );
+
+    return { error: null };
+  });
+
+  if (assignmentResult.error) {
+    response.status(409).json({ message: assignmentResult.error });
+    return;
   }
 
   const meeting = await getMeeting(meetingId);
@@ -1279,14 +1313,47 @@ async function getNextRoleSlotSortOrder(meetingId: string) {
   return (lastSlot?.sortOrder ?? 0) + 1;
 }
 
-function clearRoleAssignment(slotId: string) {
-  return prisma.meetingRoleSlot.update({
+function setRoleAssignment(
+  tx: Prisma.TransactionClient,
+  slotId: string,
+  studentId: string | null,
+  assignedByUserId: string | null
+) {
+  return tx.meetingRoleSlot.update({
     where: { id: slotId },
-    data: {
-      assignedStudentId: null,
-      assignedByUserId: null,
-      assignedAt: null
-    }
+    data: studentId
+      ? { assignedStudentId: studentId, assignedByUserId, assignedAt: new Date() }
+      : { assignedStudentId: null, assignedByUserId: null, assignedAt: null }
+  });
+}
+
+async function syncPairedReportAssignment(
+  tx: Prisma.TransactionClient,
+  meetingSlots: RoleSlotDescriptor[],
+  mainSlot: RoleSlotDescriptor,
+  studentId: string | null,
+  assignedByUserId: string | null
+) {
+  const reportRoleName = reportRoleNameForRoleSlot(mainSlot);
+
+  if (!reportRoleName) {
+    return;
+  }
+
+  const reportSlotIds = meetingSlots
+    .filter((meetingSlot) => roleSlotHasName(meetingSlot, reportRoleName))
+    .map((meetingSlot) => meetingSlot.id)
+    .filter((slotId): slotId is string => Boolean(slotId));
+
+  if (!reportSlotIds.length) {
+    return;
+  }
+
+  await tx.meetingRoleSlot.updateMany({
+    where: { id: { in: reportSlotIds } },
+    data: studentId
+      ? { assignedStudentId: studentId, assignedByUserId, assignedAt: new Date() }
+      : { assignedStudentId: null, assignedByUserId: null, assignedAt: null }
   });
 }
 
@@ -1475,21 +1542,51 @@ export function isLeadershipRoleName(roleName: string) {
 }
 
 export function roleAssignmentLimitViolation(
-  existingRoles: Array<{ slotLabel?: string | null; roleDefinition: { name: string } }>,
-  targetRole: { slotLabel?: string | null; roleDefinition: { name: string } }
+  existingRoles: RoleSlotDescriptor[],
+  targetRole: RoleSlotDescriptor
 ) {
-  if (existingRoles.length >= maximumRolesPerStudentMeeting) {
+  if (isReportRoleSlot(targetRole)) {
+    return "Report roles are assigned automatically with their matching main role.";
+  }
+
+  const existingClaimableRoles = existingRoles.filter((role) => !isReportRoleSlot(role));
+
+  if (existingClaimableRoles.length >= maximumRolesPerStudentMeeting) {
     return "Students can claim a maximum of 2 roles for this meeting.";
   }
 
-  if (isLeadershipRoleSlot(targetRole) && existingRoles.some(isLeadershipRoleSlot)) {
+  if (isLeadershipRoleSlot(targetRole) && existingClaimableRoles.some(isLeadershipRoleSlot)) {
     return "Students can claim only 1 leadership role per meeting.";
   }
 
   return null;
 }
 
-function isLeadershipRoleSlot(slot: { slotLabel?: string | null; roleDefinition: { name: string } }) {
+type RoleSlotDescriptor = {
+  id?: string;
+  assignedStudentId?: string | null;
+  slotLabel?: string | null;
+  roleDefinition: { name: string };
+};
+
+export function isReportRoleSlot(slot: RoleSlotDescriptor) {
+  return roleSlotNames(slot).some(isReportRoleName);
+}
+
+function reportRoleNameForRoleSlot(slot: RoleSlotDescriptor) {
+  return roleSlotNames(slot).map(reportRoleNameForMainRole).find(Boolean) ?? null;
+}
+
+function roleSlotHasName(slot: RoleSlotDescriptor, roleName: string) {
+  const normalizedRoleName = normalizeLeadershipRoleName(roleName);
+  return roleSlotNames(slot).some((candidate) => normalizeLeadershipRoleName(candidate) === normalizedRoleName);
+}
+
+function roleSlotNames(slot: RoleSlotDescriptor) {
+  return [...new Set([slot.slotLabel, slot.roleDefinition.name].filter((roleName): roleName is string => Boolean(roleName)))];
+}
+
+function isLeadershipRoleSlot(slot: RoleSlotDescriptor) {
   return isLeadershipRoleName(slot.slotLabel || "") || isLeadershipRoleName(slot.roleDefinition.name);
 }
 

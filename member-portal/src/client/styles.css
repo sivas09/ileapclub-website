@@ -2492,6 +2492,14 @@ button {
   grid-template-columns: minmax(150px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(160px, 1fr) 80px auto auto;
 }
 
+.manager-role-auto-assignment {
+  align-self: stretch;
+  padding: 10px;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #f7fafc;
+}
+
 .score-feedback-row {
   grid-template-columns: minmax(180px, 0.9fr) minmax(180px, 0.85fr) 110px minmax(260px, 1.2fr) auto;
 }

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { mainRoleNameForReportRole } from "../../shared/portalConstants.js";
 
 type AgendaMeeting = Prisma.MeetingGetPayload<{
   include: {
@@ -305,6 +306,19 @@ function assignedMemberName(slot: AgendaRoleSlot) {
 }
 
 function assignedMemberForRole(roleSlots: AgendaRoleSlot[], requestedRole: string) {
+  const pairedMainRole = mainRoleNameForReportRole(requestedRole);
+
+  if (pairedMainRole) {
+    const mainSlot = roleSlots.find((candidate) => (
+      normalize(roleSlotName(candidate)) === normalize(pairedMainRole)
+      || normalize(candidate.roleDefinition.name) === normalize(pairedMainRole)
+    ));
+
+    if (mainSlot?.assignedStudent) {
+      return assignedMemberName(mainSlot);
+    }
+  }
+
   const slot = roleSlots.find((candidate) => roleMatches(roleSlotName(candidate), requestedRole));
 
   return slot ? assignedMemberName(slot) : "None";

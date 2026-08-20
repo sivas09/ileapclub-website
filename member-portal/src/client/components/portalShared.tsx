@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import type { Meeting, MeetingsOverview, MemberDetail, ResourceLink, Role, RoleDefinition } from "../api";
-import { bandLevels, documentCategories, leadershipRoleKeys, programLevels, resourceCategories } from "../../shared/portalConstants";
+import {
+  bandLevels,
+  documentCategories,
+  isReportRoleName,
+  leadershipRoleKeys,
+  programLevels,
+  resourceCategories
+} from "../../shared/portalConstants";
 
 export const programLevelOptions = programLevels.map((value) => ({
   value,
@@ -329,6 +336,14 @@ export function roleDefinitionsForSlot(roleDefinitions: RoleDefinition[], slot: 
 
 export function isLeadershipMeetingRole(slot: Meeting["roleSlots"][number]) {
   return isLeadershipRoleName(slot.slotLabel || "") || isLeadershipRoleName(slot.roleDefinition.name);
+}
+
+export function isReportMeetingRole(slot: Meeting["roleSlots"][number]) {
+  return isReportRoleName(slot.slotLabel || "") || isReportRoleName(slot.roleDefinition.name);
+}
+
+export function claimableMeetingRoleSlots(meeting: Pick<Meeting, "roleSlots">) {
+  return meeting.roleSlots.filter((slot) => !isReportMeetingRole(slot));
 }
 
 export function isLeadershipRoleName(roleName: string) {
