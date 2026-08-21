@@ -3108,6 +3108,179 @@ button {
   }
 }
 
+/* Keep primary actions readable after all workspace and theme overrides. */
+:root {
+  --portal-action-blue: #00296b;
+  --portal-action-blue-hover: #001d4d;
+  --portal-action-blue-active: #00153a;
+  --portal-action-orange: #b54708;
+  --portal-action-orange-hover: #8f3506;
+  --portal-action-orange-active: #762d05;
+  --portal-action-disabled: #64748b;
+}
+
+:is(
+  .admin-heading > button,
+  .admin-heading > .meeting-row-actions > button,
+  .admin-form button:not(.text-action):not(.danger-action),
+  .edit-user-actions button[type="submit"],
+  .assignment-form button,
+  .document-add-toggle button,
+  .document-form button[type="submit"],
+  .document-edit-form button[type="submit"],
+  .meeting-form button:not(.secondary-action):not(.danger-action),
+  .role-definition-form button[type="submit"],
+  .student-placement-form button[type="submit"],
+  .requirement-controls button:not(.text-action):not(.danger-action),
+  .score-feedback-row button:not(.danger-action),
+  .workspace-error-actions button:not(.secondary-action)
+) {
+  --primary-action-active: var(--portal-action-blue-active);
+  border-color: var(--portal-action-blue);
+  color: #ffffff;
+  background: var(--portal-action-blue);
+  opacity: 1;
+}
+
+:is(
+  .meeting-form button:not(.secondary-action):not(.danger-action),
+  .role-definition-form button[type="submit"],
+  .score-feedback-row button:not(.danger-action)
+) {
+  --primary-action-hover: var(--portal-action-orange-hover);
+  --primary-action-active: var(--portal-action-orange-active);
+  border-color: var(--portal-action-orange);
+  background: var(--portal-action-orange);
+}
+
+:is(
+  .admin-heading > button,
+  .admin-heading > .meeting-row-actions > button,
+  .admin-form button:not(.text-action):not(.danger-action),
+  .edit-user-actions button[type="submit"],
+  .assignment-form button,
+  .document-add-toggle button,
+  .document-form button[type="submit"],
+  .document-edit-form button[type="submit"],
+  .meeting-form button:not(.secondary-action):not(.danger-action),
+  .role-definition-form button[type="submit"],
+  .student-placement-form button[type="submit"],
+  .requirement-controls button:not(.text-action):not(.danger-action),
+  .score-feedback-row button:not(.danger-action),
+  .workspace-error-actions button:not(.secondary-action)
+):hover:not(:disabled) {
+  border-color: var(--primary-action-hover, var(--portal-action-blue-hover));
+  color: #ffffff;
+  background: var(--primary-action-hover, var(--portal-action-blue-hover));
+}
+
+:is(
+  .admin-heading > button,
+  .admin-heading > .meeting-row-actions > button,
+  .admin-form button:not(.text-action):not(.danger-action),
+  .edit-user-actions button[type="submit"],
+  .assignment-form button,
+  .document-add-toggle button,
+  .document-form button[type="submit"],
+  .document-edit-form button[type="submit"],
+  .meeting-form button:not(.secondary-action):not(.danger-action),
+  .role-definition-form button[type="submit"],
+  .student-placement-form button[type="submit"],
+  .requirement-controls button:not(.text-action):not(.danger-action),
+  .score-feedback-row button:not(.danger-action),
+  .workspace-error-actions button:not(.secondary-action)
+):active:not(:disabled) {
+  border-color: var(--primary-action-active);
+  color: #ffffff;
+  background: var(--primary-action-active);
+  transform: translateY(0);
+}
+
+:is(
+  .admin-heading > button,
+  .admin-heading > .meeting-row-actions > button,
+  .admin-form button:not(.text-action):not(.danger-action),
+  .edit-user-actions button[type="submit"],
+  .assignment-form button,
+  .document-add-toggle button,
+  .document-form button[type="submit"],
+  .document-edit-form button[type="submit"],
+  .meeting-form button:not(.secondary-action):not(.danger-action),
+  .role-definition-form button[type="submit"],
+  .student-placement-form button[type="submit"],
+  .requirement-controls button:not(.text-action):not(.danger-action),
+  .score-feedback-row button:not(.danger-action),
+  .workspace-error-actions button:not(.secondary-action)
+):focus-visible {
+  outline: 3px solid #fbbf24;
+  outline-offset: 3px;
+  color: #ffffff;
+}
+
+:is(
+  .admin-heading > button,
+  .admin-heading > .meeting-row-actions > button,
+  .admin-form button:not(.text-action):not(.danger-action),
+  .edit-user-actions button[type="submit"],
+  .assignment-form button,
+  .document-add-toggle button,
+  .document-form button[type="submit"],
+  .document-edit-form button[type="submit"],
+  .meeting-form button:not(.secondary-action):not(.danger-action),
+  .role-definition-form button[type="submit"],
+  .student-placement-form button[type="submit"],
+  .requirement-controls button:not(.text-action):not(.danger-action),
+  .score-feedback-row button:not(.danger-action),
+  .workspace-error-actions button:not(.secondary-action)
+):disabled {
+  cursor: not-allowed;
+  border-color: var(--portal-action-disabled);
+  color: #ffffff;
+  background: var(--portal-action-disabled);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.admin-form button.text-action,
+.edit-user-actions button.text-action,
+.meeting-form button.secondary-action,
+.workspace-error-actions button.secondary-action {
+  border-color: #9fb0c5;
+  color: var(--portal-blue);
+  background: #ffffff;
+  opacity: 1;
+}
+
+:is(
+  .admin-form button.text-action,
+  .edit-user-actions button.text-action,
+  .meeting-form button.secondary-action,
+  .workspace-error-actions button.secondary-action
+):hover:not(:disabled),
+:is(
+  .admin-form button.text-action,
+  .edit-user-actions button.text-action,
+  .meeting-form button.secondary-action,
+  .workspace-error-actions button.secondary-action
+):focus-visible {
+  border-color: var(--portal-teal);
+  color: #0b6675;
+  background: #ffffff;
+}
+
+:is(
+  .admin-form button.text-action,
+  .edit-user-actions button.text-action,
+  .meeting-form button.secondary-action,
+  .workspace-error-actions button.secondary-action
+):disabled {
+  cursor: not-allowed;
+  border-color: #cbd5e1;
+  color: #526277;
+  background: #f1f5f9;
+  opacity: 1;
+}
+
 @media (max-width: 520px) {
   .notice-filter-form {
     grid-template-columns: 1fr;
