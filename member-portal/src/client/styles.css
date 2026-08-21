@@ -2096,8 +2096,15 @@ button {
 .meeting-table,
 .role-assignment-table {
   width: 100%;
-  min-width: 860px;
   border-collapse: collapse;
+}
+
+.meeting-table {
+  min-width: 860px;
+}
+
+.role-assignment-table {
+  table-layout: fixed;
 }
 
 .meeting-table th,

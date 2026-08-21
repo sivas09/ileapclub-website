@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, type Meeting, type ResourceLink } from "../src/client/api";
-import { MeetingEditForm } from "../src/client/components/MeetingWorkspace";
+import { MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import {
   claimableMeetingRoleSlots,
@@ -21,6 +21,31 @@ const editMarkup = renderToStaticMarkup(
 
 assert.match(editMarkup, /value="2026-08-15"/, "Edit Meeting renders a valid date input without a runtime exception.");
 assert.match(editMarkup, /value="Saturday Meeting"/, "Edit Meeting initializes the selected meeting title.");
+
+const scoredMeeting: Meeting = {
+  ...meeting,
+  roleSlots: [{
+    ...meetingRoleSlotFixture("speech", "Prepared Speech 1"),
+    assignedStudentId: "student-1",
+    assignedStudent: studentFixture(),
+    score: {
+      id: "score-1",
+      meetingId: meeting.id,
+      roleSlotId: "speech",
+      studentId: "student-1",
+      score: 88,
+      feedback: "Strong speech"
+    }
+  }]
+};
+const meetingViewMarkup = renderToStaticMarkup(
+  <RoleAssignmentTable meeting={scoredMeeting} resources={[]} onSelectResource={() => undefined} />
+);
+assert.match(meetingViewMarkup, /<th>Role<\/th>/, "Meeting View keeps the role column.");
+assert.match(meetingViewMarkup, /<th>Assigned Member<\/th>/, "Meeting View keeps the assigned member column.");
+assert.doesNotMatch(meetingViewMarkup, /<th>Score<\/th>/, "Meeting View does not display the score column.");
+assert.doesNotMatch(meetingViewMarkup, /<th>Feedback<\/th>/, "Meeting View does not display the feedback column.");
+assert.doesNotMatch(meetingViewMarkup, /88\/100|Strong speech/, "Meeting View does not expose score or feedback values.");
 
 const parsedOverview = parseMeetingsOverviewResponse({
   meetings: [meeting],
@@ -165,5 +190,21 @@ function meetingRoleSlotFixture(id: string, roleName: string): Meeting["roleSlot
       isActive: true
     },
     score: null
+  };
+}
+
+function studentFixture(): NonNullable<Meeting["roleSlots"][number]["assignedStudent"]> {
+  return {
+    id: "student-1",
+    grade: "7",
+    programLevel: "SENIOR",
+    bandLevel: "White",
+    user: {
+      id: "student-user-1",
+      email: "student@example.com",
+      firstName: "Alex",
+      lastName: "Student",
+      role: "STUDENT"
+    }
   };
 }

@@ -293,7 +293,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
             {canManageMeetings ? <button type="button" className={meetingMode === "score" ? "is-active" : ""} onClick={() => setMeetingMode("score")}>Score Feedback</button> : null}
           </div>
 
-          {meetingMode === "view" ? <MeetingView meeting={selectedMeeting} user={user} resources={resources} onSelectResource={setSelectedResource} /> : null}
+          {meetingMode === "view" ? <MeetingView meeting={selectedMeeting} resources={resources} onSelectResource={setSelectedResource} /> : null}
           {meetingMode === "book" ? (
             <BookRoles
               meeting={selectedMeeting}
@@ -722,19 +722,17 @@ function DeleteMeetingDialog({
 
 function MeetingView({
   meeting,
-  user,
   resources,
   onSelectResource
 }: {
   meeting: Meeting;
-  user: PortalUser;
   resources: ResourceLink[];
   onSelectResource: (resource: ResourceLink) => void;
 }) {
   return (
     <section className="meeting-mode-section" aria-label="Meeting view">
       <MeetingSummary meeting={meeting} />
-      <RoleAssignmentTable meeting={meeting} user={user} resources={resources} onSelectResource={onSelectResource} />
+      <RoleAssignmentTable meeting={meeting} resources={resources} onSelectResource={onSelectResource} />
     </section>
   );
 }
@@ -1178,14 +1176,12 @@ function MeetingSummary({ meeting }: { meeting: Meeting }) {
   );
 }
 
-function RoleAssignmentTable({
+export function RoleAssignmentTable({
   meeting,
-  user,
   resources,
   onSelectResource
 }: {
   meeting: Meeting;
-  user: PortalUser;
   resources: ResourceLink[];
   onSelectResource: (resource: ResourceLink) => void;
 }) {
@@ -1196,13 +1192,11 @@ function RoleAssignmentTable({
           <tr>
             <th>Role</th>
             <th>Assigned Member</th>
-            <th>Score</th>
-            <th>Feedback</th>
           </tr>
         </thead>
         <tbody>
           {meeting.roleSlots.map((slot) => (
-            <RoleAssignmentRow key={slot.id} slot={slot} user={user} resources={resources} onSelectResource={onSelectResource} />
+            <RoleAssignmentRow key={slot.id} slot={slot} resources={resources} onSelectResource={onSelectResource} />
           ))}
         </tbody>
       </table>
@@ -1212,17 +1206,13 @@ function RoleAssignmentTable({
 
 function RoleAssignmentRow({
   slot,
-  user,
   resources,
   onSelectResource
 }: {
   slot: Meeting["roleSlots"][number];
-  user: PortalUser;
   resources: ResourceLink[];
   onSelectResource: (resource: ResourceLink) => void;
 }) {
-  const canSeeScore = user.role !== "STUDENT" || slot.assignedStudent?.user.id === user.id;
-
   return (
     <tr>
       <td>
@@ -1233,8 +1223,6 @@ function RoleAssignmentRow({
         />
       </td>
       <td>{slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "None"}</td>
-      <td>{canSeeScore && slot.score ? `${slot.score.score}/100` : "None"}</td>
-      <td>{canSeeScore ? slot.score?.feedback || "None" : "None"}</td>
     </tr>
   );
 }
@@ -1643,4 +1631,3 @@ function bandRequirementPayloadFromForm(form: HTMLFormElement) {
     isActive: formData.get("isActive") === "on"
   };
 }
-
