@@ -33,6 +33,7 @@ model User {
   createdResourceLinks ResourceLink[] @relation("ResourceLinkCreatedBy")
   updatedResourceLinks ResourceLink[] @relation("ResourceLinkUpdatedBy")
   createdNotices Notice[] @relation("NoticeCreatedBy")
+  createdMemberFeedback MemberFeedback[] @relation("MemberFeedbackCreatedBy")
 }
 
 model Centre {
@@ -64,6 +65,7 @@ model Club {
   meetings     Meeting[]
   bandDocuments BandDocument[]
   notices      Notice[]
+  memberFeedback MemberFeedback[]
 }
 
 model Student {
@@ -82,6 +84,7 @@ model Student {
   attendance MeetingAttendance[]
   roleScores MeetingRoleScore[]
   meetingFeedbacks StudentMeetingFeedback[]
+  memberFeedback MemberFeedback[]
   requirementProgress StudentRequirementProgress[]
 }
 
@@ -253,6 +256,24 @@ model StudentMeetingFeedback {
   @@index([meetingId])
   @@index([studentId])
   @@index([roleSlotId])
+}
+
+model MemberFeedback {
+  id              String   @id @default(cuid())
+  studentId       String
+  clubId          String
+  feedback        String
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  student   Student @relation(fields: [studentId], references: [id])
+  club      Club    @relation(fields: [clubId], references: [id])
+  createdBy User?   @relation("MemberFeedbackCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, createdAt])
+  @@index([clubId, createdAt])
+  @@index([createdByUserId])
 }
 
 model BandRequirement {

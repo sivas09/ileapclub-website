@@ -2033,6 +2033,32 @@ button {
   background: #fff1f2;
 }
 
+.member-feedback-form {
+  margin-bottom: 20px;
+}
+
+.member-feedback-form > label,
+.member-feedback-list textarea {
+  display: grid;
+  gap: 8px;
+}
+
+.member-feedback-form textarea,
+.member-feedback-list textarea {
+  width: 100%;
+  min-height: 112px;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #10223f;
+  background: #ffffff;
+  resize: vertical;
+}
+
+.member-feedback-list small {
+  color: #64748b;
+}
+
 .pagination-row {
   display: flex;
   align-items: center;

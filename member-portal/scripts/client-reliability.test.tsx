@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseMeetingsOverviewResponse, type Meeting, type ResourceLink } from "../src/client/api";
+import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type Meeting, type ResourceLink } from "../src/client/api";
 import { MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
+import { StudentClubMembersPanel, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import {
   claimableMeetingRoleSlots,
@@ -46,6 +47,47 @@ assert.match(meetingViewMarkup, /<th>Assigned Member<\/th>/, "Meeting View keeps
 assert.doesNotMatch(meetingViewMarkup, /<th>Score<\/th>/, "Meeting View does not display the score column.");
 assert.doesNotMatch(meetingViewMarkup, /<th>Feedback<\/th>/, "Meeting View does not display the feedback column.");
 assert.doesNotMatch(meetingViewMarkup, /88\/100|Strong speech/, "Meeting View does not expose score or feedback values.");
+
+const memberProgressMarkup = renderToStaticMarkup(<StudentProgressDashboard />);
+assert.match(memberProgressMarkup, /Member Progress Dashboard/, "Member progress uses member-facing terminology.");
+assert.doesNotMatch(memberProgressMarkup, /Student Progress Dashboard/, "Legacy student dashboard wording is hidden.");
+const clubMembersMarkup = renderToStaticMarkup(<StudentClubMembersPanel />);
+assert.match(clubMembersMarkup, /Club Members/, "My Club uses member-facing terminology.");
+
+const parsedProgress = parseStudentProgressResponse({
+  student: {
+    id: "student-1",
+    userId: "student-user-1",
+    grade: "7",
+    bandLevel: "White",
+    user: studentFixture().user,
+    attendance: [],
+    roleSlots: [],
+    roleScores: []
+  },
+  feedback: [],
+  memberFeedback: [{
+    id: "member-feedback-1",
+    clubName: "Kanata Saturday",
+    feedback: "Excellent preparation.",
+    facilitatorName: "Pat Facilitator",
+    createdAt: "2026-08-20T12:00:00.000Z",
+    updatedAt: "2026-08-20T12:00:00.000Z"
+  }],
+  requirements: [],
+  summary: {
+    bandLevel: "White",
+    programLevel: "SENIOR",
+    clubName: "Kanata Saturday",
+    centreName: "Kanata",
+    attendanceRate: null,
+    totalMeetingsMarked: 0,
+    rolesCompleted: 0,
+    scoredRoles: 0,
+    averageScore: null
+  }
+});
+assert.equal(parsedProgress.memberFeedback[0]?.feedback, "Excellent preparation.", "Member-level feedback is retained in My Progress responses.");
 
 const parsedOverview = parseMeetingsOverviewResponse({
   meetings: [meeting],

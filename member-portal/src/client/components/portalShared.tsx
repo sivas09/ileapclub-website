@@ -70,14 +70,14 @@ const overviewLinks: Record<Role, OverviewLink[]> = {
     { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
     { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
     { href: "#feedback", label: "Feedback", description: "Scores and facilitator feedback" },
-    { href: "#requirements", label: "Band Progress", description: "Requirements and student advancement" }
+    { href: "#requirements", label: "Band Progress", description: "Requirements and member advancement" }
   ],
   FACILITATOR: [
     { href: "#members", label: "Members", description: "Members in your assigned clubs" },
     { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
     { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
-    { href: "#feedback", label: "Feedback", description: "Scores and student feedback" },
-    { href: "#requirements", label: "Band Progress", description: "Requirements and student advancement" }
+    { href: "#feedback", label: "Feedback", description: "Scores and member feedback" },
+    { href: "#requirements", label: "Band Progress", description: "Requirements and member advancement" }
   ],
   STUDENT: [
     { href: "#club-members", label: "My Club", description: "Members in your club" },
@@ -490,5 +490,4 @@ export function isTodayOrFuture(value: string) {
   return Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate())
     >= Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
 }
-
 

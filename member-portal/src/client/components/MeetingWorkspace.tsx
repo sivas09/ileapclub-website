@@ -769,7 +769,7 @@ function BookRoles({
       <MeetingSummary meeting={meeting} />
       <p className="field-note">You can claim up to 2 roles per meeting, including a maximum of 1 leadership role.</p>
       {meeting.isRoleLocked ? <p className="admin-status is-error">Role booking is locked for this meeting.</p> : null}
-      {user.role !== "STUDENT" ? <p className="loading-state">Managers can review booking availability here. Use Manage Roles to assign students.</p> : null}
+      {user.role !== "STUDENT" ? <p className="loading-state">Managers can review booking availability here. Use Manage Roles to assign members.</p> : null}
       <ul className="booking-list">
         {claimableSlots.map((slot) => {
           const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "";
@@ -801,7 +801,7 @@ function BookRoles({
                   type="button"
                   className="danger-action"
                   onClick={() => {
-                    if (window.confirm(`Release ${roleSlotName(slot)}? Another student will be able to claim it.`)) {
+                    if (window.confirm(`Release ${roleSlotName(slot)}? Another member will be able to claim it.`)) {
                       onRelease(slot.id);
                     }
                   }}
@@ -967,9 +967,9 @@ function ManageRoleSlotRow({
   }
 
   function handleReleaseAssignment() {
-    const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "this student";
+    const assignedName = slot.assignedStudent ? formatStudentName(slot.assignedStudent) : "this member";
 
-    if (window.confirm(`Release ${roleSlotName(slot)} from ${assignedName}? Another student will be able to claim it.`)) {
+    if (window.confirm(`Release ${roleSlotName(slot)} from ${assignedName}? Another member will be able to claim it.`)) {
       onAssign(null);
     }
   }
@@ -1045,7 +1045,7 @@ function ScoreFeedback({
         <strong>{meeting.title}</strong>
         <span>{formatDate(meeting.meetingDate)} - {meeting.club.name}</span>
       </div>
-      {!feedbackStudents.length ? <p className="loading-state">Assign students to roles before scoring feedback.</p> : null}
+      {!feedbackStudents.length ? <p className="loading-state">Assign members to roles before scoring feedback.</p> : null}
       <div className="score-feedback-list">
         {feedbackStudents.map((student) => (
           <StudentFeedbackRow
@@ -1294,7 +1294,7 @@ function RequirementManagementPanel({
   }
 
   async function handleBackfillPreviousBands() {
-    if (!selectedStudentId || !window.confirm("This will mark all requirements before the student's current band as completed. Continue?")) {
+    if (!selectedStudentId || !window.confirm("This will mark all requirements before the member's current band as completed. Continue?")) {
       return;
     }
 
@@ -1332,10 +1332,10 @@ function RequirementManagementPanel({
         bandLevel: String(formData.get("bandLevel") || "White")
       });
       setProgress(updatedProgress);
-      setStatus("Student program and band level updated.");
+      setStatus("Member program and band level updated.");
       onUpdated();
     } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Unable to update student placement.");
+      setError(updateError instanceof Error ? updateError.message : "Unable to update member placement.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1346,7 +1346,7 @@ function RequirementManagementPanel({
       <div className="admin-heading">
         <div>
           <p className="eyebrow">Personal Tracking</p>
-          <h3>Update Student Band Progress</h3>
+          <h3>Update Member Band Progress</h3>
         </div>
         <select value={selectedStudentId} onChange={(event) => setSelectedStudentId(event.target.value)}>
           {students.map((student) => (
@@ -1389,7 +1389,7 @@ function RequirementManagementPanel({
                 ))}
               </select>
             </label>
-            <button type="submit" disabled={isSubmitting}>Update Student</button>
+            <button type="submit" disabled={isSubmitting}>Update Member</button>
             <button type="button" onClick={handleBackfillPreviousBands} disabled={isSubmitting || !progress.summary.programLevel}>
               Backfill Previous Bands
             </button>
@@ -1491,7 +1491,7 @@ function BandRequirementDefinitionManager({ onChanged }: { onChanged: () => void
   }
 
   async function handleRemove(requirement: BandRequirement) {
-    const confirmed = window.confirm(`Remove "${requirement.name}" from ${formatProgramLevel(requirement.programLevel)} ${requirement.bandLevel}? If students already have progress for it, it will be marked inactive instead of deleted.`);
+    const confirmed = window.confirm(`Remove "${requirement.name}" from ${formatProgramLevel(requirement.programLevel)} ${requirement.bandLevel}? If members already have progress for it, it will be marked inactive instead of deleted.`);
 
     if (!confirmed) {
       return;

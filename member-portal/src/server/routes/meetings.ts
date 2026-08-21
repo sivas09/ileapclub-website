@@ -619,7 +619,7 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
   const user = request.user!;
 
   if (user.role !== Role.STUDENT) {
-    response.status(403).json({ message: "Only students can self-claim roles." });
+    response.status(403).json({ message: "Only members can self-claim roles." });
     return;
   }
 
@@ -628,7 +628,7 @@ meetingsRouter.post("/:meetingId/slots/:slotId/claim", asyncRoute(async (request
   });
 
   if (!student) {
-    response.status(404).json({ message: "Student profile not found." });
+    response.status(404).json({ message: "Member profile not found." });
     return;
   }
 
@@ -720,7 +720,7 @@ meetingsRouter.post("/:meetingId/slots/:slotId/release", asyncRoute(async (reque
   const user = request.user!;
 
   if (user.role !== Role.STUDENT) {
-    response.status(403).json({ message: "Only students can release their own role claims." });
+    response.status(403).json({ message: "Only members can release their own role claims." });
     return;
   }
 
@@ -729,7 +729,7 @@ meetingsRouter.post("/:meetingId/slots/:slotId/release", asyncRoute(async (reque
   });
 
   if (!student) {
-    response.status(404).json({ message: "Student profile not found." });
+    response.status(404).json({ message: "Member profile not found." });
     return;
   }
 
@@ -903,7 +903,7 @@ meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, respo
   const parsed = assignRoleSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Enter a valid student assignment." });
+    response.status(400).json({ message: "Enter a valid member assignment." });
     return;
   }
 
@@ -935,7 +935,7 @@ meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, respo
     const student = await prisma.student.findUnique({ where: { id: parsed.data.studentId } });
 
     if (!student || !(await isStudentInClub(student.id, slot.meeting.clubId))) {
-      response.status(400).json({ message: "Choose a student assigned to this club." });
+      response.status(400).json({ message: "Choose a member assigned to this club." });
       return;
     }
 
@@ -1022,7 +1022,7 @@ meetingsRouter.put("/:meetingId/attendance", asyncRoute(async (request, response
   const parsed = attendanceSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Choose a student and attendance status." });
+    response.status(400).json({ message: "Choose a member and attendance status." });
     return;
   }
 
@@ -1044,7 +1044,7 @@ meetingsRouter.put("/:meetingId/attendance", asyncRoute(async (request, response
   const student = await prisma.student.findUnique({ where: { id: parsed.data.studentId } });
 
   if (!student || !(await isStudentInClub(student.id, meeting.clubId))) {
-    response.status(400).json({ message: "Choose a student assigned to this club." });
+    response.status(400).json({ message: "Choose a member assigned to this club." });
     return;
   }
 
@@ -1109,12 +1109,12 @@ meetingsRouter.put("/:meetingId/slots/:slotId/score", asyncRoute(async (request,
   }
 
   if (!slot.assignedStudentId) {
-    response.status(400).json({ message: "Assign a student before scoring this role." });
+    response.status(400).json({ message: "Assign a member before scoring this role." });
     return;
   }
 
   if (!(await isStudentInClub(slot.assignedStudentId, slot.meeting.clubId))) {
-    response.status(400).json({ message: "The assigned student is no longer active in this club." });
+    response.status(400).json({ message: "The assigned member is no longer active in this club." });
     return;
   }
 
@@ -1146,14 +1146,14 @@ meetingsRouter.put("/:meetingId/student-feedback", asyncRoute(async (request, re
   const user = request.user!;
 
   if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can save student feedback." });
+    response.status(403).json({ message: "Only admins and facilitators can save member feedback." });
     return;
   }
 
   const parsed = studentFeedbackSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Choose a student and enter a score between 0 and 100." });
+    response.status(400).json({ message: "Choose a member and enter a score between 0 and 100." });
     return;
   }
 
@@ -1173,7 +1173,7 @@ meetingsRouter.put("/:meetingId/student-feedback", asyncRoute(async (request, re
   const student = await prisma.student.findUnique({ where: { id: parsed.data.studentId } });
 
   if (!student || !(await isStudentInClub(student.id, meeting.clubId))) {
-    response.status(400).json({ message: "Choose a student assigned to this club." });
+    response.status(400).json({ message: "Choose a member assigned to this club." });
     return;
   }
 
@@ -1181,7 +1181,7 @@ meetingsRouter.put("/:meetingId/student-feedback", asyncRoute(async (request, re
     const roleSlot = await prisma.meetingRoleSlot.findUnique({ where: { id: parsed.data.roleSlotId } });
 
     if (!roleSlot || roleSlot.meetingId !== meetingId || roleSlot.assignedStudentId !== student.id) {
-      response.status(400).json({ message: "Choose one of this student's assigned roles for this meeting." });
+      response.status(400).json({ message: "Choose one of this member's assigned roles for this meeting." });
       return;
     }
   }
@@ -1552,11 +1552,11 @@ export function roleAssignmentLimitViolation(
   const existingClaimableRoles = existingRoles.filter((role) => !isReportRoleSlot(role));
 
   if (existingClaimableRoles.length >= maximumRolesPerStudentMeeting) {
-    return "Students can claim a maximum of 2 roles for this meeting.";
+    return "Members can claim a maximum of 2 roles for this meeting.";
   }
 
   if (isLeadershipRoleSlot(targetRole) && existingClaimableRoles.some(isLeadershipRoleSlot)) {
-    return "Students can claim only 1 leadership role per meeting.";
+    return "Members can claim only 1 leadership role per meeting.";
   }
 
   return null;

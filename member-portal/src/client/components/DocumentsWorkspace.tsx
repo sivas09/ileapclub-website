@@ -562,7 +562,7 @@ function StudentResourcesPanel() {
   const roleHelpResources = remainingResources.filter((resource) => !guideResourceIds.has(resource.id));
 
   return (
-    <section className="documents-workspace" id="resources" aria-label="Student band resources">
+    <section className="documents-workspace" id="resources" aria-label="Member band resources">
       <div className="admin-heading">
         <div>
           <p className="eyebrow">Learning resources</p>

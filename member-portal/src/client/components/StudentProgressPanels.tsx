@@ -46,7 +46,7 @@ export function StudentClubMembersPanel() {
   }
 
   return (
-    <section className="student-progress" id="club-members" aria-label="Student club members">
+    <section className="student-progress" id="club-members" aria-label="Club members">
       <div className="admin-heading">
         <div>
           <p className="eyebrow">My club</p>
@@ -63,7 +63,7 @@ export function StudentClubMembersPanel() {
           <table className="student-feedback-table">
             <thead>
               <tr>
-                <th>Student</th>
+                <th>Member</th>
                 <th>Current Band</th>
                 <th>Program Level</th>
                 <th>Club</th>
@@ -120,12 +120,29 @@ export function StudentProgressDashboard() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  const feedbackRows = progress ? [
+    ...progress.memberFeedback.map((entry) => ({
+      id: `member-${entry.id}`,
+      date: entry.updatedAt || entry.createdAt,
+      feedback: entry.feedback,
+      facilitatorName: entry.facilitatorName
+    })),
+    ...progress.feedback
+      .filter((entry) => Boolean(entry.feedback))
+      .map((entry) => ({
+        id: `meeting-${entry.id}`,
+        date: entry.scoredAt || entry.meetingDate,
+        feedback: entry.feedback || "",
+        facilitatorName: entry.facilitatorName
+      }))
+  ].sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime()) : [];
+
   return (
-    <section className="student-progress" id="progress" aria-label="Student progress dashboard">
+    <section className="student-progress" id="progress" aria-label="Member progress dashboard">
       <div className="admin-heading">
         <div>
           <p className="eyebrow">My progress</p>
-          <h2>Student Progress Dashboard</h2>
+          <h2>Member Progress Dashboard</h2>
         </div>
       </div>
 
@@ -161,33 +178,23 @@ export function StudentProgressDashboard() {
             <span>{progress.summary.centreName} - {formatBandLadder(progress.summary.programLevel)}</span>
           </div>
 
-          <DataPanel title="My Scores & Feedback">
-            {progress.feedback.length ? (
+          <DataPanel title="My Feedback">
+            {feedbackRows.length ? (
               <div className="student-feedback-table-wrap">
                 <table className="student-feedback-table">
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th>Meeting</th>
-                      <th>Club</th>
-                      <th>Related Roles</th>
-                      <th>Score</th>
                       <th>Feedback</th>
                       <th>Facilitator</th>
-                      <th>Attendance</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {progress.feedback.map((entry) => (
+                    {feedbackRows.map((entry) => (
                       <tr key={entry.id}>
-                        <td>{formatDate(entry.meetingDate)}</td>
-                        <td>{entry.meetingTitle}</td>
-                        <td>{entry.clubName}</td>
-                        <td>{entry.roleName}</td>
-                        <td>{entry.score}/100</td>
-                        <td>{entry.feedback || "No feedback entered yet."}</td>
+                        <td>{formatDate(entry.date)}</td>
+                        <td>{entry.feedback}</td>
                         <td>{entry.facilitatorName}</td>
-                        <td>{entry.attendanceStatus ?? "Not marked"}</td>
                       </tr>
                     ))}
                   </tbody>

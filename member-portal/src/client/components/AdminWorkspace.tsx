@@ -344,7 +344,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               disabled={isCurrentAdmin}
               required
             >
-              <option value="STUDENT">Student</option>
+              <option value="STUDENT">Member</option>
               <option value="FACILITATOR">Facilitator</option>
               <option value="ADMIN">Admin</option>
             </select>
@@ -444,7 +444,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         <SummaryTile label="Centres" value={overview?.centres.length ?? 0} />
         <SummaryTile label="Clubs" value={overview?.clubs.length ?? 0} />
         <SummaryTile label="Users" value={overview?.users.length ?? 0} />
-        <SummaryTile label="Students" value={overview?.students.length ?? 0} />
+        <SummaryTile label="Members" value={overview?.students.length ?? 0} />
       </div>
 
       <div className="admin-form-grid">
@@ -541,7 +541,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
             <label>
               Role
               <select name="role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value as Role)} required>
-                <option value="STUDENT">Student</option>
+                <option value="STUDENT">Member</option>
                 <option value="FACILITATOR">Facilitator</option>
                 <option value="ADMIN">Admin</option>
               </select>
@@ -705,7 +705,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                     <strong>{club.name}</strong>
                     <StatusBadge isActive={club.isActive} />
                   </div>
-                  <span>{club.program} - {club.studentMemberships?.length ?? 0} students - {club.facilitators?.length ?? 0} facilitators</span>
+                  <span>{club.program} - {club.studentMemberships?.length ?? 0} members - {club.facilitators?.length ?? 0} facilitators</span>
                   <button type="button" className="text-action" onClick={() => updateClubStatus(club.id, !club.isActive)} disabled={isSubmitting}>
                     {club.isActive ? "Archive Club" : "Restore Club"}
                   </button>
@@ -774,7 +774,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
           ) : <p>No users yet.</p>}
         </DataPanel>
 
-        <DataPanel title="Student Assignments">
+        <DataPanel title="Member Assignments">
           {overview?.students.length ? (
             <ul className="record-list">
               {overview.students.map((student) => (
@@ -784,7 +784,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                 </li>
               ))}
             </ul>
-          ) : <p>No student assignments yet.</p>}
+          ) : <p>No member assignments yet.</p>}
         </DataPanel>
       </div>
     </section>

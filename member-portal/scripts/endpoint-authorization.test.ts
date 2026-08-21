@@ -41,6 +41,9 @@ const state = {
   documentCreates: 0,
   noticeCreates: 0,
   resourceCreates: 0,
+  memberFeedbackCreates: 0,
+  memberFeedbackUpdates: 0,
+  memberFeedbackDeletes: 0,
   meetingDeleteTransactions: 0,
   deletedMeetingIds: new Set<string>(),
   meetingDeletionSteps: {} as Record<string, string[]>,
@@ -73,7 +76,7 @@ patchModel("clubFacilitator", {
   findFirst: ({ where }: any) => where.facilitatorId === users.facilitator.id && includesClub(where.clubId, assignedClubId)
     ? { id: "club-facilitator" }
     : null,
-  count: () => 0
+  count: ({ where }: any) => where.facilitatorId === users.facilitator.id && where.clubId === assignedClubId ? 1 : 0
 });
 patchModel("centreFacilitator", {
   findFirst: () => null,
@@ -112,7 +115,11 @@ patchModel("studentClubMembership", {
 
     return null;
   },
-  count: () => 0,
+  count: ({ where }: any = {}) => {
+    const isAssignedMembership = where.studentId === assignedStudentId && where.clubId === assignedClubId;
+    const isOtherMembership = where.studentId === otherStudentId && where.clubId === otherClubId;
+    return isAssignedMembership || isOtherMembership ? 1 : 0;
+  },
   deleteMany: () => ({ count: 0 }),
   createMany: () => ({ count: 1 }),
   updateMany: () => ({ count: 1 })
@@ -223,6 +230,31 @@ patchModel("studentMeetingFeedback", {
   groupBy: () => [],
   deleteMany: ({ where }: any) => recordMeetingDelete(where.meetingId, "studentFeedbacks", 1)
 });
+patchModel("memberFeedback", {
+  create: ({ data }: any) => {
+    state.memberFeedbackCreates += 1;
+    return memberFeedbackRecord("created-feedback", data.studentId, data.clubId, data.createdByUserId, data.feedback);
+  },
+  findFirst: ({ where }: any) => {
+    const record = where.id === "own-feedback"
+      ? memberFeedbackRecord("own-feedback", assignedStudentId, assignedClubId, users.facilitator.id)
+      : where.id === "other-feedback"
+        ? memberFeedbackRecord("other-feedback", assignedStudentId, assignedClubId, "other-facilitator")
+        : null;
+
+    return record?.studentId === where.studentId ? record : null;
+  },
+  update: ({ where, data }: any) => {
+    state.memberFeedbackUpdates += 1;
+    return memberFeedbackRecord(where.id, assignedStudentId, assignedClubId, where.id === "own-feedback" ? users.facilitator.id : "other-facilitator", data.feedback);
+  },
+  delete: ({ where }: any) => {
+    state.memberFeedbackDeletes += 1;
+    return { id: where.id };
+  },
+  count: () => 0,
+  deleteMany: () => ({ count: 0 })
+});
 patchModel("bandDocument", {
   findMany: ({ where }: any) => {
     state.lastDocumentWhere = where;
@@ -328,6 +360,18 @@ try {
   await assertStatus("facilitator cannot update member identity fields", "PATCH", `/api/members/${assignedStudentId}`, Role.FACILITATOR, 400, { programLevel: "JUNIOR", bandLevel: "Yellow", email: "tampered@example.com" });
   await assertStatus("facilitator cannot update unassigned student learning levels", "PATCH", `/api/members/${otherStudentId}`, Role.FACILITATOR, 403, { programLevel: "JUNIOR", bandLevel: "Yellow" });
   await assertStatus("student cannot update member learning levels", "PATCH", `/api/members/${assignedStudentId}`, Role.STUDENT, 403, { programLevel: "JUNIOR", bandLevel: "Yellow" });
+  await assertStatus("facilitator can write feedback for an assigned-club member", "POST", `/api/members/${assignedStudentId}/feedback`, Role.FACILITATOR, 201, memberFeedbackPayload(assignedClubId));
+  await assertStatus("facilitator cannot write feedback for an unassigned-club member", "POST", `/api/members/${otherStudentId}/feedback`, Role.FACILITATOR, 403, memberFeedbackPayload(otherClubId));
+  await assertStatus("admin can write feedback for any active member", "POST", `/api/members/${otherStudentId}/feedback`, Role.ADMIN, 201, memberFeedbackPayload(otherClubId));
+  await assertStatus("member cannot write feedback", "POST", `/api/members/${assignedStudentId}/feedback`, Role.STUDENT, 403, memberFeedbackPayload(assignedClubId));
+  await assertStatus("facilitator can edit feedback they created", "PATCH", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.FACILITATOR, 200, { feedback: "Updated by its author." });
+  await assertStatus("facilitator cannot edit another facilitator's feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.FACILITATOR, 403, { feedback: "Tampered feedback." });
+  await assertStatus("admin can edit any member feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.ADMIN, 200, { feedback: "Admin correction." });
+  await assertStatus("member cannot edit feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.STUDENT, 403, { feedback: "Tampered feedback." });
+  await assertStatus("facilitator can delete feedback they created", "DELETE", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.FACILITATOR, 200);
+  await assertStatus("facilitator cannot delete another facilitator's feedback", "DELETE", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.FACILITATOR, 403);
+  await assertStatus("admin can delete any member feedback", "DELETE", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.ADMIN, 200);
+  await assertStatus("member cannot delete feedback", "DELETE", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.STUDENT, 403);
 
   await assertStatus("admin can assign a meeting role", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.ADMIN, 200, { studentId: assignedStudentId });
   await assertStatus("facilitator can assign a role in assigned club", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.FACILITATOR, 200, { studentId: assignedStudentId });
@@ -456,6 +500,9 @@ try {
   assertEqual(state.noticeCreates > 0, true, "notice create tests executed create path");
   assertEqual(state.resourceCreates > 0, true, "resource create tests executed create path");
   assertEqual(state.studentRequirementUpserts > 0, true, "band progress tests executed upsert path");
+  assertEqual(state.memberFeedbackCreates, 2, "authorized member feedback creates reached persistence");
+  assertEqual(state.memberFeedbackUpdates, 2, "only authorized member feedback edits reached persistence");
+  assertEqual(state.memberFeedbackDeletes, 2, "only authorized member feedback deletes reached persistence");
 
   console.log("Endpoint authorization tests passed.");
 } finally {
@@ -611,6 +658,13 @@ function progressPayload() {
   };
 }
 
+function memberFeedbackPayload(clubId: string) {
+  return {
+    clubId,
+    feedback: "A thoughtful and encouraging member comment."
+  };
+}
+
 function requirementPayload() {
   return {
     programLevel: "JUNIOR",
@@ -661,6 +715,28 @@ function studentRecord(studentId: string, userId: string, clubId: string) {
         centre: { name: "Centre", isActive: true }
       }
     }]
+  };
+}
+
+function memberFeedbackRecord(
+  id: string,
+  studentId: string,
+  clubId: string,
+  createdByUserId: string,
+  feedback = "A thoughtful and encouraging member comment."
+) {
+  const now = new Date("2026-08-21T12:00:00.000Z");
+
+  return {
+    id,
+    studentId,
+    clubId,
+    feedback,
+    createdByUserId,
+    createdAt: now,
+    updatedAt: now,
+    club: { id: clubId, name: clubId === assignedClubId ? "Assigned Club" : "Other Club" },
+    createdBy: { id: createdByUserId, firstName: "Test", lastName: "Facilitator", role: Role.FACILITATOR }
   };
 }
 

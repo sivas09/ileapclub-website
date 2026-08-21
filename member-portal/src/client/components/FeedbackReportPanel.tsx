@@ -30,7 +30,7 @@ export function FeedbackReportPanel() {
       <div className="admin-heading">
         <div>
           <p className="eyebrow">Feedback</p>
-          <h2>Facilitator Feedback for Students</h2>
+          <h2>Member Feedback</h2>
         </div>
         <button type="button" onClick={() => refreshFeedback()} disabled={isLoading}>Refresh</button>
       </div>
@@ -42,7 +42,7 @@ export function FeedbackReportPanel() {
           <table className="feedback-table">
             <thead>
               <tr>
-                <th>Student</th>
+                <th>Member</th>
                 <th>Club</th>
                 <th>Meeting</th>
                 <th>Related Roles</th>

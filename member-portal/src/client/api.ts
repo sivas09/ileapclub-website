@@ -155,6 +155,7 @@ export type StudentProgress = {
     }>;
   };
   feedback: StudentFeedbackEntry[];
+  memberFeedback: MemberFeedbackEntry[];
   requirements: StudentRequirementStatus[];
   summary: {
     bandLevel: string;
@@ -183,6 +184,18 @@ export type StudentFeedbackEntry = {
   facilitatorRole?: Role | null;
   attendanceStatus?: MeetingAttendance["status"] | null;
   scoredAt: string;
+};
+
+export type MemberFeedbackEntry = {
+  id: string;
+  studentId?: string;
+  clubId?: string;
+  clubName: string;
+  feedback: string;
+  facilitatorName: string;
+  createdAt: string;
+  updatedAt: string;
+  canEdit?: boolean;
 };
 
 export type StudentClubMember = {
@@ -261,6 +274,7 @@ export type MemberDetail = {
     facilitatorName: string;
     roleName: string;
   }>;
+  memberFeedback?: MemberFeedbackEntry[];
 };
 
 export type BandDocument = {
@@ -1148,6 +1162,7 @@ export function parseStudentProgressResponse(value: unknown): StudentProgress {
   return {
     student: student as StudentProgress["student"],
     feedback: expectRecordArray(result.feedback, "student progress") as StudentFeedbackEntry[],
+    memberFeedback: Array.isArray(result.memberFeedback) ? result.memberFeedback as MemberFeedbackEntry[] : [],
     requirements: expectRecordArray(result.requirements, "student progress") as StudentRequirementStatus[],
     summary: summary as StudentProgress["summary"]
   };
@@ -1251,6 +1266,26 @@ export async function getMemberDetail(studentId: string) {
   return request<{ member: MemberDetail }>(`/api/members/${studentId}`);
 }
 
+export async function createMemberFeedback(studentId: string, payload: { clubId: string; feedback: string }) {
+  return request<{ feedback: MemberFeedbackEntry }>(`/api/members/${studentId}/feedback`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateMemberFeedback(studentId: string, feedbackId: string, payload: { feedback: string }) {
+  return request<{ feedback: MemberFeedbackEntry }>(`/api/members/${studentId}/feedback/${feedbackId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteMemberFeedback(studentId: string, feedbackId: string) {
+  return request<{ deletedFeedback: { id: string } }>(`/api/members/${studentId}/feedback/${feedbackId}`, {
+    method: "DELETE"
+  });
+}
+
 export async function createMember(payload: {
   email: string;
   password: string;
@@ -1288,6 +1323,7 @@ export async function permanentlyDeleteMember(studentId: string) {
     deletionSummary: {
       deletedRoleScores: number;
       deletedMeetingFeedback: number;
+      deletedMemberFeedback: number;
       deletedAttendance: number;
       deletedRequirementProgress: number;
       deletedClubMemberships: number;

@@ -44,7 +44,7 @@ noticesRouter.get("/", asyncRoute(async (request, response) => {
   const visibleClubIds = await getVisibleClubIds(user.id, user.role);
 
   if (user.role === Role.STUDENT && clubId) {
-    response.status(403).json({ message: "Student notice scope is determined by club membership." });
+    response.status(403).json({ message: "Member notice scope is determined by club membership." });
     return;
   }
 

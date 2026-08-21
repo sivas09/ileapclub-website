@@ -239,7 +239,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
             <p className="eyebrow">{formatRole(user.role)}</p>
             <h2 id="overview-title">Welcome back, {user.firstName}.</h2>
             <p>{copy.summary}</p>
-            {user.role === "ADMIN" ? <small>To preview member experience, use a student test account.</small> : null}
+            {user.role === "ADMIN" ? <small>To preview member experience, use a member test account.</small> : null}
           </section>
 
           {user.role === "STUDENT" ? (

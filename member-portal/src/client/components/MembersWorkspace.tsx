@@ -1,7 +1,9 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   backfillPreviousBandRequirements,
+  createMemberFeedback,
   createMember,
+  deleteMemberFeedback,
   getMemberDetail,
   getMembers,
   MemberDetail,
@@ -12,6 +14,7 @@ import {
   Role,
   setUserActive,
   updateMember,
+  updateMemberFeedback,
   updateUser,
   updateStudentRequirement
 } from "../api";
@@ -29,6 +32,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
   const [data, setData] = useState<MembersResponse | null>(null);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
   const [editingMember, setEditingMember] = useState<MemberDetail | null>(null);
+  const [feedbackTarget, setFeedbackTarget] = useState<MemberListEntry | null>(null);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [filters, setFilters] = useState({
     centreId: "",
@@ -188,7 +192,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
         });
         form.reset();
         setIsAddFormOpen(false);
-        setStatus("Student member added.");
+        setStatus("Member added.");
       }
 
       await loadMembers();
@@ -224,9 +228,37 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     }
   }
 
+  async function submitMemberFeedback(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!feedbackTarget?.clubId) {
+      setError("Select a member from a club before writing feedback.");
+      return;
+    }
+
+    const form = event.currentTarget;
+    const feedback = String(new FormData(form).get("feedback") || "").trim();
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await createMemberFeedback(feedbackTarget.id, { clubId: feedbackTarget.clubId, feedback });
+      const studentId = feedbackTarget.id;
+      setFeedbackTarget(null);
+      setStatus("Member feedback saved.");
+      await openDetail(studentId, "member-feedback");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to save member feedback.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   const pageCount = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const clubs = data?.clubs.filter((club) => !filters.centreId || club.centreId === filters.centreId) ?? [];
   const assignableClubs = data?.clubs.filter((club) => club.isActive && club.centre?.isActive !== false) ?? [];
+  const showMemberResults = user.role !== "FACILITATOR" || Boolean(filters.clubId);
 
   return (
     <section className="members-workspace" id="members" aria-label="Members">
@@ -261,6 +293,26 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
         />
       ) : null}
 
+      {feedbackTarget ? (
+        <form id="member-feedback-form" className="admin-form wide member-feedback-form" onSubmit={submitMemberFeedback}>
+          <div className="admin-heading">
+            <div>
+              <p className="eyebrow">Write Feedback</p>
+              <h3>{feedbackTarget.displayName}</h3>
+              <span>{feedbackTarget.clubName}</span>
+            </div>
+          </div>
+          <label>
+            Feedback/comment
+            <textarea name="feedback" rows={6} maxLength={5000} required autoFocus placeholder="Write feedback for this member..." />
+          </label>
+          <div className="edit-user-actions">
+            <button type="submit" disabled={isSubmitting}>Save Feedback</button>
+            <button type="button" className="text-action" onClick={() => setFeedbackTarget(null)} disabled={isSubmitting}>Cancel</button>
+          </div>
+        </form>
+      ) : null}
+
       <div className="member-filter-form">
         {user.role === "ADMIN" ? (
           <label>
@@ -276,7 +328,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
         <label>
           Club
           <select value={filters.clubId} onChange={(event) => updateFilter("clubId", event.currentTarget.value)}>
-            <option value="">All clubs</option>
+            <option value="">{user.role === "FACILITATOR" ? "Select a club" : "All clubs"}</option>
             {clubs.map((club) => (
               <option key={club.id} value={club.id}>{club.name}</option>
             ))}
@@ -315,9 +367,10 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       </div>
 
       {isLoading ? <p className="loading-state">Loading members...</p> : null}
-      {!isLoading && !data?.members.length ? <p className="loading-state">No members found.</p> : null}
+      {!isLoading && !showMemberResults ? <p className="loading-state">Select an assigned club to view its members.</p> : null}
+      {!isLoading && showMemberResults && !data?.members.length ? <p className="loading-state">No members found.</p> : null}
 
-      {data?.members.length ? (
+      {showMemberResults && data?.members.length ? (
         <>
           <div className="feedback-table-wrap">
             <table className="feedback-table members-table">
@@ -345,6 +398,16 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                         <button type="button" onClick={() => startEditingMember(member.id)} disabled={isSubmitting}>Edit Member</button>
                         <button type="button" onClick={() => openDetail(member.id, "member-progress")} disabled={isSubmitting}>View Progress</button>
                         <button type="button" onClick={() => openDetail(member.id, "member-feedback")} disabled={isSubmitting}>View Feedback</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeedbackTarget(member);
+                            window.setTimeout(() => document.getElementById("member-feedback-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+                          }}
+                            disabled={isSubmitting || (user.role === "FACILITATOR" && member.isActive === false)}
+                        >
+                          Write Feedback
+                        </button>
                         {user.role === "ADMIN" ? (
                           <button type="button" className="danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
                             {member.isActive === false ? "Reactivate" : "Deactivate"}
@@ -376,6 +439,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
         <MemberDetailPanel
           member={detail}
           canManage
+          viewerRole={user.role}
           onClose={() => setDetail(null)}
           onRefresh={() => openDetail(detail.id)}
         />
@@ -413,7 +477,7 @@ function MemberForm({
       <div className="admin-heading">
         <div>
           <p className="eyebrow">{member ? "Edit member" : "Add member"}</p>
-          <h3>{member ? member.displayName : "New Student Member"}</h3>
+          <h3>{member ? member.displayName : "New Member"}</h3>
         </div>
       </div>
       <div className="form-two-column">
@@ -429,7 +493,7 @@ function MemberForm({
           <label>
             Role
             <select name="role" value={selectedRole} onChange={(event) => setSelectedRole(event.currentTarget.value as Role)} required>
-              <option value="STUDENT">Student</option>
+              <option value="STUDENT">Member</option>
               <option value="FACILITATOR">Facilitator</option>
               <option value="ADMIN">Admin</option>
             </select>
@@ -488,20 +552,24 @@ function MemberForm({
 function MemberDetailPanel({
   member,
   canManage,
+  viewerRole,
   onClose,
   onRefresh
 }: {
   member: MemberDetail;
   canManage: boolean;
+  viewerRole: Role;
   onClose: () => void;
   onRefresh: () => void;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
+  const [editingFeedbackText, setEditingFeedbackText] = useState("");
 
   async function backfillBands() {
-    if (!window.confirm("This will mark all requirements before the student's current band as completed. Continue?")) {
+    if (!window.confirm("This will mark all requirements before the member's current band as completed. Continue?")) {
       return;
     }
 
@@ -515,6 +583,44 @@ function MemberDetailPanel({
       setStatus(`Backfilled ${result.updatedCount} requirements.`);
     } catch (backfillError) {
       setError(backfillError instanceof Error ? backfillError.message : "Unable to backfill requirements.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function saveFeedbackEdit(feedbackId: string) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await updateMemberFeedback(member.id, feedbackId, { feedback: editingFeedbackText.trim() });
+      setEditingFeedbackId(null);
+      setEditingFeedbackText("");
+      await onRefresh();
+      setStatus("Member feedback updated.");
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update member feedback.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function removeFeedback(feedbackId: string) {
+    if (!window.confirm("Delete this member feedback? This action cannot be undone.")) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await deleteMemberFeedback(member.id, feedbackId);
+      await onRefresh();
+      setStatus("Member feedback deleted.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete member feedback.");
     } finally {
       setIsSubmitting(false);
     }
@@ -590,7 +696,38 @@ function MemberDetailPanel({
         </div>
 
         <div className="member-detail-anchor" id="member-feedback">
-          <DataPanel title="Scores & Feedback">
+          <DataPanel title="Member Feedback">
+            {member.memberFeedback?.length ? (
+              <ul className="record-list member-feedback-list">
+                {member.memberFeedback.map((entry) => (
+                  <li key={entry.id}>
+                    <strong>{formatDate(entry.createdAt)} - {entry.facilitatorName}</strong>
+                    {editingFeedbackId === entry.id ? (
+                      <>
+                        <textarea rows={5} maxLength={5000} value={editingFeedbackText} onChange={(event) => setEditingFeedbackText(event.currentTarget.value)} />
+                        <div className="member-row-actions">
+                          <button type="button" onClick={() => saveFeedbackEdit(entry.id)} disabled={isSubmitting || !editingFeedbackText.trim()}>Save</button>
+                          <button type="button" className="text-action" onClick={() => setEditingFeedbackId(null)} disabled={isSubmitting}>Cancel</button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span>{entry.feedback}</span>
+                        <small>{entry.clubName}{entry.updatedAt !== entry.createdAt ? ` - updated ${formatDate(entry.updatedAt)}` : ""}</small>
+                        {entry.canEdit && (viewerRole === "ADMIN" || viewerRole === "FACILITATOR") ? (
+                          <div className="member-row-actions">
+                            <button type="button" className="text-action" onClick={() => { setEditingFeedbackId(entry.id); setEditingFeedbackText(entry.feedback); }} disabled={isSubmitting}>Edit</button>
+                            <button type="button" className="danger-action" onClick={() => removeFeedback(entry.id)} disabled={isSubmitting}>Delete</button>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : <p>No member feedback yet.</p>}
+          </DataPanel>
+          <DataPanel title="Meeting Scores & Feedback">
             {member.feedback?.length ? (
               <ul className="record-list">
                 {member.feedback.slice(0, 8).map((entry) => (
@@ -600,7 +737,7 @@ function MemberDetailPanel({
                   </li>
                 ))}
               </ul>
-            ) : <p>No facilitator feedback yet.</p>}
+            ) : <p>No meeting feedback yet.</p>}
           </DataPanel>
         </div>
       </div>
@@ -659,4 +796,3 @@ function MemberDetailPanel({
     </section>
   );
 }
-

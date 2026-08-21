@@ -121,6 +121,15 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
           }
         }
       },
+      memberFeedback: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          club: true,
+          createdBy: {
+            select: { firstName: true, lastName: true }
+          }
+        }
+      },
       requirementProgress: {
         include: {
           requirement: true
@@ -130,7 +139,7 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
   });
 
   if (!student) {
-    response.status(404).json({ message: "Student profile not found." });
+    response.status(404).json({ message: "Member profile not found." });
     return;
   }
 
@@ -152,6 +161,14 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
 
   response.json({
     student,
+    memberFeedback: student.memberFeedback.map((entry) => ({
+      id: entry.id,
+      clubName: entry.club.name,
+      feedback: entry.feedback,
+      facilitatorName: entry.createdBy ? `${entry.createdBy.firstName} ${entry.createdBy.lastName}` : "Former facilitator",
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt
+    })),
     feedback: student.meetingFeedbacks.map((score) => {
       const scorer = score.scoredByUserId ? scorerById.get(score.scoredByUserId) : null;
       const attendance = student.attendance.find((entry) => entry.meetingId === score.meetingId);
@@ -210,7 +227,7 @@ studentRouter.get("/me/club-members", requireRole([Role.STUDENT]), asyncRoute(as
   });
 
   if (!student) {
-    response.status(404).json({ message: "Student profile not found." });
+    response.status(404).json({ message: "Member profile not found." });
     return;
   }
 
@@ -420,19 +437,19 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
   ]);
 
   if (!student || !requirement) {
-    response.status(404).json({ message: "Student or requirement not found." });
+    response.status(404).json({ message: "Member or requirement not found." });
     return;
   }
 
   if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
-    response.status(403).json({ message: "You cannot update this student's requirements." });
+    response.status(403).json({ message: "You cannot update this member's requirements." });
     return;
   }
 
   const selectedProgramLevel = getStudentProgramLevel(student);
 
   if (!selectedProgramLevel || requirement.programLevel !== selectedProgramLevel) {
-    response.status(400).json({ message: "Choose a requirement from this student's program ladder." });
+    response.status(400).json({ message: "Choose a requirement from this member's program ladder." });
     return;
   }
 
@@ -518,12 +535,12 @@ studentRouter.post("/:studentId/requirements/backfill", asyncRoute(async (reques
   });
 
   if (!student) {
-    response.status(404).json({ message: "Student not found." });
+    response.status(404).json({ message: "Member not found." });
     return;
   }
 
   if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
-    response.status(403).json({ message: "You cannot backfill this student's requirements." });
+    response.status(403).json({ message: "You cannot backfill this member's requirements." });
     return;
   }
 
@@ -594,7 +611,7 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
   const user = request.user!;
 
   if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can update student band placement." });
+    response.status(403).json({ message: "Only admins and facilitators can update member band placement." });
     return;
   }
 
@@ -621,12 +638,12 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
   });
 
   if (!student) {
-    response.status(404).json({ message: "Student not found." });
+    response.status(404).json({ message: "Member not found." });
     return;
   }
 
   if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
-    response.status(403).json({ message: "You cannot update this student's band placement." });
+    response.status(403).json({ message: "You cannot update this member's band placement." });
     return;
   }
 
@@ -652,6 +669,7 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
   response.json({
     student: updatedStudent,
     feedback: [],
+    memberFeedback: [],
     requirements: await buildRequirementProgress(updatedStudent.id, selectedProgramLevel),
     summary: {
       bandLevel: updatedStudent.bandLevel,
@@ -672,7 +690,7 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   const user = request.user!;
 
   if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can view managed student progress." });
+    response.status(403).json({ message: "Only admins and facilitators can view managed member progress." });
     return;
   }
 
@@ -692,12 +710,12 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   });
 
   if (!student) {
-    response.status(404).json({ message: "Student not found." });
+    response.status(404).json({ message: "Member not found." });
     return;
   }
 
   if (user.role === Role.FACILITATOR && !(await canFacilitatorAccessStudent(user.id, student.id))) {
-    response.status(403).json({ message: "You cannot view this student's requirements." });
+    response.status(403).json({ message: "You cannot view this member's requirements." });
     return;
   }
 
@@ -706,6 +724,7 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   response.json({
     student,
     feedback: [],
+    memberFeedback: [],
     requirements: await buildRequirementProgress(student.id, selectedProgramLevel),
     summary: {
       bandLevel: student.bandLevel,
