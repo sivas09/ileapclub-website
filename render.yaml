@@ -6,7 +6,9 @@ services:
     # an existing service retains its current type and a new service defaults to Starter.
     # Production must not use a Free instance; verify the current plan in the dashboard.
     rootDir: member-portal
-    buildCommand: npm install && npm run build && npm run prisma:migrate:deploy
+    # NODE_ENV is production during the build, so explicitly include the
+    # TypeScript/Vite/React type packages required to compile the application.
+    buildCommand: npm ci --include=dev && npm run build && npm run prisma:migrate:deploy
     startCommand: npm run start
     envVars:
       - key: DATABASE_URL

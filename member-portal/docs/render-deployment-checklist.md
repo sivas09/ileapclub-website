@@ -26,7 +26,7 @@ Create from the repository-root `render.yaml` or configure manually:
 - Build command:
 
   ```bash
-  npm install && npm run build && npm run prisma:migrate:deploy
+  npm ci --include=dev && npm run build && npm run prisma:migrate:deploy
   ```
 
 - Start command:
@@ -34,6 +34,8 @@ Create from the repository-root `render.yaml` or configure manually:
   ```bash
   npm run start
   ```
+
+The explicit `--include=dev` is required while `NODE_ENV=production`: TypeScript, Vite, Prisma CLI, `@types/react`, and `@types/react-dom` are needed to compile but are intentionally declared as devDependencies. Do not set `NPM_CONFIG_OMIT=dev` or run an omit-dev install before this build. Runtime behavior remains production mode through `NODE_ENV=production`.
 
 ## 3. Environment Variables
 

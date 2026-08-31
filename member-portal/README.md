@@ -101,8 +101,10 @@ Configure:
 The Render build command runs production migrations:
 
 ```bash
-npm install && npm run build && npm run prisma:migrate:deploy
+npm ci --include=dev && npm run build && npm run prisma:migrate:deploy
 ```
+
+The Render build explicitly includes devDependencies because TypeScript, Vite, Prisma CLI, and the React type declarations are required at compile time even though `NODE_ENV=production`. Do not omit devDependencies until after the build and migration step; the compiled server still runs with production runtime behavior.
 
 Seed demo data only for a private test environment. Do not seed demo users into a production portal that families can access.
 Demo cleanup endpoints are blocked when `NODE_ENV=production` unless `ENABLE_DEMO_CLEANUP=true`. They remain admin-only when enabled, and the admin UI shows a dry-run candidate count before bulk cleanup.
