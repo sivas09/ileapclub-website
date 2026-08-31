@@ -44,6 +44,8 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [editingUserRole, setEditingUserRole] = useState<Role>("STUDENT");
   const [passwordResetUser, setPasswordResetUser] = useState<AdminUser | null>(null);
+  const [reactivatingUser, setReactivatingUser] = useState<AdminUser | null>(null);
+  const [reactivationClubIds, setReactivationClubIds] = useState<string[]>([]);
 
   async function refreshOverview() {
     const data = await getAdminOverview();
@@ -103,6 +105,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     setError("");
     setStatus("");
     setPasswordResetUser(null);
+    setReactivatingUser(null);
     setEditingUser(portalUser);
     setEditingUserRole(portalUser.role);
     window.setTimeout(() => {
@@ -114,6 +117,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     setError("");
     setStatus("");
     setEditingUser(null);
+    setReactivatingUser(null);
     setPasswordResetUser(portalUser);
     window.setTimeout(() => {
       document.getElementById(`reset-password-${portalUser.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -163,6 +167,44 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
       setStatus(isActive ? "User reactivated." : "User deactivated.");
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update user.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function startReactivatingUser(portalUser: AdminUser) {
+    setError("");
+    setStatus("");
+    setEditingUser(null);
+    setPasswordResetUser(null);
+    setReactivatingUser(portalUser);
+    setReactivationClubIds([]);
+    window.setTimeout(() => {
+      document.getElementById(`reactivate-user-${portalUser.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 0);
+  }
+
+  async function handleReactivationSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!reactivatingUser) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await setUserActive(reactivatingUser.id, true, reactivationClubIds);
+      await refreshOverview();
+      setStatus(reactivationClubIds.length
+        ? "User reactivated with selected club access."
+        : "User reactivated without active club access.");
+      setReactivatingUser(null);
+      setReactivationClubIds([]);
+    } catch (reactivationError) {
+      setError(reactivationError instanceof Error ? reactivationError.message : "Unable to reactivate user.");
     } finally {
       setIsSubmitting(false);
     }
@@ -428,6 +470,52 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         <div className="edit-user-actions">
           <button type="submit" disabled={isSubmitting}>Reset Password</button>
           <button type="button" className="text-action" onClick={() => setPasswordResetUser(null)} disabled={isSubmitting}>Cancel</button>
+        </div>
+      </form>
+    );
+  }
+
+  function renderReactivationForm(portalUser: AdminUser) {
+    const assignmentLabel = portalUser.role === "FACILITATOR" ? "Assigned Clubs" : "Member Clubs";
+
+    return (
+      <form id={`reactivate-user-${portalUser.id}`} className="edit-user-panel" onSubmit={handleReactivationSubmit}>
+        <div className="admin-heading">
+          <div>
+            <p className="eyebrow">Reactivate user</p>
+            <h3>{portalUser.firstName} {portalUser.lastName}</h3>
+          </div>
+        </div>
+        <label>
+          {assignmentLabel}
+          <select
+            multiple
+            value={reactivationClubIds}
+            onChange={(event) => setReactivationClubIds(
+              Array.from(event.currentTarget.selectedOptions).map((option) => option.value)
+            )}
+          >
+            {activeClubs.map((club) => (
+              <option key={club.id} value={club.id}>{club.name}</option>
+            ))}
+          </select>
+        </label>
+        {!reactivationClubIds.length ? (
+          <p className="field-note warning-text">This account will reactivate, but the member/facilitator will not have active club access.</p>
+        ) : null}
+        <div className="edit-user-actions">
+          <button type="submit" disabled={isSubmitting}>Reactivate User</button>
+          <button
+            type="button"
+            className="text-action"
+            onClick={() => {
+              setReactivatingUser(null);
+              setReactivationClubIds([]);
+            }}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
         </div>
       </form>
     );
@@ -747,7 +835,9 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                       <button
                         type="button"
                         className="text-action"
-                        onClick={() => updateUserStatus(portalUser.id, !portalUser.isActive)}
+                        onClick={() => portalUser.isActive
+                          ? updateUserStatus(portalUser.id, false)
+                          : startReactivatingUser(portalUser)}
                         disabled={isSubmitting || portalUser.id === currentUser.id}
                       >
                         {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
@@ -773,6 +863,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                     </div>
                     {editingUser?.id === portalUser.id ? renderEditUserForm(portalUser) : null}
                     {passwordResetUser?.id === portalUser.id ? renderResetPasswordForm(portalUser) : null}
+                    {reactivatingUser?.id === portalUser.id ? renderReactivationForm(portalUser) : null}
                   </li>
                 ))}
               </ul>

@@ -33,6 +33,8 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
   const [detail, setDetail] = useState<MemberDetail | null>(null);
   const [editingMember, setEditingMember] = useState<MemberDetail | null>(null);
   const [feedbackTarget, setFeedbackTarget] = useState<MemberListEntry | null>(null);
+  const [reactivationTarget, setReactivationTarget] = useState<MemberListEntry | null>(null);
+  const [reactivationClubIds, setReactivationClubIds] = useState<string[]>([]);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const [filters, setFilters] = useState({
     centreId: "",
@@ -117,6 +119,44 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       setStatus(isActive ? "Member reactivated." : "Member deactivated.");
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update member status.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function startMemberReactivation(member: MemberListEntry) {
+    setError("");
+    setStatus("");
+    setReactivationTarget(member);
+    setReactivationClubIds([]);
+    window.setTimeout(() => {
+      document.getElementById("member-reactivation-form")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 0);
+  }
+
+  async function handleMemberReactivation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!reactivationTarget?.userId) {
+      setError("This member account cannot be reactivated from the Members page.");
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await setUserActive(reactivationTarget.userId, true, reactivationClubIds);
+      await loadMembers();
+      setDetail(null);
+      setStatus(reactivationClubIds.length
+        ? "Member reactivated with selected club access."
+        : "Member reactivated without active club access.");
+      setReactivationTarget(null);
+      setReactivationClubIds([]);
+    } catch (reactivationError) {
+      setError(reactivationError instanceof Error ? reactivationError.message : "Unable to reactivate member.");
     } finally {
       setIsSubmitting(false);
     }
@@ -409,7 +449,14 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                           Write Feedback
                         </button>
                         {user.role === "ADMIN" ? (
-                          <button type="button" className="danger-action" onClick={() => updateMemberStatus(member, member.isActive === false)} disabled={isSubmitting}>
+                          <button
+                            type="button"
+                            className="danger-action"
+                            onClick={() => member.isActive === false
+                              ? startMemberReactivation(member)
+                              : updateMemberStatus(member, false)}
+                            disabled={isSubmitting}
+                          >
                             {member.isActive === false ? "Reactivate" : "Deactivate"}
                           </button>
                         ) : null}
@@ -425,6 +472,49 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
               </tbody>
             </table>
           </div>
+          {reactivationTarget ? (
+            <form id="member-reactivation-form" className="edit-user-panel" onSubmit={handleMemberReactivation}>
+              <div className="admin-heading">
+                <div>
+                  <p className="eyebrow">Reactivate member</p>
+                  <h3>{reactivationTarget.displayName}</h3>
+                </div>
+              </div>
+              <label>
+                Member Clubs
+                <select
+                  multiple
+                  value={reactivationClubIds}
+                  onChange={(event) => setReactivationClubIds(
+                    Array.from(event.currentTarget.selectedOptions).map((option) => option.value)
+                  )}
+                >
+                  {(data.clubs ?? [])
+                    .filter((club) => club.isActive && club.centre?.isActive !== false)
+                    .map((club) => (
+                      <option key={club.id} value={club.id}>{club.name}</option>
+                    ))}
+                </select>
+              </label>
+              {!reactivationClubIds.length ? (
+                <p className="field-note warning-text">This account will reactivate, but the member/facilitator will not have active club access.</p>
+              ) : null}
+              <div className="edit-user-actions">
+                <button type="submit" disabled={isSubmitting}>Reactivate Member</button>
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => {
+                    setReactivationTarget(null);
+                    setReactivationClubIds([]);
+                  }}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : null}
           <div className="pagination-row">
             <span>Page {filters.page} of {pageCount} - {data.total} members</span>
             <div>

@@ -631,14 +631,14 @@ export async function updateUser(userId: string, payload: {
   });
 }
 
-export async function setUserActive(userId: string, isActive: boolean) {
+export async function setUserActive(userId: string, isActive: boolean, clubIds: string[] = []) {
   const path = isActive
     ? `/api/admin/users/${userId}/active`
     : `/api/admin/users/${userId}/deactivate`;
 
   return request<{ user: PortalUser & { isActive: boolean } }>(path, {
     method: "PATCH",
-    ...(isActive ? { body: JSON.stringify({ isActive: true }) } : {})
+    ...(isActive ? { body: JSON.stringify({ isActive: true, clubIds }) } : {})
   });
 }
 

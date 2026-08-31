@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { isDemoCleanupEnabled } from "../config.js";
@@ -48,6 +48,11 @@ const facilitatorAssignmentSchema = z.object({
 
 const passwordResetSchema = z.object({
   newPassword: z.string().min(8)
+});
+
+const reactivateUserSchema = z.object({
+  isActive: z.literal(true),
+  clubIds: z.array(z.string().min(1)).default([])
 });
 
 const validBandLevels = new Set([
@@ -497,21 +502,7 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
             }
           });
 
-        await tx.studentClubMembership.deleteMany({
-          where: data.clubIds.length
-            ? { studentId: student.id, clubId: { notIn: data.clubIds } }
-            : { studentId: student.id }
-        });
-
-        if (data.clubIds.length > 0) {
-          await tx.studentClubMembership.createMany({
-            data: data.clubIds.map((clubId) => ({
-              clubId,
-              studentId: student.id
-            })),
-            skipDuplicates: true
-          });
-        }
+        await syncStudentClubAccess(tx, student.id, data.clubIds);
 
         await tx.clubFacilitator.deleteMany({ where: { facilitatorId: userId } });
       } else {
@@ -558,22 +549,63 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
 
 adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) => {
   const userId = String(request.params.userId);
+  const parsed = reactivateUserSchema.safeParse(request.body);
 
-  if (request.body?.isActive !== true) {
-    response.status(400).json({ message: "Use the dedicated deactivate action to deactivate an account." });
+  if (!parsed.success) {
+    response.status(400).json({ message: "Select any clubs to restore and confirm account reactivation." });
     return;
   }
 
-  const user = await prisma.user.update({
-    where: {
-      id: userId,
-      role: { in: [Role.ADMIN, Role.FACILITATOR, Role.STUDENT] }
-    },
-    data: { isActive: true },
-    select: memberUserSelect
+  const clubIds = [...new Set(parsed.data.clubIds)];
+  const result = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: {
+        ...memberUserSelect,
+        studentProfile: { select: { id: true } }
+      }
+    });
+
+    if (!user) {
+      throw new AdminActionError(404, "User not found.");
+    }
+
+    if (user.role !== Role.STUDENT && user.role !== Role.FACILITATOR) {
+      throw new AdminActionError(400, "Only member and facilitator accounts can be reactivated with club access.");
+    }
+
+    if (user.isActive) {
+      throw new AdminActionError(400, "This account is already active.");
+    }
+
+    await requireActiveClubIds(tx, clubIds);
+
+    if (user.role === Role.STUDENT) {
+      if (!user.studentProfile) {
+        throw new AdminActionError(409, "This member account has no student profile to reactivate.");
+      }
+
+      await syncStudentClubAccess(tx, user.studentProfile.id, clubIds);
+    } else {
+      await syncFacilitatorClubAccess(tx, user.id, clubIds);
+    }
+
+    const updatedUser = await tx.user.update({
+      where: { id: user.id },
+      data: { isActive: true },
+      select: memberUserSelect
+    });
+
+    return {
+      user: safeUserDto(updatedUser),
+      activeClubIds: clubIds,
+      warning: clubIds.length
+        ? null
+        : "This account will reactivate, but the member/facilitator will not have active club access."
+    };
   });
 
-  response.json({ user: safeUserDto(user) });
+  response.json(result);
 }));
 
 adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response) => {
@@ -953,6 +985,67 @@ async function getDemoMeetingIds(sampleStudentIds?: string[]) {
   });
 
   return demoMeetings.map((meeting) => meeting.id);
+}
+
+async function requireActiveClubIds(tx: Prisma.TransactionClient, clubIds: string[]) {
+  if (!clubIds.length) {
+    return;
+  }
+
+  const activeClubCount = await tx.club.count({
+    where: {
+      id: { in: clubIds },
+      isActive: true,
+      centre: { isActive: true }
+    }
+  });
+
+  if (activeClubCount !== clubIds.length) {
+    throw new AdminActionError(400, "Restore access only to active clubs in active centres.");
+  }
+}
+
+async function syncStudentClubAccess(tx: Prisma.TransactionClient, studentId: string, clubIds: string[]) {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  await tx.studentClubMembership.updateMany({
+    where: clubIds.length
+      ? { studentId, status: "ACTIVE", clubId: { notIn: clubIds } }
+      : { studentId, status: "ACTIVE" },
+    data: { status: "INACTIVE", endDate: today }
+  });
+
+  await Promise.all(clubIds.map((clubId) => tx.studentClubMembership.upsert({
+    where: {
+      studentId_clubId: { studentId, clubId }
+    },
+    update: {
+      status: "ACTIVE",
+      endDate: null
+    },
+    create: {
+      studentId,
+      clubId,
+      status: "ACTIVE"
+    }
+  })));
+}
+
+async function syncFacilitatorClubAccess(tx: Prisma.TransactionClient, facilitatorId: string, clubIds: string[]) {
+  await tx.clubFacilitator.deleteMany({
+    where: clubIds.length
+      ? { facilitatorId, clubId: { notIn: clubIds } }
+      : { facilitatorId }
+  });
+  await tx.centreFacilitator.deleteMany({ where: { facilitatorId } });
+
+  if (clubIds.length) {
+    await tx.clubFacilitator.createMany({
+      data: clubIds.map((clubId) => ({ clubId, facilitatorId })),
+      skipDuplicates: true
+    });
+  }
 }
 
 function sampleUserWhere() {

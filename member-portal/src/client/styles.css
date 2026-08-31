@@ -906,6 +906,14 @@ button {
   line-height: 1.45;
 }
 
+.field-note.warning-text {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #f0c36d;
+  border-radius: 0.65rem;
+  color: #7a4b00;
+  background: #fffaf0;
+}
+
 .meeting-form input:focus,
 .meeting-form select:focus,
 .role-slot select:focus,
