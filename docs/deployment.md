@@ -48,7 +48,8 @@ The repository-root `render.yaml` defines the Express API deployment.
 - Render root directory: `member-portal`
 - Build command: `npm ci --include=dev && npm run build && npm run prisma:migrate:deploy`
 - Start command: `npm run start`
-- Health check: `/api/health`
+- Liveness endpoint: `/api/health` (process status only; does not query PostgreSQL)
+- Readiness/Render health check: `/api/ready` (bounded PostgreSQL `SELECT 1`; returns HTTP 503 when unavailable)
 - Database: Render PostgreSQL through `DATABASE_URL`
 - Production requirement: use a paid API instance; do not run the production API on Render Free
 
@@ -59,6 +60,8 @@ Confirm in Render's **Blueprints** page whether the production service is connec
 Required API variables include `DATABASE_URL`, `JWT_SECRET`, `CLIENT_ORIGIN`, and `CLIENT_ORIGINS`. Production migrations run only through the documented Render deployment command; do not run destructive database commands from a local machine.
 
 Render sets `NODE_ENV=production` for both build and runtime. The build command must retain `--include=dev` because TypeScript, Vite, Prisma CLI, and the React declaration packages are build-time devDependencies. Do not configure `NPM_CONFIG_OMIT=dev` or use `npm install --omit=dev` before the build. `NODE_ENV=production` remains in effect when the compiled server starts.
+
+Render supports one HTTP health-check path for this service. Use `/api/ready`, as declared by `healthCheckPath` in `render.yaml`, so new instances receive traffic only after PostgreSQL is reachable and running instances are removed from traffic during a database outage. Keep `/api/health` for liveness diagnostics that need to distinguish a running process from a failed dependency. The readiness probe is bounded by `READINESS_TIMEOUT_MS` (2 seconds by default), below Render's five-second HTTP health-check limit. Render sends `SIGTERM` during shutdown; the API stops accepting requests, drains the HTTP server, disconnects Prisma, and has 15 seconds before Render can force termination.
 
 ## Security Headers
 

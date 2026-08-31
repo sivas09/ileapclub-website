@@ -51,7 +51,9 @@ Phase 2 foundation for `member.ileapclub.com`.
 
 Frontend: `http://localhost:5173`
 
-API: `http://localhost:4000/api/health`
+API liveness: `http://localhost:4000/api/health`
+
+API readiness, including a bounded PostgreSQL check: `http://localhost:4000/api/ready`
 
 API smoke check, with the server running:
 

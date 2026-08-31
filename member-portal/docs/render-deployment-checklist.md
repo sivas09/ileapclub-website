@@ -46,6 +46,7 @@ Required:
 - `CLIENT_ORIGIN`: `https://member.ileapclub.com`
 - `CLIENT_ORIGINS`: `https://member.ileapclub.com,https://members.ileapclub.com`
 - `PORT`: Render usually provides this automatically
+- `READINESS_TIMEOUT_MS`: optional readiness database timeout; defaults to `2000`
 
 Optional for private test seeding only:
 
@@ -83,7 +84,9 @@ This creates demo users and sample data. Do not run this on a production databas
 
 After deployment:
 
-- Open `/api/health`
+- Open `/api/health` and confirm liveness returns `ok: true` with a timestamp.
+- Open `/api/ready` and confirm readiness returns `ok: true` with `checks.database: "reachable"`.
+- Confirm the Render service health-check path is `/api/ready`. Render supports one HTTP health path, and readiness is required so traffic is not routed while PostgreSQL is unavailable.
 - Run an API smoke check:
 
   ```bash

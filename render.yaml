@@ -10,6 +10,10 @@ services:
     # TypeScript/Vite/React type packages required to compile the application.
     buildCommand: npm ci --include=dev && npm run build && npm run prisma:migrate:deploy
     startCommand: npm run start
+    # Render supports one HTTP health path. Readiness is the correct choice
+    # because it prevents routing traffic when PostgreSQL is unavailable.
+    healthCheckPath: /api/ready
+    maxShutdownDelaySeconds: 15
     envVars:
       - key: DATABASE_URL
         sync: false

@@ -1,95 +1,67 @@
-import express from "express";
-import type { NextFunction, Request, Response } from "express";
-import cors from "cors";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import type { Server } from "node:http";
+import { createApp } from "./app.js";
 import { config } from "./config.js";
-import { adminRouter } from "./routes/admin.js";
-import { authRouter } from "./routes/auth.js";
-import { documentsRouter } from "./routes/documents.js";
-import { meetingsRouter } from "./routes/meetings.js";
-import { membersRouter } from "./routes/members.js";
-import { noticesRouter } from "./routes/notices.js";
-import { reportsRouter } from "./routes/reports.js";
-import { resourcesRouter } from "./routes/resources.js";
-import { studentRouter } from "./routes/student.js";
+import { prisma } from "./db.js";
 
-const app = express();
-app.set("trust proxy", 1);
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDistPath = path.resolve(__dirname, "../client");
-const allowedOrigins = new Set(config.CLIENT_ORIGINS);
+const forceShutdownAfterMs = 10_000;
+const app = createApp();
+const server = app.listen(config.PORT, () => {
+  console.log(`iLEAP Member Portal API listening on port ${config.PORT}`);
+});
+let isShuttingDown = false;
 
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.has(origin)) {
-        callback(null, true);
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    void shutdown(signal);
+  });
+}
+
+async function shutdown(signal: "SIGTERM" | "SIGINT") {
+  if (isShuttingDown) {
+    return;
+  }
+
+  isShuttingDown = true;
+  console.log(`${signal} received; closing the API server.`);
+
+  const forceShutdownTimer = setTimeout(() => {
+    console.error(`Graceful shutdown exceeded ${forceShutdownAfterMs}ms; forcing process exit.`);
+    process.exit(1);
+  }, forceShutdownAfterMs);
+  forceShutdownTimer.unref();
+
+  let exitCode = 0;
+
+  try {
+    await closeServer(server);
+  } catch (error) {
+    exitCode = 1;
+    console.error("Failed to close the API server cleanly.", error);
+  }
+
+  try {
+    await prisma.$disconnect();
+  } catch (error) {
+    exitCode = 1;
+    console.error("Failed to disconnect Prisma cleanly.", error);
+  }
+
+  clearTimeout(forceShutdownTimer);
+  process.exitCode = exitCode;
+  console.log("API shutdown complete.");
+}
+
+function closeServer(httpServer: Server) {
+  return new Promise<void>((resolve, reject) => {
+    httpServer.close((error) => {
+      if (error) {
+        reject(error);
         return;
       }
 
-      callback(null, false);
-    },
-    credentials: true
-  })
-);
-app.use(express.json());
-
-app.get("/api/health", (_request, response) => {
-  response.json({
-    ok: true,
-    service: "ileap-member-portal-api"
-  });
-});
-
-app.use("/api/auth", authRouter);
-app.use("/api/admin", adminRouter);
-app.use("/api/documents", documentsRouter);
-app.use("/api/meetings", meetingsRouter);
-app.use("/api/members", membersRouter);
-app.use("/api/notices", noticesRouter);
-app.use("/api/reports", reportsRouter);
-app.use("/api/resources", resourcesRouter);
-app.use("/api/student", studentRouter);
-
-app.use(express.static(clientDistPath));
-
-app.get("*", (request, response) => {
-  if (request.path.startsWith("/api/")) {
-    response.status(404).json({ message: "API route not found." });
-    return;
-  }
-
-  response.sendFile(path.join(clientDistPath, "index.html"));
-});
-
-app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
-  console.error(error);
-
-  if (isRequestBodyError(error)) {
-    response.status(error.status).json({
-      message: error.status === 413 ? "Request body is too large." : "Request body must contain valid JSON."
+      resolve();
     });
-    return;
-  }
 
-  response.status(500).json({ message: "Unexpected server error." });
-});
-
-app.use((_request, response) => {
-  response.status(404).json({ message: "API route not found." });
-});
-
-app.listen(config.PORT, () => {
-  console.log(`iLEAP Member Portal API listening on port ${config.PORT}`);
-});
-
-function isRequestBodyError(error: unknown): error is { status: 400 | 413 } {
-  if (!error || typeof error !== "object" || !("status" in error)) {
-    return false;
-  }
-
-  const status = (error as { status?: unknown }).status;
-
-  return status === 400 || status === 413;
+    httpServer.closeIdleConnections();
+  });
 }

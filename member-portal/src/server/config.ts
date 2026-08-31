@@ -8,6 +8,7 @@ const envSchema = z.object({
   CLIENT_ORIGINS: z.string().optional(),
   NODE_ENV: z.string().default("development"),
   ENABLE_DEMO_CLEANUP: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  READINESS_TIMEOUT_MS: z.coerce.number().int().min(100).max(4000).default(2000),
   PORT: z.coerce.number().int().positive().default(4000)
 }).transform((env) => ({
   ...env,
