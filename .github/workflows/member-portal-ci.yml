@@ -12,6 +12,14 @@ permissions:
 jobs:
   verify-member-portal:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ileap_ci?schema=public
+      JWT_SECRET: ci-only-jwt-secret-at-least-32-characters
+      CLIENT_ORIGIN: http://localhost:5173
+      CLIENT_ORIGINS: http://localhost:5173
+      NODE_ENV: test
+      ENABLE_DEMO_CLEANUP: "false"
     defaults:
       run:
         working-directory: member-portal
@@ -23,15 +31,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: member-portal/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run checks
+      - name: Build and type-check
         run: npm run check
 
-      - name: Build production application
-        run: npm run build
+      - name: Run full test suite
+        run: npm test
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
