@@ -425,6 +425,12 @@ export type DemoCleanupSummary = {
   demoMeetings?: number;
 };
 
+export type DemoCleanupPreview = {
+  sampleUsers: number;
+  sampleStudents: number;
+  demoMeetings: number;
+};
+
 const tokenKey = "ileap_member_portal_token";
 const authenticationExpiredEvent = "ileap:authentication-expired";
 const viteEnvironment = import.meta.env;
@@ -647,6 +653,10 @@ export async function deleteDemoUser(userId: string) {
   return request<DemoCleanupSummary>(`/api/admin/users/${userId}/demo`, {
     method: "DELETE"
   });
+}
+
+export async function getDemoCleanupPreview() {
+  return request<{ preview: DemoCleanupPreview }>("/api/admin/demo/cleanup-preview");
 }
 
 export async function deleteSampleUsers() {

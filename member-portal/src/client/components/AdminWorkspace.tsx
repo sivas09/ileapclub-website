@@ -8,6 +8,7 @@ import {
   deleteDemoUser,
   deleteSampleFeedback,
   deleteSampleUsers,
+  getDemoCleanupPreview,
   getAdminOverview,
   PortalUser,
   removeClubFacilitator,
@@ -168,7 +169,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   }
 
   async function handleDeleteDemoUser(portalUser: AdminUser) {
-    if (!window.confirm("This permanently removes sample/test data only. Real member data will not be deleted. Continue?")) {
+    if (!window.confirm(`Permanently delete the selected demo candidate ${portalUser.firstName} ${portalUser.lastName} (${portalUser.email})?`)) {
       return;
     }
 
@@ -188,15 +189,20 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   }
 
   async function runDemoCleanup(action: () => Promise<unknown>, successMessage: string) {
-    if (!window.confirm("This permanently removes sample/test data only. Real member data will not be deleted. Continue?")) {
-      return;
-    }
-
     setError("");
     setStatus("");
     setIsSubmitting(true);
 
     try {
+      const { preview } = await getDemoCleanupPreview();
+      const confirmed = window.confirm(
+        `Dry-run preview: ${preview.sampleUsers} sample users, ${preview.sampleStudents} sample students, and ${preview.demoMeetings} demo-linked meetings match the cleanup rules. Related records may also be removed. Continue?`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
       const result = await action();
       await refreshOverview();
       setStatus(formatCleanupSummary(successMessage, result));
@@ -647,7 +653,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
             <h3>Remove Sample Data</h3>
           </div>
         </div>
-        <p className="field-note">These actions only target sample/test records such as users with example.com email addresses or Sample in the name. Use the Members page for permanent deletion of real member records.</p>
+        <p className="field-note">Production cleanup is disabled unless explicitly enabled by the server operator. A dry-run count is shown before bulk cleanup; candidate matching still uses seed markers and must be reviewed carefully.</p>
         <div className="record-actions">
           <button
             type="button"
@@ -790,4 +796,3 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     </section>
   );
 }
-

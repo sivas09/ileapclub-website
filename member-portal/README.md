@@ -28,6 +28,7 @@ Phase 2 foundation for `member.ileapclub.com`.
    - `CLIENT_ORIGIN`
    - `CLIENT_ORIGINS`
    - `VITE_API_BASE_URL`
+   - `ENABLE_DEMO_CLEANUP` (leave `false` unless demo cleanup is deliberately needed)
    - optional local seed values: `SEED_ADMIN_EMAIL`, `SEED_DEMO_PASSWORD`
 
 4. Create the database tables:
@@ -91,6 +92,8 @@ Configure:
 
 - `DATABASE_URL` from Render PostgreSQL
 - `JWT_SECRET` as a generated secret
+- `NODE_ENV` as `production`
+- `ENABLE_DEMO_CLEANUP` as `false`; only set it to `true` for a deliberate, time-bounded cleanup operation
 - `CLIENT_ORIGIN` as `https://member.ileapclub.com`
 - `CLIENT_ORIGINS` as `https://member.ileapclub.com,https://members.ileapclub.com`
 - `VITE_API_BASE_URL` as `https://ileap-member-portal-api.onrender.com` on Cloudflare Pages, then `https://api.member.ileapclub.com` after the API subdomain is ready
@@ -102,3 +105,4 @@ npm install && npm run build && npm run prisma:migrate:deploy
 ```
 
 Seed demo data only for a private test environment. Do not seed demo users into a production portal that families can access.
+Demo cleanup endpoints are blocked when `NODE_ENV=production` unless `ENABLE_DEMO_CLEANUP=true`. They remain admin-only when enabled, and the admin UI shows a dry-run candidate count before bulk cleanup.

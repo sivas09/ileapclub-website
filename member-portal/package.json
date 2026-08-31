@@ -19,7 +19,7 @@
     "smoke:api": "tsx scripts/smoke-api.ts",
     "test": "npm run test:client && npm run test:auth",
     "test:client": "tsx scripts/client-reliability.test.tsx",
-    "test:auth": "tsx scripts/facilitator-member-auth.test.ts && tsx scripts/login-rate-limit.test.ts && tsx scripts/admin-deactivation.test.ts && tsx scripts/endpoint-authorization.test.ts",
+    "test:auth": "tsx scripts/facilitator-member-auth.test.ts && tsx scripts/login-rate-limit.test.ts && tsx scripts/admin-deactivation.test.ts && tsx scripts/demo-cleanup-availability.test.ts && tsx scripts/endpoint-authorization.test.ts",
     "typecheck": "npm run typecheck:client && npm run typecheck:server",
     "typecheck:client": "tsc -p tsconfig.json --noEmit",
     "typecheck:server": "tsc -p tsconfig.server.json --noEmit",

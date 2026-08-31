@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
+import { isDemoCleanupEnabled } from "../config.js";
 import { prisma } from "../db.js";
 import {
   facilitatorUserSelect,
@@ -695,14 +696,36 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
   response.json(result);
 }));
 
-adminRouter.delete("/users/:userId/demo", asyncRoute(async (request, response) => {
+adminRouter.delete("/users/:userId/demo", requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
   const userId = String(request.params.userId);
   const result = await deleteSampleUser(userId, request.user!.id);
 
   response.json(result);
 }));
 
-adminRouter.post("/demo/delete-sample-users", asyncRoute(async (request, response) => {
+adminRouter.get("/demo/cleanup-preview", requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
+  const sampleStudentIds = await getSampleStudentIds();
+  const [sampleUsers, demoMeetingIds] = await Promise.all([
+    prisma.user.count({
+      where: {
+        id: { not: request.user!.id },
+        role: { in: [Role.STUDENT, Role.FACILITATOR] },
+        OR: sampleUserWhere()
+      }
+    }),
+    getDemoMeetingIds(sampleStudentIds)
+  ]);
+
+  response.json({
+    preview: {
+      sampleUsers,
+      sampleStudents: sampleStudentIds.length,
+      demoMeetings: demoMeetingIds.length
+    }
+  });
+}));
+
+adminRouter.post("/demo/delete-sample-users", requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
   const sampleUsers = await prisma.user.findMany({
     where: {
       id: { not: request.user!.id },
@@ -723,26 +746,15 @@ adminRouter.post("/demo/delete-sample-users", asyncRoute(async (request, respons
   });
 }));
 
-adminRouter.post("/demo/delete-sample-feedback", asyncRoute(async (_request, response) => {
+adminRouter.post("/demo/delete-sample-feedback", requireDemoCleanupEnabled, asyncRoute(async (_request, response) => {
   const summary = await deleteSampleFeedback();
 
   response.json(summary);
 }));
 
-adminRouter.post("/demo/reset-meeting-data", asyncRoute(async (_request, response) => {
+adminRouter.post("/demo/reset-meeting-data", requireDemoCleanupEnabled, asyncRoute(async (_request, response) => {
   const sampleStudentIds = await getSampleStudentIds();
-  const demoMeetings = await prisma.meeting.findMany({
-    where: {
-      OR: [
-        { id: { startsWith: "seed-" } },
-        { title: { contains: "Sample", mode: "insensitive" } },
-        { title: { contains: "Demo", mode: "insensitive" } },
-        { roleSlots: { some: { assignedStudentId: { in: sampleStudentIds } } } }
-      ]
-    },
-    select: { id: true }
-  });
-  const demoMeetingIds = demoMeetings.map((meeting) => meeting.id);
+  const demoMeetingIds = await getDemoMeetingIds(sampleStudentIds);
   const [roleScores, studentFeedback, attendance, roleSlots] = await prisma.$transaction([
     prisma.meetingRoleScore.deleteMany({
       where: {
@@ -779,6 +791,17 @@ adminRouter.post("/demo/reset-meeting-data", asyncRoute(async (_request, respons
     clearedRoleSlots: roleSlots.count
   });
 }));
+
+function requireDemoCleanupEnabled(_request: Request, response: Response, next: NextFunction) {
+  if (!isDemoCleanupEnabled()) {
+    response.status(403).json({
+      message: "Demo cleanup is disabled in production. Set ENABLE_DEMO_CLEANUP=true to enable it explicitly."
+    });
+    return;
+  }
+
+  next();
+}
 
 async function deleteSampleUser(userId: string, currentUserId: string) {
   if (userId === currentUserId) {
@@ -913,6 +936,23 @@ async function getSampleUserIds() {
   });
 
   return users.map((user) => user.id);
+}
+
+async function getDemoMeetingIds(sampleStudentIds?: string[]) {
+  const studentIds = sampleStudentIds ?? await getSampleStudentIds();
+  const demoMeetings = await prisma.meeting.findMany({
+    where: {
+      OR: [
+        { id: { startsWith: "seed-" } },
+        { title: { contains: "Sample", mode: "insensitive" } },
+        { title: { contains: "Demo", mode: "insensitive" } },
+        { roleSlots: { some: { assignedStudentId: { in: studentIds } } } }
+      ]
+    },
+    select: { id: true }
+  });
+
+  return demoMeetings.map((meeting) => meeting.id);
 }
 
 function sampleUserWhere() {

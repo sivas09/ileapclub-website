@@ -13,6 +13,10 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_DEMO_CLEANUP
+        value: "false"
       - key: CLIENT_ORIGIN
         value: https://member.ileapclub.com
       - key: CLIENT_ORIGINS
