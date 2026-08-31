@@ -1,20 +1,15 @@
 import type { Prisma } from "@prisma/client";
 import { mainRoleNameForReportRole } from "../../shared/portalConstants.js";
+import { publicUserSelect } from "./safeUser.js";
 
 type AgendaMeeting = Prisma.MeetingGetPayload<{
   include: {
-    club: {
-      include: {
-        centre: true;
-      };
-    };
+    club: { include: { centre: true } };
     roleSlots: {
       include: {
         roleDefinition: true;
         assignedStudent: {
-          include: {
-            user: true;
-          };
+          include: { user: { select: typeof publicUserSelect } };
         };
       };
     };

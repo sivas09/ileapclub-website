@@ -4,6 +4,7 @@ import { Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
+import { memberUserSelect, publicUserSelect } from "../services/safeUser.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
 export const studentRouter = Router();
@@ -57,7 +58,7 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
   const student = await prisma.student.findUnique({
     where: { userId: request.user!.id },
     include: {
-      user: true,
+      user: { select: publicUserSelect },
       clubMemberships: {
         include: {
           club: {
@@ -126,7 +127,7 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
         include: {
           club: true,
           createdBy: {
-            select: { firstName: true, lastName: true }
+            select: publicUserSelect
           }
         }
       },
@@ -153,7 +154,7 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
   const scorers = scorerIds.length
     ? await prisma.user.findMany({
       where: { id: { in: scorerIds } },
-      select: { id: true, firstName: true, lastName: true, role: true }
+      select: publicUserSelect
     })
     : [];
   const scorerById = new Map(scorers.map((scorer) => [scorer.id, scorer]));
@@ -626,7 +627,7 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: {
-      user: true,
+      user: { select: memberUserSelect },
       clubMemberships: {
         include: {
           club: {
@@ -654,7 +655,7 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
       bandLevel: parsed.data.bandLevel
     },
     include: {
-      user: true,
+      user: { select: memberUserSelect },
       clubMemberships: {
         include: {
           club: {
@@ -698,7 +699,7 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: {
-      user: true,
+      user: { select: memberUserSelect },
       clubMemberships: {
         include: {
           club: {

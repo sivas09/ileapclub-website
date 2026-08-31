@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
 import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
+import { memberUserSelect } from "../services/safeUser.js";
 import { standardIleapRoleNames } from "../services/standardRoles.js";
 import {
   isReportRoleName,
@@ -129,7 +130,7 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
       } : {},
       orderBy: [{ user: { lastName: "asc" } }, { user: { firstName: "asc" } }],
       include: {
-        user: true,
+        user: { select: memberUserSelect },
         clubMemberships: {
           include: {
             club: {
@@ -1223,7 +1224,7 @@ const meetingInclude = {
     include: {
       roleDefinition: true,
       assignedStudent: {
-        include: { user: true }
+        include: { user: { select: memberUserSelect } }
       },
       score: true
     }
@@ -1231,7 +1232,7 @@ const meetingInclude = {
   attendance: {
     include: {
       student: {
-        include: { user: true }
+        include: { user: { select: memberUserSelect } }
       }
     }
   },
@@ -1239,7 +1240,7 @@ const meetingInclude = {
   studentFeedbacks: {
     include: {
       student: {
-        include: { user: true }
+        include: { user: { select: memberUserSelect } }
       }
     }
   }

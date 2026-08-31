@@ -6,6 +6,7 @@ import { Role } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { requireAuth, signToken } from "../auth.js";
+import { memberUserSelect, safeUserDto } from "../services/safeUser.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -51,7 +52,11 @@ authRouter.post("/login", loginRateLimiter, asyncRoute(async (request, response)
   }
 
   const user = await prisma.user.findUnique({
-    where: { email: parsed.data.email.toLowerCase() }
+    where: { email: parsed.data.email.toLowerCase() },
+    select: {
+      ...memberUserSelect,
+      passwordHash: true
+    }
   });
 
   if (!user || !user.isActive) {
@@ -79,25 +84,14 @@ authRouter.post("/login", loginRateLimiter, asyncRoute(async (request, response)
 
   response.json({
     token: signToken(sessionUser),
-    user: {
-      ...sessionUser,
-      firstName: user.firstName,
-      lastName: user.lastName
-    }
+    user: safeUserDto(user)
   });
 }));
 
 authRouter.get("/me", requireAuth, asyncRoute(async (request, response) => {
   const user = await prisma.user.findUnique({
     where: { id: request.user?.id },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      isActive: true
-    }
+    select: memberUserSelect
   });
 
   if (!user || !user.isActive) {
@@ -110,7 +104,7 @@ authRouter.get("/me", requireAuth, asyncRoute(async (request, response) => {
     return;
   }
 
-  response.json({ user });
+  response.json({ user: safeUserDto(user) });
 }));
 
 authRouter.post("/change-password", requireAuth, asyncRoute(async (request, response) => {
@@ -152,7 +146,8 @@ authRouter.post("/change-password", requireAuth, asyncRoute(async (request, resp
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash }
+    data: { passwordHash },
+    select: { id: true }
   });
 
   response.json({ ok: true });

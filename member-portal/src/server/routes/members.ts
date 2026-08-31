@@ -5,6 +5,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { memberUserSelect, publicUserSelect, safeUserDto } from "../services/safeUser.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
 export const membersRouter = Router();
@@ -147,7 +148,7 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
         club: { include: { centre: true } },
         student: {
           include: {
-            user: true
+            user: { select: memberUserSelect }
           }
         }
       }
@@ -239,7 +240,8 @@ membersRouter.post("/", asyncRoute(async (request, response) => {
           firstName: data.firstName,
           lastName: data.lastName,
           role: Role.STUDENT
-        }
+        },
+        select: memberUserSelect
       });
 
       const student = await tx.student.create({
@@ -264,14 +266,7 @@ membersRouter.post("/", asyncRoute(async (request, response) => {
     });
 
     response.status(201).json({
-      user: {
-        id: createdUser.id,
-        email: createdUser.email,
-        firstName: createdUser.firstName,
-        lastName: createdUser.lastName,
-        role: createdUser.role,
-        isActive: createdUser.isActive
-      }
+      user: safeUserDto(createdUser)
     });
   } catch (error) {
     const prismaError = error as { code?: string };
@@ -291,7 +286,7 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: {
-      user: true,
+      user: { select: memberUserSelect },
       clubMemberships: {
         include: {
           club: {
@@ -326,7 +321,7 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
         include: {
           club: true,
           createdBy: {
-            select: { id: true, firstName: true, lastName: true, role: true }
+            select: publicUserSelect
           }
         }
       },
@@ -389,7 +384,7 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
   const scorers = scorerIds.length
     ? await prisma.user.findMany({
       where: { id: { in: scorerIds } },
-      select: { id: true, firstName: true, lastName: true, role: true }
+      select: publicUserSelect
     })
     : [];
   const scorerById = new Map(scorers.map((scorer) => [scorer.id, scorer]));
@@ -510,7 +505,7 @@ membersRouter.post("/:studentId/feedback", asyncRoute(async (request, response) 
     },
     include: {
       club: true,
-      createdBy: { select: { id: true, firstName: true, lastName: true, role: true } }
+      createdBy: { select: publicUserSelect }
     }
   });
 
@@ -551,7 +546,7 @@ membersRouter.patch("/:studentId/feedback/:feedbackId", asyncRoute(async (reques
     data: { feedback: parsed.data.feedback },
     include: {
       club: true,
-      createdBy: { select: { id: true, firstName: true, lastName: true, role: true } }
+      createdBy: { select: publicUserSelect }
     }
   });
 
@@ -603,7 +598,7 @@ membersRouter.patch("/:studentId", asyncRoute(async (request, response) => {
   const data = parsed.data;
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    include: { user: true }
+    include: { user: { select: memberUserSelect } }
   });
 
   if (!student || student.user.role !== Role.STUDENT) {
@@ -625,14 +620,7 @@ membersRouter.patch("/:studentId", asyncRoute(async (request, response) => {
   });
 
   response.json({
-    user: {
-      id: student.user.id,
-      email: student.user.email,
-      firstName: student.user.firstName,
-      lastName: student.user.lastName,
-      role: student.user.role,
-      isActive: student.user.isActive
-    }
+    user: safeUserDto(student.user)
   });
 }));
 
@@ -654,7 +642,7 @@ membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
   const studentId = String(request.params.studentId);
   const student = await prisma.student.findUnique({
     where: { id: studentId },
-    include: { user: true }
+    include: { user: { select: memberUserSelect } }
   });
 
   const targetDecision = permanentMemberDeleteDecision({
@@ -1014,7 +1002,7 @@ async function buildRequirementProgress(studentId: string, programLevel: Program
 function publicMemberRow(membership: Prisma.StudentClubMembershipGetPayload<{
   include: {
     club: { include: { centre: true } };
-    student: { include: { user: true } };
+    student: { include: { user: { select: typeof memberUserSelect } } };
   };
 }>) {
   return {

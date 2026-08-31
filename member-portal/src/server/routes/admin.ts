@@ -5,6 +5,11 @@ import { Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
+import {
+  facilitatorUserSelect,
+  memberUserSelect,
+  safeUserDto
+} from "../services/safeUser.js";
 
 const centreSchema = z.object({
   name: z.string().trim().min(2),
@@ -97,12 +102,12 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
         studentMemberships: {
           include: {
             student: {
-              include: { user: true }
+              include: { user: { select: memberUserSelect } }
             }
           }
         },
         facilitators: {
-          include: { facilitator: true }
+          include: { facilitator: { select: facilitatorUserSelect } }
         }
       }
     }),
@@ -112,12 +117,7 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
       },
       orderBy: [{ role: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
       select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isActive: true,
+        ...memberUserSelect,
         studentProfile: {
           select: {
             id: true,
@@ -143,7 +143,7 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
       },
       orderBy: [{ user: { lastName: "asc" } }],
       include: {
-        user: true,
+        user: { select: memberUserSelect },
         clubMemberships: {
           include: {
             club: {
@@ -227,12 +227,12 @@ adminRouter.patch("/clubs/:clubId/archive", asyncRoute(async (request, response)
       studentMemberships: {
         include: {
           student: {
-            include: { user: true }
+            include: { user: { select: memberUserSelect } }
           }
         }
       },
       facilitators: {
-        include: { facilitator: true }
+        include: { facilitator: { select: facilitatorUserSelect } }
       }
     }
   });
@@ -255,7 +255,8 @@ adminRouter.post("/clubs/:clubId/facilitators", asyncRoute(async (request, respo
       include: { centre: true }
     }),
     prisma.user.findUnique({
-      where: { id: parsed.data.facilitatorId }
+      where: { id: parsed.data.facilitatorId },
+      select: facilitatorUserSelect
     })
   ]);
 
@@ -281,7 +282,7 @@ adminRouter.post("/clubs/:clubId/facilitators", asyncRoute(async (request, respo
       clubId,
       facilitatorId: facilitator.id
     },
-    include: { facilitator: true }
+    include: { facilitator: { select: facilitatorUserSelect } }
   });
 
   response.status(201).json({ assignment });
@@ -344,7 +345,8 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
           firstName: data.firstName,
           lastName: data.lastName,
           role: data.role
-        }
+        },
+        select: memberUserSelect
       });
 
       if (data.role === Role.STUDENT) {
@@ -383,14 +385,7 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
     });
 
     response.status(201).json({
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        isActive: user.isActive
-      }
+      user: safeUserDto(user)
     });
   } catch (error) {
     const prismaError = error as { code?: string };
@@ -452,7 +447,10 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
 
   const existingUser = await prisma.user.findUnique({
     where: { id: userId },
-    include: { studentProfile: true }
+    select: {
+      ...memberUserSelect,
+      studentProfile: true
+    }
   });
 
   if (!existingUser || !editableRoles.has(existingUser.role)) {
@@ -475,7 +473,8 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
           lastName: data.lastName,
           role: data.role,
           isActive: data.isActive
-        }
+        },
+        select: memberUserSelect
       });
 
       if (data.role === Role.STUDENT) {
@@ -542,14 +541,7 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
     });
 
     response.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        isActive: user.isActive
-      }
+      user: safeUserDto(user)
     });
   } catch (error) {
     const prismaError = error as { code?: string };
@@ -577,17 +569,10 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
       role: { in: [Role.ADMIN, Role.FACILITATOR, Role.STUDENT] }
     },
     data: { isActive: true },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      isActive: true
-    }
+    select: memberUserSelect
   });
 
-  response.json({ user });
+  response.json({ user: safeUserDto(user) });
 }));
 
 adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response) => {
@@ -606,14 +591,7 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      isActive: true
-    }
+    select: memberUserSelect
   });
 
   if (!user || !editableRoles.has(user.role)) {
@@ -625,17 +603,10 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
   const updatedUser = await prisma.user.update({
     where: { id: user.id },
     data: { passwordHash },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      isActive: true
-    }
+    select: memberUserSelect
   });
 
-  response.json({ user: updatedUser });
+  response.json({ user: safeUserDto(updatedUser) });
 }));
 
 adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, response) => {
@@ -648,7 +619,10 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { studentProfile: true }
+    select: {
+      ...memberUserSelect,
+      studentProfile: true
+    }
   });
 
   if (!user || !editableRoles.has(user.role)) {
@@ -708,14 +682,7 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
     const updatedUser = await tx.user.update({
       where: { id: user.id },
       data: { isActive: false },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isActive: true
-      }
+      select: memberUserSelect
     });
 
     return {
@@ -820,7 +787,10 @@ async function deleteSampleUser(userId: string, currentUserId: string) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    include: { studentProfile: true }
+    select: {
+      ...memberUserSelect,
+      studentProfile: true
+    }
   });
 
   if (!user) {

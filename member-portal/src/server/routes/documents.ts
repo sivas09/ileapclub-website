@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { publicUserSelect } from "../services/safeUser.js";
 import { bandLevels, documentCategories, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
 export const documentsRouter = Router();
@@ -94,7 +95,7 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
       include: {
         club: true,
         uploadedBy: {
-          select: { firstName: true, lastName: true }
+          select: publicUserSelect
         }
       }
     }),
@@ -262,7 +263,7 @@ export function canPermanentlyDeleteDocument(role: Role) {
 const documentInclude = {
   club: true,
   uploadedBy: {
-    select: { firstName: true, lastName: true }
+    select: publicUserSelect
   }
 } satisfies Prisma.BandDocumentInclude;
 

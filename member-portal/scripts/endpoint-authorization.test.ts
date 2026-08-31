@@ -3,19 +3,27 @@ import type { Server } from "node:http";
 import { Role } from "@prisma/client";
 import { signToken } from "../src/server/auth.js";
 import { prisma } from "../src/server/db.js";
+import { adminRouter } from "../src/server/routes/admin.js";
+import { authRouter } from "../src/server/routes/auth.js";
 import { documentsRouter } from "../src/server/routes/documents.js";
 import { meetingsRouter } from "../src/server/routes/meetings.js";
 import { membersRouter } from "../src/server/routes/members.js";
 import { noticesRouter } from "../src/server/routes/notices.js";
+import { reportsRouter } from "../src/server/routes/reports.js";
 import { resourcesRouter } from "../src/server/routes/resources.js";
 import { studentRouter } from "../src/server/routes/student.js";
+import {
+  facilitatorUserSelect,
+  memberUserSelect,
+  publicUserSelect
+} from "../src/server/services/safeUser.js";
 
 type MockFn = (...args: any[]) => any;
 
 const users = {
-  admin: { id: "admin-user", email: "admin@example.com", role: Role.ADMIN, isActive: true },
-  facilitator: { id: "facilitator-user", email: "facilitator@example.com", role: Role.FACILITATOR, isActive: true },
-  student: { id: "student-user", email: "student@example.com", role: Role.STUDENT, isActive: true }
+  admin: { id: "admin-user", email: "admin@example.com", firstName: "Admin", lastName: "User", role: Role.ADMIN, isActive: true },
+  facilitator: { id: "facilitator-user", email: "facilitator@example.com", firstName: "Test", lastName: "Facilitator", role: Role.FACILITATOR, isActive: true },
+  student: { id: "student-user", email: "student@example.com", firstName: "Current", lastName: "Student", role: Role.STUDENT, isActive: true }
 };
 
 const assignedClubId = "assigned-club";
@@ -55,15 +63,48 @@ const state = {
 };
 
 patchModel("user", {
-  findUnique: ({ where }: any) => {
+  findUnique: ({ where, select }: any) => {
     const user = Object.values(users).find((candidate) => candidate.id === where.id);
 
-    return user ? { ...user } : null;
-  }
+    return user
+      ? projectUser({
+        ...rawUser(user.id, user.role),
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName
+      }, select)
+      : null;
+  },
+  findMany: ({ where, select }: any = {}) => where?.role?.in
+    ? [projectUser(rawUser(users.admin.id, Role.ADMIN), select)]
+    : []
 });
 patchModel("club", {
   count: ({ where }: any) => where.id?.in?.every((clubId: string) => clubId === assignedClubId || clubId === otherClubId) ? where.id.in.length : 0,
-  findMany: () => [],
+  findMany: ({ include }: any = {}) => include?.studentMemberships
+    ? [{
+      id: assignedClubId,
+      name: "Assigned Club",
+      program: "Junior Regular Meeting",
+      centreId: "centre-1",
+      isActive: true,
+      centre: { id: "centre-1", name: "Centre", isActive: true },
+      studentMemberships: [{
+        student: studentRecord(
+          assignedStudentId,
+          users.student.id,
+          assignedClubId,
+          include.studentMemberships.include.student.include.user.select
+        )
+      }],
+      facilitators: [{
+        facilitator: projectUser(
+          rawUser(users.facilitator.id, Role.FACILITATOR),
+          include.facilitators.include.facilitator.select
+        )
+      }]
+    }]
+    : [],
   findUnique: ({ where }: any) => where.id === assignedClubId || where.id === otherClubId
     ? { id: where.id, isActive: true, centre: { isActive: true } }
     : null
@@ -125,22 +166,24 @@ patchModel("studentClubMembership", {
   updateMany: () => ({ count: 1 })
 });
 patchModel("student", {
-  findMany: () => [],
-  findUnique: ({ where }: any) => {
+  findMany: ({ where, include }: any = {}) => where?.user?.role === Role.STUDENT
+    ? [studentRecord(assignedStudentId, users.student.id, assignedClubId, include?.user?.select)]
+    : [],
+  findUnique: ({ where, include }: any) => {
     if (where.userId === users.student.id || where.id === assignedStudentId) {
-      return studentRecord(assignedStudentId, users.student.id, assignedClubId);
+      return studentRecord(assignedStudentId, users.student.id, assignedClubId, include?.user?.select);
     }
 
     if (where.id === otherStudentId) {
-      return studentRecord(otherStudentId, "other-user", otherClubId);
+      return studentRecord(otherStudentId, "other-user", otherClubId, include?.user?.select);
     }
 
     return null;
   },
   create: () => studentRecord(assignedStudentId, users.student.id, assignedClubId),
-  update: ({ where, data }: any) => {
+  update: ({ where, data, include }: any) => {
     state.lastStudentUpdate = data;
-    return studentRecord(where.id, users.student.id, assignedClubId);
+    return studentRecord(where.id, users.student.id, assignedClubId, include?.user?.select);
   },
   delete: () => ({ id: assignedStudentId })
 });
@@ -148,12 +191,12 @@ patchModel("roleDefinition", {
   findMany: () => []
 });
 patchModel("meeting", {
-  findMany: () => Array.from(meetingClubIds.entries())
+  findMany: ({ include }: any = {}) => Array.from(meetingClubIds.entries())
     .filter(([meetingId]) => !state.deletedMeetingIds.has(meetingId))
-    .map(([meetingId, clubId]) => meetingRecord(clubId, meetingId)),
+    .map(([meetingId, clubId]) => meetingRecord(clubId, meetingId, include)),
   findUnique: ({ where }: any) => meetingRecordForId(where.id),
-  findUniqueOrThrow: () => meetingRecord(assignedClubId),
-  update: () => meetingRecord(assignedClubId),
+  findUniqueOrThrow: ({ include }: any = {}) => meetingRecord(assignedClubId, "assigned-meeting", include),
+  update: ({ include }: any = {}) => meetingRecord(assignedClubId, "assigned-meeting", include),
   delete: ({ where }: any) => {
     const meeting = meetingRecordForId(where.id);
 
@@ -226,6 +269,28 @@ patchModel("meetingRoleScore", {
   }
 });
 patchModel("studentMeetingFeedback", {
+  findMany: ({ include }: any = {}) => [{
+    id: "feedback-report-1",
+    roleSlotId: null,
+    studentId: assignedStudentId,
+    score: 88,
+    feedback: "Strong preparation.",
+    scoredByUserId: null,
+    scoredAt: new Date("2026-08-15T16:00:00.000Z"),
+    meeting: {
+      id: "assigned-meeting",
+      title: "Weekly Meeting",
+      meetingDate: new Date("2026-08-15T00:00:00.000Z"),
+      club: { id: assignedClubId, name: "Assigned Club" },
+      roleSlots: []
+    },
+    student: studentRecord(
+      assignedStudentId,
+      users.student.id,
+      assignedClubId,
+      include?.student?.include?.user?.select
+    )
+  }],
   count: ({ where }: any = {}) => where?.roleSlotId === "feedback-slot" ? 1 : 0,
   groupBy: () => [],
   deleteMany: ({ where }: any) => recordMeetingDelete(where.meetingId, "studentFeedbacks", 1)
@@ -258,7 +323,7 @@ patchModel("memberFeedback", {
 patchModel("bandDocument", {
   findMany: ({ where }: any) => {
     state.lastDocumentWhere = where;
-    return [];
+    return [documentRecord(assignedClubId)];
   },
   create: () => {
     state.documentCreates += 1;
@@ -290,7 +355,7 @@ patchModel("notice", {
   delete: ({ where }: any) => noticeRecords().find((notice) => notice.id === where.id) ?? noticeRecord(where.id, assignedClubId)
 });
 patchModel("resourceLink", {
-  findMany: () => [],
+  findMany: () => [resourceRecord()],
   create: () => {
     state.resourceCreates += 1;
     return resourceRecord();
@@ -334,11 +399,14 @@ patchModel("studentParent", {
 
 const app = express();
 app.use(express.json());
+app.use("/api/auth", authRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/members", membersRouter);
 app.use("/api/meetings", meetingsRouter);
 app.use("/api/documents", documentsRouter);
 app.use("/api/notices", noticesRouter);
 app.use("/api/resources", resourcesRouter);
+app.use("/api/reports", reportsRouter);
 app.use("/api/student", studentRouter);
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   response.status(500).json({ message: error instanceof Error ? error.message : "Unexpected test server error." });
@@ -348,9 +416,18 @@ const server = await listen(app);
 const baseUrl = `http://127.0.0.1:${(server.address() as any).port}`;
 
 try {
+  assertSafeSelector("publicUserSelect", publicUserSelect, ["id", "firstName", "lastName", "role"]);
+  assertSafeSelector("memberUserSelect", memberUserSelect, ["id", "firstName", "lastName", "email", "role", "isActive"]);
+  assertSafeSelector("facilitatorUserSelect", facilitatorUserSelect, ["id", "firstName", "lastName", "email", "role", "isActive"]);
+  assertSensitiveFieldScannerRejectsNestedSecrets();
+
   await assertStatus("unauthenticated members request is rejected", "GET", "/api/members", null, 401);
 
+  await assertStatus("auth me response excludes confidential fields", "GET", "/api/auth/me", Role.ADMIN, 200);
+  await assertStatus("admin overview response excludes confidential fields", "GET", "/api/admin/overview", Role.ADMIN, 200);
+
   await assertStatus("admin can view all members", "GET", "/api/members", Role.ADMIN, 200);
+  await assertStatus("admin member detail excludes confidential fields", "GET", `/api/members/${assignedStudentId}`, Role.ADMIN, 200);
   await assertStatus("facilitator can view assigned club members", "GET", `/api/members?clubId=${assignedClubId}`, Role.FACILITATOR, 200);
   await assertStatus("facilitator cannot view unassigned club members", "GET", `/api/members?clubId=${otherClubId}`, Role.FACILITATOR, 403);
   await assertStatus("student cannot create members", "POST", "/api/members", Role.STUDENT, 403, memberPayload([assignedClubId]));
@@ -487,6 +564,11 @@ try {
   await assertStatus("facilitator cannot add resources", "POST", "/api/resources", Role.FACILITATOR, 403, resourcePayload());
   await assertStatus("student cannot delete resources", "DELETE", "/api/resources/resource-1", Role.STUDENT, 403);
   await assertStatus("admin can delete resources", "DELETE", "/api/resources/resource-1", Role.ADMIN, 200);
+  await assertStatus("admin resource list excludes confidential fields", "GET", "/api/resources", Role.ADMIN, 200);
+
+  await assertStatus("admin feedback report excludes confidential fields", "GET", "/api/reports/facilitator-feedback", Role.ADMIN, 200);
+  await assertStatus("student self progress excludes confidential fields", "GET", "/api/student/me/progress", Role.STUDENT, 200);
+  await assertStatus("admin student progress excludes confidential fields", "GET", `/api/student/${assignedStudentId}/progress`, Role.ADMIN, 200);
 
   await assertStatus("admin can update student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.ADMIN, 200, progressPayload());
   await assertStatus("facilitator can update assigned student band progress", "PUT", `/api/student/${assignedStudentId}/requirements/requirement-1`, Role.FACILITATOR, 200, progressPayload());
@@ -523,7 +605,53 @@ async function assertStatus(label: string, method: string, path: string, role: R
     throw new Error(`${label}: expected ${expectedStatus}, received ${response.status}: ${await response.text()}`);
   }
 
+  if (response.headers.get("content-type")?.includes("application/json")) {
+    assertNoSensitiveResponseFields(await response.clone().json(), label);
+  }
+
   return response;
+}
+
+function assertNoSensitiveResponseFields(value: unknown, label: string, path = "response") {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertNoSensitiveResponseFields(entry, label, `${path}[${index}]`));
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (/password|reset.?token|jwt.?secret|secret|access.?token|refresh.?token/i.test(key)) {
+      throw new Error(`${label}: confidential response field found at ${path}.${key}`);
+    }
+
+    assertNoSensitiveResponseFields(entry, label, `${path}.${key}`);
+  }
+}
+
+function assertSensitiveFieldScannerRejectsNestedSecrets() {
+  for (const field of ["passwordHash", "password", "tokenSecret", "resetToken", "jwtSecret", "secret"]) {
+    let rejected = false;
+
+    try {
+      assertNoSensitiveResponseFields({ payload: [{ account: { [field]: "must-not-leak" } }] }, "scanner self-test");
+    } catch {
+      rejected = true;
+    }
+
+    assertEqual(rejected, true, `recursive confidentiality scanner rejects nested ${field}`);
+  }
+}
+
+function assertSafeSelector(label: string, selector: Record<string, true>, expectedKeys: string[]) {
+  const actualKeys = Object.keys(selector).sort().join(",");
+  const allowedKeys = [...expectedKeys].sort().join(",");
+
+  if (actualKeys !== allowedKeys) {
+    throw new Error(`${label}: expected only ${allowedKeys}, received ${actualKeys}`);
+  }
 }
 
 async function responseNotices(response: globalThis.Response) {
@@ -690,21 +818,14 @@ function activeMembership(clubId: string) {
   };
 }
 
-function studentRecord(studentId: string, userId: string, clubId: string) {
+function studentRecord(studentId: string, userId: string, clubId: string, userSelect?: Record<string, boolean>) {
   return {
     id: studentId,
     userId,
     grade: "6",
     programLevel: "JUNIOR",
     bandLevel: "White",
-    user: {
-      id: userId,
-      email: `${userId}@example.com`,
-      firstName: userId === users.student.id ? "Current" : "Other",
-      lastName: "Student",
-      role: Role.STUDENT,
-      isActive: true
-    },
+    user: projectUser(rawUser(userId, Role.STUDENT), userSelect),
     clubMemberships: [{
       clubId,
       status: "ACTIVE",
@@ -714,7 +835,12 @@ function studentRecord(studentId: string, userId: string, clubId: string) {
         program: "Junior Regular Meeting",
         centre: { name: "Centre", isActive: true }
       }
-    }]
+    }],
+    attendance: [],
+    roleSlots: [],
+    meetingFeedbacks: [],
+    memberFeedback: [],
+    requirementProgress: []
   };
 }
 
@@ -740,7 +866,27 @@ function memberFeedbackRecord(
   };
 }
 
-function meetingRecord(clubId: string, id = clubId === assignedClubId ? "assigned-meeting" : "other-meeting") {
+function meetingRecord(
+  clubId: string,
+  id = clubId === assignedClubId ? "assigned-meeting" : "other-meeting",
+  include?: any
+) {
+  const meetingStudentSelect = include?.roleSlots?.include?.assignedStudent?.include?.user?.select;
+  const includedRoleSlots = include?.roleSlots
+    ? [{
+      id: `${id}-response-slot`,
+      meetingId: id,
+      slotLabel: "Prepared Speech",
+      sortOrder: 1,
+      assignedStudentId,
+      assignedByUserId: users.admin.id,
+      assignedAt: new Date("2026-08-14T12:00:00.000Z"),
+      roleDefinition: { id: "prepared-speech", name: "Prepared Speech", isActive: true },
+      assignedStudent: studentRecord(assignedStudentId, users.student.id, clubId, meetingStudentSelect),
+      score: null
+    }]
+    : [];
+
   return {
     id,
     clubId,
@@ -756,11 +902,35 @@ function meetingRecord(clubId: string, id = clubId === assignedClubId ? "assigne
       program: "Junior Regular Meeting",
       centre: { isActive: true }
     },
-    roleSlots: [],
+    roleSlots: includedRoleSlots,
     attendance: [],
     roleScores: [],
     studentFeedbacks: []
   };
+}
+
+function rawUser(id: string, role: Role) {
+  return {
+    id,
+    email: `${id}@example.com`,
+    firstName: id === users.student.id ? "Current" : "Test",
+    lastName: role === Role.STUDENT ? "Student" : "User",
+    role,
+    isActive: true,
+    passwordHash: "regression-test-password-hash",
+    resetToken: "regression-test-reset-token",
+    jwtSecret: "regression-test-jwt-secret"
+  };
+}
+
+function projectUser(user: ReturnType<typeof rawUser>, select?: Record<string, boolean>) {
+  if (!select) {
+    return user;
+  }
+
+  return Object.fromEntries(
+    Object.keys(select).map((key) => [key, user[key as keyof typeof user]])
+  );
 }
 
 function meetingRecordForId(meetingId: string) {

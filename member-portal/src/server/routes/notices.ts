@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { publicUserSelect } from "../services/safeUser.js";
 import { noticeLimits, noticeStatuses } from "../../shared/portalConstants.js";
 
 export const noticesRouter = Router();
@@ -223,7 +224,7 @@ noticesRouter.delete("/:noticeId", asyncRoute(async (request, response) => {
 const noticeInclude = {
   club: true,
   createdBy: {
-    select: { firstName: true, lastName: true }
+    select: publicUserSelect
   }
 } satisfies Prisma.NoticeInclude;
 

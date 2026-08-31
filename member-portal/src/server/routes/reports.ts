@@ -3,6 +3,7 @@ import { Router } from "express";
 import { Role } from "@prisma/client";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { publicUserSelect } from "../services/safeUser.js";
 
 export const reportsRouter = Router();
 
@@ -42,7 +43,7 @@ reportsRouter.get("/facilitator-feedback", asyncRoute(async (request, response) 
       },
       student: {
         include: {
-          user: true
+          user: { select: publicUserSelect }
         }
       }
     }
@@ -52,7 +53,7 @@ reportsRouter.get("/facilitator-feedback", asyncRoute(async (request, response) 
   const scorers = scorerIds.length
     ? await prisma.user.findMany({
       where: { id: { in: scorerIds } },
-      select: { id: true, firstName: true, lastName: true, role: true }
+      select: publicUserSelect
     })
     : [];
   const scorerById = new Map(scorers.map((scorer) => [scorer.id, scorer]));

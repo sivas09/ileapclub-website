@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { publicUserSelect } from "../services/safeUser.js";
 import { roleResourceKey } from "../services/standardRoles.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
@@ -190,10 +191,10 @@ export function canPermanentlyDeleteResourceLink(role: Role) {
 const resourceInclude = {
   requirement: true,
   createdBy: {
-    select: { firstName: true, lastName: true }
+    select: publicUserSelect
   },
   updatedBy: {
-    select: { firstName: true, lastName: true }
+    select: publicUserSelect
   }
 } satisfies Prisma.ResourceLinkInclude;
 
