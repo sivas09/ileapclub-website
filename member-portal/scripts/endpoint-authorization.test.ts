@@ -1,6 +1,7 @@
 import express from "express";
 import type { Server } from "node:http";
 import { Role } from "@prisma/client";
+import { parseStudentProgressResponse } from "../src/client/api.js";
 import { signToken } from "../src/server/auth.js";
 import { prisma } from "../src/server/db.js";
 import { adminRouter } from "../src/server/routes/admin.js";
@@ -567,7 +568,14 @@ try {
   await assertStatus("admin resource list excludes confidential fields", "GET", "/api/resources", Role.ADMIN, 200);
 
   await assertStatus("admin feedback report excludes confidential fields", "GET", "/api/reports/facilitator-feedback", Role.ADMIN, 200);
-  await assertStatus("student self progress excludes confidential fields", "GET", "/api/student/me/progress", Role.STUDENT, 200);
+  const studentProgressResponse = await assertStatus("student self progress excludes confidential fields", "GET", "/api/student/me/progress", Role.STUDENT, 200);
+  const studentProgress = parseStudentProgressResponse(await studentProgressResponse.json());
+  assertEqual(studentProgress.student.id, assignedStudentId, "student self progress includes the member id");
+  assertEqual(studentProgress.student.user.firstName, "Current", "student self progress includes the safe member name");
+  assertEqual("email" in studentProgress.student.user, false, "student self progress does not expose the member email");
+  assertEqual(studentProgress.summary.clubName, "Assigned Club", "student self progress includes the active club");
+  assertEqual(studentProgress.summary.programLevel, "JUNIOR", "student self progress includes the program level");
+  assertEqual(studentProgress.summary.bandLevel, "White", "student self progress includes the current band");
   await assertStatus("admin student progress excludes confidential fields", "GET", `/api/student/${assignedStudentId}/progress`, Role.ADMIN, 200);
 
   await assertStatus("admin can update student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.ADMIN, 200, progressPayload());
@@ -838,6 +846,7 @@ function studentRecord(studentId: string, userId: string, clubId: string, userSe
     }],
     attendance: [],
     roleSlots: [],
+    roleScores: [],
     meetingFeedbacks: [],
     memberFeedback: [],
     requirementProgress: []

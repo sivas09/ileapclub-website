@@ -60,6 +60,13 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
     include: {
       user: { select: publicUserSelect },
       clubMemberships: {
+        where: {
+          status: "ACTIVE",
+          club: {
+            isActive: true,
+            centre: { isActive: true }
+          }
+        },
         include: {
           club: {
             include: { centre: true }

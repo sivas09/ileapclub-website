@@ -3,7 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type Meeting, type ResourceLink } from "../src/client/api";
 import { MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
-import { StudentClubMembersPanel, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
+import { StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import {
   claimableMeetingRoleSlots,
@@ -60,7 +60,12 @@ const parsedProgress = parseStudentProgressResponse({
     userId: "student-user-1",
     grade: "7",
     bandLevel: "White",
-    user: studentFixture().user,
+    user: {
+      id: "student-user-1",
+      firstName: "Max",
+      lastName: "Mao",
+      role: "STUDENT"
+    },
     attendance: [],
     roleSlots: [],
     roleScores: []
@@ -74,7 +79,22 @@ const parsedProgress = parseStudentProgressResponse({
     createdAt: "2026-08-20T12:00:00.000Z",
     updatedAt: "2026-08-20T12:00:00.000Z"
   }],
-  requirements: [],
+  requirements: [{
+    requirement: {
+      id: "white-speech",
+      programLevel: "SENIOR",
+      bandLevel: "White",
+      bandOrder: 1,
+      name: "Deliver the first prepared speech",
+      description: "Complete a prepared speech at a club meeting.",
+      requirementType: "Speech",
+      targetCount: 1,
+      sortOrder: 1,
+      isActive: true
+    },
+    currentCount: 0,
+    isCompleted: false
+  }],
   summary: {
     bandLevel: "White",
     programLevel: "SENIOR",
@@ -88,6 +108,18 @@ const parsedProgress = parseStudentProgressResponse({
   }
 });
 assert.equal(parsedProgress.memberFeedback[0]?.feedback, "Excellent preparation.", "Member-level feedback is retained in My Progress responses.");
+assert.equal("email" in parsedProgress.student.user, false, "Student progress validates without exposing the member email.");
+const studentOverviewMarkup = renderToStaticMarkup(
+  <StudentHomeSummaryView
+    user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
+    progress={parsedProgress}
+  />
+);
+assert.match(studentOverviewMarkup, /Max Mao/, "Student Overview renders the member name.");
+assert.match(studentOverviewMarkup, /White/, "Student Overview renders the current band.");
+assert.match(studentOverviewMarkup, /Kanata Saturday/, "Student Overview renders the active club.");
+assert.match(studentOverviewMarkup, /Senior/, "Student Overview renders the program level.");
+assert.match(studentOverviewMarkup, /Deliver the first prepared speech/, "Student Overview renders the next requirement.");
 
 const parsedOverview = parseMeetingsOverviewResponse({
   meetings: [meeting],

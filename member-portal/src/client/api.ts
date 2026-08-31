@@ -8,6 +8,8 @@ export type PortalUser = {
   role: Role;
 };
 
+export type PublicPortalUser = Pick<PortalUser, "id" | "firstName" | "lastName" | "role">;
+
 type LoginResponse = {
   token: string;
   user: PortalUser;
@@ -39,7 +41,7 @@ export type Student = {
   grade: string;
   programLevel?: string | null;
   bandLevel: string;
-  user: PortalUser;
+  user: PublicPortalUser;
   clubMemberships?: StudentClubMembership[];
 };
 
@@ -1038,9 +1040,17 @@ function isPortalRole(value: unknown): value is Role {
 }
 
 function isPortalUserResponse(value: unknown): value is PortalUser {
+  if (!isPublicPortalUserResponse(value)) {
+    return false;
+  }
+
+  const email = (value as PublicPortalUser & { email?: unknown }).email;
+  return typeof email === "string" && email.length > 0;
+}
+
+function isPublicPortalUserResponse(value: unknown): value is PublicPortalUser {
   return isRecord(value)
     && typeof value.id === "string"
-    && typeof value.email === "string"
     && typeof value.firstName === "string"
     && typeof value.lastName === "string"
     && isPortalRole(value.role);
@@ -1105,7 +1115,7 @@ function isStudentResponse(value: unknown): value is Student {
   return isRecord(value)
     && typeof value.id === "string"
     && typeof value.bandLevel === "string"
-    && isPortalUserResponse(value.user);
+    && isPublicPortalUserResponse(value.user);
 }
 
 function parseAdminOverviewResponse(value: unknown): AdminOverview {
@@ -1164,8 +1174,14 @@ export function parseStudentProgressResponse(value: unknown): StudentProgress {
   const student = expectRecord(result.student, "student progress");
   const summary = expectRecord(result.summary, "student progress");
 
-  if (!isPortalUserResponse(student.user)
-    || typeof summary.bandLevel !== "string") {
+  if (!Array.isArray(student.attendance)
+    || !Array.isArray(student.roleSlots)
+    || !Array.isArray(student.roleScores)
+    || !isStudentResponse(student)
+    || typeof summary.bandLevel !== "string"
+    || (summary.programLevel !== null && typeof summary.programLevel !== "string")
+    || typeof summary.clubName !== "string"
+    || typeof summary.centreName !== "string") {
     throw new Error("The student progress service returned an invalid response.");
   }
 

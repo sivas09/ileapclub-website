@@ -6,6 +6,7 @@ import {
   getStudentProgress,
   MemberDetail,
   MemberListEntry,
+  PortalUser,
   ResourceLink,
   StudentProgress
 } from "../api";
@@ -21,6 +22,65 @@ import {
   resourcesForRoleName,
   SummaryTile
 } from "./portalShared";
+
+export function StudentHomeSummaryView({
+  user,
+  progress,
+  error = "",
+  isLoading = false
+}: {
+  user: PortalUser;
+  progress: StudentProgress | null;
+  error?: string;
+  isLoading?: boolean;
+}) {
+  const currentBand = progress?.summary.bandLevel ?? "Not set";
+  const nextRequirement = progress?.requirements
+    .filter((entry) => !entry.isCompleted)
+    .sort((left, right) => {
+      const leftIsCurrentBand = left.requirement.bandLevel === currentBand ? 0 : 1;
+      const rightIsCurrentBand = right.requirement.bandLevel === currentBand ? 0 : 1;
+      return leftIsCurrentBand - rightIsCurrentBand
+        || left.requirement.bandOrder - right.requirement.bandOrder
+        || left.requirement.sortOrder - right.requirement.sortOrder;
+    })[0];
+  const studentName = `${user.firstName} ${user.lastName}`;
+
+  return (
+    <section className="student-home-summary" aria-labelledby="student-summary-title">
+      <div className="student-home-summary-header">
+        <div>
+          <p className="eyebrow">Member summary</p>
+          <h3 id="student-summary-title">{studentName}</h3>
+        </div>
+        {isLoading ? <span>Loading...</span> : null}
+      </div>
+
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+
+      <div className="student-home-grid">
+        <article className="student-band-highlight">
+          <span>Current Band</span>
+          <strong>{currentBand}</strong>
+        </article>
+        <article>
+          <span>Club</span>
+          <strong>{progress?.summary.clubName || "Not assigned"}</strong>
+        </article>
+        <article>
+          <span>Program Level</span>
+          <strong>{formatProgramLevel(progress?.summary.programLevel)}</strong>
+        </article>
+        <article>
+          <span>Next Requirement</span>
+          <strong>{nextRequirement?.requirement.name || "No pending requirement"}</strong>
+          {nextRequirement ? <small>{nextRequirement.requirement.bandLevel}</small> : null}
+        </article>
+      </div>
+    </section>
+  );
+}
+
 export function StudentClubMembersPanel() {
   const [members, setMembers] = useState<MemberListEntry[]>([]);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
@@ -288,4 +348,3 @@ export function StudentProgressDashboard() {
     </section>
   );
 }
-
