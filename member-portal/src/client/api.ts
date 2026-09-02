@@ -226,6 +226,12 @@ export type MemberListEntry = {
 
 export type PaymentStatus = "PAID" | "NOT_PAID";
 
+export type OwnMemberPaymentStatus = {
+  paymentMonth: string;
+  status: PaymentStatus;
+  updatedAt: string | null;
+};
+
 export type MonthlyMemberPayment = {
   studentId: string;
   status: PaymentStatus;
@@ -878,6 +884,10 @@ export async function saveStudentMeetingFeedback(meetingId: string, payload: {
 
 export async function getStudentProgress() {
   return parseStudentProgressResponse(await request<unknown>("/api/student/me/progress"));
+}
+
+export async function getOwnMemberPaymentStatus() {
+  return request<OwnMemberPaymentStatus>("/api/student/me/payment-status");
 }
 
 export async function getStudentClubMembers() {

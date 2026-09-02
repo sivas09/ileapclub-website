@@ -4258,6 +4258,24 @@ body {
   font-size: 1.45rem;
 }
 
+.student-home-grid .student-payment-status.is-paid {
+  border-color: #86d3ad;
+  background: #ecfdf3;
+}
+
+.student-home-grid .student-payment-status.is-paid strong {
+  color: #166534;
+}
+
+.student-home-grid .student-payment-status.is-not-paid {
+  border-color: #fda4af;
+  background: #fff5f6;
+}
+
+.student-home-grid .student-payment-status.is-not-paid strong {
+  color: #9f1239;
+}
+
 .student-resource-groups,
 .resource-link-groups {
   display: grid;

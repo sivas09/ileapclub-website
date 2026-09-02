@@ -5,6 +5,7 @@ import { PaymentStatus, Role } from "@prisma/client";
 import { signToken } from "../src/server/auth.js";
 import { prisma } from "../src/server/db.js";
 import { membersRouter } from "../src/server/routes/members.js";
+import { studentRouter } from "../src/server/routes/student.js";
 
 type MockFn = (...args: any[]) => any;
 type StoredPayment = {
@@ -26,12 +27,19 @@ const users = {
 };
 const payments = new Map<string, StoredPayment>();
 let lastResetStudentIds: string[] = [];
+let ownPaymentRecord: StoredPayment | null = null;
+let lastOwnPaymentStudentId = "";
+let lastOwnPaymentMonth = "";
 
 patchModel("user", {
   findUnique: ({ where }: any) => Object.values(users).find((user) => user.id === where.id) ?? null
 });
 patchModel("student", {
   findUnique: ({ where }: any) => {
+    if (where.userId === users.student.id) {
+      return { id: activeStudentId };
+    }
+
     if (where.id === activeStudentId) {
       return { id: activeStudentId, user: { role: Role.STUDENT } };
     }
@@ -51,6 +59,11 @@ patchModel("student", {
   }
 });
 patchModel("monthlyMemberPayment", {
+  findUnique: ({ where }: any) => {
+    lastOwnPaymentStudentId = where.studentId_paymentMonth.studentId;
+    lastOwnPaymentMonth = monthKey(where.studentId_paymentMonth.paymentMonth);
+    return ownPaymentRecord;
+  },
   findMany: ({ where }: any) => Array.from(payments.values())
     .filter((payment) => monthKey(payment.paymentMonth) === monthKey(where.paymentMonth))
     .map(publicPayment),
@@ -104,6 +117,7 @@ patchModel("monthlyMemberPayment", {
 const app = express();
 app.use(express.json());
 app.use("/api/members", membersRouter);
+app.use("/api/student", studentRouter);
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   response.status(500).json({ message: error instanceof Error ? error.message : "Unexpected test server error." });
 });
@@ -179,6 +193,36 @@ try {
   assert.equal(listBody.paymentMonth, currentMonth, "Admin can retrieve payment statuses for the selected month.");
   assertNoSensitiveFields(listBody);
   assert.equal(JSON.stringify(listBody).includes("password"), false, "Payment responses do not expose sensitive account fields.");
+
+  ownPaymentRecord = {
+    studentId: activeStudentId,
+    paymentMonth: new Date(`${currentMonth}-01T00:00:00.000Z`),
+    status: PaymentStatus.PAID,
+    updatedByAdminId: users.admin.id,
+    createdAt: new Date("2026-09-01T12:00:00.000Z"),
+    updatedAt: new Date("2026-09-02T12:00:00.000Z")
+  };
+  const ownPaidResponse = await request("GET", "/api/student/me/payment-status", Role.STUDENT, 200);
+  const ownPaidBody = await ownPaidResponse.json() as any;
+  assert.equal(ownPaidBody.status, PaymentStatus.PAID, "Student can see their own current-month Paid status.");
+  assert.deepEqual(Object.keys(ownPaidBody).sort(), ["paymentMonth", "status", "updatedAt"], "Student payment response contains only safe fields.");
+  assert.equal(lastOwnPaymentStudentId, activeStudentId, "Student payment lookup is derived from the authenticated member account.");
+  assert.equal(lastOwnPaymentMonth, ownPaidBody.paymentMonth, "Student payment lookup is limited to the current month returned by the endpoint.");
+  assertNoSensitiveFields(ownPaidBody);
+
+  ownPaymentRecord = null;
+  const ownDefaultResponse = await request("GET", "/api/student/me/payment-status", Role.STUDENT, 200);
+  const ownDefaultBody = await ownDefaultResponse.json() as any;
+  assert.equal(ownDefaultBody.status, PaymentStatus.NOT_PAID, "Student sees Not Paid when the current month has no payment record.");
+  assert.equal(ownDefaultBody.updatedAt, null, "Missing payment records do not expose an update timestamp.");
+
+  await request("GET", `/api/student/${inactiveStudentId}/payment-status`, Role.STUDENT, 404);
+  await request("GET", "/api/student/me/payment-status", Role.FACILITATOR, 403);
+  await request("GET", "/api/student/me/payment-status", Role.ADMIN, 403);
+  await request("PUT", `/api/members/payments/${inactiveStudentId}`, Role.STUDENT, 403, {
+    paymentMonth: currentMonth,
+    status: PaymentStatus.PAID
+  });
 
   console.log("Monthly member payment tests passed.");
 } finally {

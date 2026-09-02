@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
-import { Role } from "@prisma/client";
+import { PaymentStatus, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
@@ -47,11 +47,28 @@ type StudentWithClubs = {
 };
 
 const programLevelWarning = "Program level not set. Please ask Admin or Facilitator to set Junior or Senior.";
+const paymentTimeZone = "America/Toronto";
 
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
   return (request: Request, response: Response, next: NextFunction) => {
     handler(request, response, next).catch(next);
   };
+}
+
+function currentPaymentMonthStart(now = new Date()) {
+  const monthParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: paymentTimeZone,
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(now);
+  const year = monthParts.find((part) => part.type === "year")?.value;
+  const month = monthParts.find((part) => part.type === "month")?.value;
+
+  if (!year || !month) {
+    throw new Error("Unable to determine the current payment month.");
+  }
+
+  return new Date(`${year}-${month}-01T00:00:00.000Z`);
 }
 
 studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async (request, response) => {
@@ -212,6 +229,38 @@ studentRouter.get("/me/progress", requireRole([Role.STUDENT]), asyncRoute(async 
       scoredRoles: scoredFeedback,
       averageScore
     }
+  });
+}));
+
+studentRouter.get("/me/payment-status", requireRole([Role.STUDENT]), asyncRoute(async (request, response) => {
+  const student = await prisma.student.findUnique({
+    where: { userId: request.user!.id },
+    select: { id: true }
+  });
+
+  if (!student) {
+    response.status(404).json({ message: "Member profile not found." });
+    return;
+  }
+
+  const paymentMonth = currentPaymentMonthStart();
+  const payment = await prisma.monthlyMemberPayment.findUnique({
+    where: {
+      studentId_paymentMonth: {
+        studentId: student.id,
+        paymentMonth
+      }
+    },
+    select: {
+      status: true,
+      updatedAt: true
+    }
+  });
+
+  response.json({
+    paymentMonth: paymentMonth.toISOString().slice(0, 7),
+    status: payment?.status ?? PaymentStatus.NOT_PAID,
+    updatedAt: payment?.updatedAt ?? null
   });
 }));
 

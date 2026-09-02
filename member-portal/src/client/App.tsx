@@ -4,10 +4,12 @@ import {
   changeMyPassword,
   clearToken,
   getCurrentUser,
+  getOwnMemberPaymentStatus,
   getStoredToken,
   getStudentProgress,
   login,
   onAuthenticationExpired,
+  OwnMemberPaymentStatus,
   PortalUser,
   Role,
   storeToken,
@@ -309,17 +311,21 @@ function OverviewLaunchGrid({ role }: { role: Role }) {
 
 function StudentHomeSummary({ user }: { user: PortalUser }) {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<OwnMemberPaymentStatus | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    getStudentProgress()
-      .then(setProgress)
+    Promise.all([getStudentProgress(), getOwnMemberPaymentStatus()])
+      .then(([progressResult, paymentResult]) => {
+        setProgress(progressResult);
+        setPaymentStatus(paymentResult);
+      })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load your dashboard summary."))
       .finally(() => setIsLoading(false));
   }, []);
 
-  return <StudentHomeSummaryView user={user} progress={progress} error={error} isLoading={isLoading} />;
+  return <StudentHomeSummaryView user={user} progress={progress} paymentStatus={paymentStatus} error={error} isLoading={isLoading} />;
 }
 
 function ChangePasswordPanel() {

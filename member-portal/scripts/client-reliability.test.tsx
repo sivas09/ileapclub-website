@@ -54,6 +54,7 @@ assert.match(memberProgressMarkup, /Member Progress Dashboard/, "Member progress
 assert.doesNotMatch(memberProgressMarkup, /Student Progress Dashboard/, "Legacy student dashboard wording is hidden.");
 const clubMembersMarkup = renderToStaticMarkup(<StudentClubMembersPanel />);
 assert.match(clubMembersMarkup, /Club Members/, "My Club uses member-facing terminology.");
+assert.doesNotMatch(clubMembersMarkup, /Payment Status|Paid|Not Paid/, "My Club does not expose payment status.");
 
 const paidButtonMarkup = renderToStaticMarkup(
   <PaymentStatusButton memberName="Max Mao" status="PAID" disabled={false} onToggle={() => undefined} />
@@ -129,6 +130,7 @@ const studentOverviewMarkup = renderToStaticMarkup(
   <StudentHomeSummaryView
     user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
     progress={parsedProgress}
+    paymentStatus={{ paymentMonth: "2026-09", status: "PAID", updatedAt: "2026-09-02T12:00:00.000Z" }}
   />
 );
 assert.match(studentOverviewMarkup, /Max Mao/, "Student Overview renders the member name.");
@@ -136,6 +138,23 @@ assert.match(studentOverviewMarkup, /White/, "Student Overview renders the curre
 assert.match(studentOverviewMarkup, /Kanata Saturday/, "Student Overview renders the active club.");
 assert.match(studentOverviewMarkup, /Senior/, "Student Overview renders the program level.");
 assert.match(studentOverviewMarkup, /Deliver the first prepared speech/, "Student Overview renders the next requirement.");
+assert.match(studentOverviewMarkup, /Payment Status/, "Student Overview shows the member payment card.");
+assert.match(studentOverviewMarkup, />Paid</, "Student Overview shows a Paid status.");
+assert.match(studentOverviewMarkup, /Payment received for this month\. Thank you\./, "Student Overview shows the paid confirmation note.");
+
+const unpaidStudentOverviewMarkup = renderToStaticMarkup(
+  <StudentHomeSummaryView
+    user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
+    progress={parsedProgress}
+    paymentStatus={{ paymentMonth: "2026-09", status: "NOT_PAID", updatedAt: null }}
+  />
+);
+assert.match(unpaidStudentOverviewMarkup, />Not Paid</, "Student Overview shows a Not Paid status.");
+assert.match(
+  unpaidStudentOverviewMarkup,
+  /Payment not recorded for this month\. Please contact iLEAP Club or complete your payment\./,
+  "Student Overview shows the required friendly Not Paid note."
+);
 
 const parsedOverview = parseMeetingsOverviewResponse({
   meetings: [meeting],

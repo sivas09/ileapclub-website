@@ -6,6 +6,7 @@ import {
   getStudentProgress,
   MemberDetail,
   MemberListEntry,
+  OwnMemberPaymentStatus,
   PortalUser,
   ResourceLink,
   StudentProgress
@@ -26,11 +27,13 @@ import {
 export function StudentHomeSummaryView({
   user,
   progress,
+  paymentStatus,
   error = "",
   isLoading = false
 }: {
   user: PortalUser;
   progress: StudentProgress | null;
+  paymentStatus: OwnMemberPaymentStatus | null;
   error?: string;
   isLoading?: boolean;
 }) {
@@ -62,6 +65,17 @@ export function StudentHomeSummaryView({
         <article className="student-band-highlight">
           <span>Current Band</span>
           <strong>{currentBand}</strong>
+        </article>
+        <article className={`student-payment-status${paymentStatus ? (paymentStatus.status === "PAID" ? " is-paid" : " is-not-paid") : ""}`}>
+          <span>Payment Status</span>
+          <strong>{paymentStatus ? (paymentStatus.status === "PAID" ? "Paid" : "Not Paid") : (isLoading ? "Loading..." : "Unavailable")}</strong>
+          {paymentStatus ? (
+            <small>
+              {paymentStatus.status === "PAID"
+                ? "Payment received for this month. Thank you."
+                : "Payment not recorded for this month. Please contact iLEAP Club or complete your payment."}
+            </small>
+          ) : null}
         </article>
         <article>
           <span>Club</span>
