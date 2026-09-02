@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { canManageOperationalData } from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 import { noticeLimits, noticeStatuses } from "../../shared/portalConstants.js";
 
@@ -29,7 +30,7 @@ function asyncRoute(handler: (request: Request, response: Response, next: NextFu
 noticesRouter.get("/", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR && user.role !== Role.STUDENT) {
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR && user.role !== Role.STUDENT) {
     response.status(403).json({ message: "You do not have permission to view notices." });
     return;
   }
@@ -103,8 +104,8 @@ noticesRouter.get("/", asyncRoute(async (request, response) => {
 noticesRouter.post("/", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can create notices." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can create notices." });
     return;
   }
 
@@ -134,7 +135,7 @@ noticesRouter.post("/", asyncRoute(async (request, response) => {
       message: data.message,
       clubId,
       createdByUserId: user.id,
-      status: user.role === Role.ADMIN ? data.status ?? "ACTIVE" : "ACTIVE",
+      status: canManageOperationalData(user) ? data.status ?? "ACTIVE" : "ACTIVE",
       expiresAt: parseExpiry(data.expiresAt),
       isPinned: data.isPinned ?? false
     },
@@ -147,8 +148,8 @@ noticesRouter.post("/", asyncRoute(async (request, response) => {
 noticesRouter.patch("/:noticeId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can edit notices." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can edit notices." });
     return;
   }
 
@@ -202,8 +203,8 @@ noticesRouter.patch("/:noticeId", asyncRoute(async (request, response) => {
 noticesRouter.delete("/:noticeId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN) {
-    response.status(403).json({ message: "Only admins can permanently delete notices." });
+  if (!canManageOperationalData(user)) {
+    response.status(403).json({ message: "Only operational managers can permanently delete notices." });
     return;
   }
 
@@ -229,7 +230,7 @@ const noticeInclude = {
 } satisfies Prisma.NoticeInclude;
 
 async function getVisibleClubIds(userId: string, role: Role) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return null;
   }
 
@@ -262,7 +263,7 @@ async function getVisibleClubIds(userId: string, role: Role) {
 }
 
 async function canManageNoticeClub(userId: string, role: Role, clubId: string) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       select: { isActive: true, centre: { select: { isActive: true } } }

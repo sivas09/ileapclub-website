@@ -9,7 +9,7 @@ import {
   updateNotice
 } from "../api";
 import { noticeLimits, noticeStatuses } from "../../shared/portalConstants";
-import { formatDate } from "./portalShared";
+import { formatDate, isOperationalManagerRole } from "./portalShared";
 
 type NoticeFilters = {
   clubId: string;
@@ -177,7 +177,7 @@ function ManagerNoticesPanel({ user }: { user: PortalUser }) {
       {isAddFormOpen ? (
         <form className="document-form notice-form" onSubmit={handleCreate}>
           <h3>Add New Notice</h3>
-          <NoticeFields clubs={clubs} allowAllClubs={user.role === "ADMIN"} />
+          <NoticeFields clubs={clubs} allowAllClubs={isOperationalManagerRole(user.role)} />
           <button type="submit" disabled={isSubmitting}>Post Notice</button>
         </form>
       ) : null}
@@ -206,9 +206,9 @@ function ManagerNoticesPanel({ user }: { user: PortalUser }) {
                   key={notice.id}
                   notice={notice}
                   clubs={clubs}
-                  allowAllClubs={user.role === "ADMIN"}
-                  canEdit={user.role === "ADMIN" || Boolean(notice.clubId)}
-                  canDelete={user.role === "ADMIN"}
+                  allowAllClubs={isOperationalManagerRole(user.role)}
+                  canEdit={isOperationalManagerRole(user.role) || Boolean(notice.clubId)}
+                  canDelete={isOperationalManagerRole(user.role)}
                   isEditing={editingNotice?.id === notice.id}
                   isSubmitting={isSubmitting}
                   onEdit={() => setEditingNotice(notice)}

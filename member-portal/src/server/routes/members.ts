@@ -5,6 +5,7 @@ import { PaymentStatus, Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
+import { canManageOperationalData, operationalManagerRoles } from "../permissions.js";
 import { memberUserSelect, publicUserSelect, safeUserDto } from "../services/safeUser.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
@@ -226,7 +227,7 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
   });
 }));
 
-membersRouter.get("/payments", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+membersRouter.get("/payments", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
   const requestedMonth = stringQuery(request.query.paymentMonth);
   const parsedMonth = paymentMonthSchema.optional().safeParse(requestedMonth || undefined);
 
@@ -253,7 +254,7 @@ membersRouter.get("/payments", requireRole([Role.ADMIN]), asyncRoute(async (requ
   });
 }));
 
-membersRouter.put("/payments/:studentId", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+membersRouter.put("/payments/:studentId", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
   const parsed = memberPaymentUpdateSchema.safeParse(request.body);
 
   if (!parsed.success) {
@@ -308,7 +309,7 @@ membersRouter.put("/payments/:studentId", requireRole([Role.ADMIN]), asyncRoute(
   });
 }));
 
-membersRouter.post("/payments/reset", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+membersRouter.post("/payments/reset", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
   const parsed = memberPaymentResetSchema.safeParse(request.body);
 
   if (!parsed.success) {
@@ -366,8 +367,8 @@ membersRouter.post("/payments/reset", requireRole([Role.ADMIN]), asyncRoute(asyn
 membersRouter.post("/", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can add members." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can add members." });
     return;
   }
 
@@ -512,7 +513,7 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
     return;
   }
 
-  if (user.role !== Role.ADMIN && !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
+  if (!canManageOperationalData(user) && !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
     response.status(403).json({ message: "You cannot view this member." });
     return;
   }
@@ -635,8 +636,8 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
 membersRouter.post("/:studentId/feedback", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can write member feedback." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can write member feedback." });
     return;
   }
 
@@ -673,8 +674,8 @@ membersRouter.post("/:studentId/feedback", asyncRoute(async (request, response) 
 membersRouter.patch("/:studentId/feedback/:feedbackId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can edit member feedback." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can edit member feedback." });
     return;
   }
 
@@ -714,8 +715,8 @@ membersRouter.patch("/:studentId/feedback/:feedbackId", asyncRoute(async (reques
 membersRouter.delete("/:studentId/feedback/:feedbackId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can delete member feedback." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can delete member feedback." });
     return;
   }
 
@@ -740,8 +741,8 @@ membersRouter.delete("/:studentId/feedback/:feedbackId", asyncRoute(async (reque
 membersRouter.patch("/:studentId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can update members." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can update members." });
     return;
   }
 
@@ -829,7 +830,7 @@ membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
 }));
 
 async function getVisibleClubIds(userId: string, role: Role) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return null;
   }
 
@@ -876,7 +877,7 @@ async function canStudentViewPublicMember(userId: string, targetStudentId: strin
 }
 
 export async function canManageRequestedClubs(userId: string, role: Role, clubIds: string[]) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     const activeClubCount = await prisma.club.count({
       where: {
         id: { in: clubIds },
@@ -902,7 +903,7 @@ export function canManageClubIdSet(role: Role, requestedClubIds: string[], visib
     return false;
   }
 
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return activeClubCount === requestedClubIds.length;
   }
 
@@ -933,12 +934,12 @@ export async function canFacilitatorAccessStudent(facilitatorId: string, student
 }
 
 export async function canWriteMemberFeedback(userId: string, role: Role, studentId: string, clubId: string) {
-  if (role !== Role.ADMIN && role !== Role.FACILITATOR) {
+  if (!canManageOperationalData(role) && role !== Role.FACILITATOR) {
     return false;
   }
 
   const membershipCount = await prisma.studentClubMembership.count({
-    where: role === Role.ADMIN
+    where: canManageOperationalData(role)
       ? {
           studentId,
           clubId,
@@ -957,7 +958,7 @@ export async function canWriteMemberFeedback(userId: string, role: Role, student
     return false;
   }
 
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return true;
   }
 
@@ -977,7 +978,7 @@ async function canModifyMemberFeedback(
   role: Role,
   feedback: { studentId: string; clubId: string; createdByUserId: string | null }
 ) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return true;
   }
 
@@ -1000,7 +1001,7 @@ export function canAccessStudentMemberships(
 }
 
 export function canPermanentlyDeleteMemberRole(role: Role) {
-  return role === Role.ADMIN;
+  return canManageOperationalData(role);
 }
 
 export function permanentMemberDeleteDecision(input: {
@@ -1014,7 +1015,7 @@ export function permanentMemberDeleteDecision(input: {
   }
 
   if (!canPermanentlyDeleteMemberRole(input.authenticatedRole)) {
-    return { status: 403, message: "Only admins can permanently delete members." };
+    return { status: 403, message: "Only operational managers can permanently delete members." };
   }
 
   if (input.targetRole !== Role.STUDENT) {
@@ -1234,7 +1235,7 @@ function serializeMemberFeedback(
     facilitatorName: entry.createdBy ? displayName(entry.createdBy) : "Former facilitator",
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
-    canEdit: viewer.role === Role.ADMIN
+    canEdit: canManageOperationalData(viewer)
       || (viewer.role === Role.FACILITATOR && hasActiveMembership && entry.createdByUserId === viewer.id)
   };
 }

@@ -22,6 +22,7 @@ import {
 } from "../api";
 import {
   bandLevelOptions,
+  canManageUserFromSetup,
   DataPanel,
   formatCleanupSummary,
   formatProgramLevel,
@@ -369,7 +370,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   }
 
   function renderEditUserForm(portalUser: AdminUser) {
-    const isCurrentAdmin = portalUser.id === currentUser.id;
+    const isCurrentUser = portalUser.id === currentUser.id;
 
     return (
       <form id={`edit-user-${portalUser.id}`} key={portalUser.id} className="edit-user-panel" onSubmit={handleEditUserSubmit}>
@@ -389,17 +390,18 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               name="role"
               value={editingUserRole}
               onChange={(event) => setEditingUserRole(event.target.value as Role)}
-              disabled={isCurrentAdmin}
+              disabled={isCurrentUser}
               required
             >
               <option value="STUDENT">Member</option>
               <option value="FACILITATOR">Facilitator</option>
-              <option value="ADMIN">Admin</option>
+              {currentUser.role === "ADMIN" ? <option value="CENTER_DIRECTOR">Center Director</option> : null}
+              {currentUser.role === "ADMIN" ? <option value="ADMIN">Admin</option> : null}
             </select>
           </label>
-          {isCurrentAdmin ? (
+          {isCurrentUser ? (
             <>
-              <input type="hidden" name="role" value="ADMIN" />
+              <input type="hidden" name="role" value={portalUser.role} />
             </>
           ) : null}
           {editingUserRole === "STUDENT" ? (
@@ -522,10 +524,10 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   }
 
   return (
-    <section className="admin-workspace" id="admin" aria-label="Admin setup workspace">
+    <section className="admin-workspace" id="admin" aria-label="Operational setup workspace">
       <div className="admin-heading">
         <div>
-          <p className="eyebrow">Admin setup</p>
+          <p className="eyebrow">Operational setup</p>
           <h2>Centres, clubs, users, and assignments</h2>
         </div>
         <button type="button" onClick={refreshOverviewSafely} disabled={isLoading}>Refresh</button>
@@ -637,7 +639,8 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               <select name="role" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value as Role)} required>
                 <option value="STUDENT">Member</option>
                 <option value="FACILITATOR">Facilitator</option>
-                <option value="ADMIN">Admin</option>
+                {currentUser.role === "ADMIN" ? <option value="CENTER_DIRECTOR">Center Director</option> : null}
+                {currentUser.role === "ADMIN" ? <option value="ADMIN">Admin</option> : null}
               </select>
             </label>
             {newUserRole === "STUDENT" ? (
@@ -734,7 +737,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         ) : <p className="loading-state">No facilitator club assignments yet.</p>}
       </section>
 
-      <section className="assignment-panel" aria-label="Demo and test data cleanup">
+      {currentUser.role === "ADMIN" ? <section className="assignment-panel" aria-label="Demo and test data cleanup">
         <div className="admin-heading">
           <div>
             <p className="eyebrow">Demo/Test Data Cleanup</p>
@@ -768,7 +771,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
             Reset Demo Meeting Data
           </button>
         </div>
-      </section>
+      </section> : null}
 
       <div className="admin-table-grid">
         <DataPanel title="Centres">
@@ -813,7 +816,10 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
           {overview?.users.length ? (
             <>
               <ul className="record-list">
-                {overview.users.map((portalUser) => (
+                {overview.users.map((portalUser) => {
+                  const canManageUser = canManageUserFromSetup(currentUser, portalUser);
+
+                  return (
                   <li key={portalUser.id} className={editingUser?.id === portalUser.id ? "is-editing-user" : undefined}>
                     <div>
                       <strong>{portalUser.firstName} {portalUser.lastName}</strong>
@@ -823,7 +829,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                       {formatRole(portalUser.role)} - {portalUser.email}
                       {portalUser.role === "STUDENT" && portalUser.studentProfile ? ` - ${formatProgramLevel(portalUser.studentProfile.programLevel)} - ${portalUser.studentProfile.bandLevel}` : ""}
                     </span>
-                    <div className="record-actions">
+                    {canManageUser ? <div className="record-actions">
                       <button
                         type="button"
                         className="text-action"
@@ -860,12 +866,13 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                           Delete User
                         </button>
                       ) : null}
-                    </div>
+                    </div> : null}
                     {editingUser?.id === portalUser.id ? renderEditUserForm(portalUser) : null}
                     {passwordResetUser?.id === portalUser.id ? renderResetPasswordForm(portalUser) : null}
                     {reactivatingUser?.id === portalUser.id ? renderReactivationForm(portalUser) : null}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </>
           ) : <p>No users yet.</p>}

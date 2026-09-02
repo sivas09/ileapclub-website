@@ -4,14 +4,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type Meeting, type ResourceLink } from "../src/client/api";
 import { MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
+import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
 import { StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import {
   claimableMeetingRoleSlots,
+  canManageUserFromSetup,
   dateInputValue,
   formatDate,
+  formatRole,
   groupResourceLinks,
   overviewLinksForRole,
+  portalNavigationItems,
   resourceGroupFor,
   sectionHrefForHash
 } from "../src/client/components/portalShared";
@@ -199,6 +203,32 @@ assert.deepEqual(
   ["Setup", "Members", "Meetings", "Documents", "Feedback", "Band Progress"],
   "Admin Overview exposes the requested management sections."
 );
+assert.deepEqual(
+  portalNavigationItems.CENTER_DIRECTOR.map((item) => item.label),
+  ["Overview", "Setup", "Members", "Notices", "Documents", "Meetings", "Feedback", "Band Progress"],
+  "Center Director receives the operational navigation set."
+);
+assert.deepEqual(
+  overviewLinksForRole("CENTER_DIRECTOR").map((item) => item.label),
+  ["Setup", "Members", "Meetings", "Documents", "Feedback", "Band Progress"],
+  "Center Director Overview exposes operational management sections."
+);
+assert.equal(formatRole("CENTER_DIRECTOR"), "Center Director", "Center Director uses the visible role label.");
+const directorViewer = { id: "director-1", role: "CENTER_DIRECTOR" as const };
+assert.equal(canManageUserFromSetup(directorViewer, { id: "student-1", role: "STUDENT" }), true, "Center Director can manage student controls.");
+assert.equal(canManageUserFromSetup(directorViewer, { id: "admin-1", role: "ADMIN" }), false, "Center Director cannot see Admin account controls.");
+assert.equal(canManageUserFromSetup(directorViewer, { id: "director-2", role: "CENTER_DIRECTOR" }), false, "Center Director cannot see Center Director account controls.");
+assert.equal(canManageUserFromSetup(directorViewer, directorViewer), false, "Center Director cannot manage their own account controls.");
+
+const adminSetupMarkup = renderToStaticMarkup(
+  <AdminWorkspace currentUser={{ id: "admin-1", email: "admin@example.com", firstName: "Admin", lastName: "User", role: "ADMIN" }} />
+);
+assert.match(adminSetupMarkup, /value="CENTER_DIRECTOR"[^>]*>Center Director/, "Admin sees Center Director as a role option.");
+const directorSetupMarkup = renderToStaticMarkup(
+  <AdminWorkspace currentUser={{ id: "director-1", email: "director@example.com", firstName: "Center", lastName: "Director", role: "CENTER_DIRECTOR" }} />
+);
+assert.doesNotMatch(directorSetupMarkup, /value="ADMIN"|value="CENTER_DIRECTOR"/, "Center Director cannot select Admin or Center Director roles.");
+assert.doesNotMatch(directorSetupMarkup, /Demo\/Test Data Cleanup/, "Center Director does not see true Admin-only cleanup controls.");
 assert.deepEqual(
   overviewLinksForRole("FACILITATOR").map((item) => item.label),
   ["Members", "Meetings", "Documents", "Feedback", "Band Progress"],

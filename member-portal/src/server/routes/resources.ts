@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { canManageOperationalData } from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 import { roleResourceKey } from "../services/standardRoles.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
@@ -49,7 +50,7 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
     ...(requirementId ? { requirementId } : {}),
     ...(category ? { category } : {}),
     ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
-    ...(user.role === Role.ADMIN && status ? { status } : { status: "ACTIVE" })
+    ...(canManageOperationalData(user) && status ? { status } : { status: "ACTIVE" })
   };
 
   if (user.role === Role.STUDENT) {
@@ -96,8 +97,8 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
 resourcesRouter.post("/", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN) {
-    response.status(403).json({ message: "Only admins can add resource links." });
+  if (!canManageOperationalData(user)) {
+    response.status(403).json({ message: "Only operational managers can add resource links." });
     return;
   }
 
@@ -127,8 +128,8 @@ resourcesRouter.post("/", asyncRoute(async (request, response) => {
 resourcesRouter.patch("/:resourceId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN) {
-    response.status(403).json({ message: "Only admins can edit resource links." });
+  if (!canManageOperationalData(user)) {
+    response.status(403).json({ message: "Only operational managers can edit resource links." });
     return;
   }
 
@@ -164,7 +165,7 @@ resourcesRouter.delete("/:resourceId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
   if (!canPermanentlyDeleteResourceLink(user.role)) {
-    response.status(403).json({ message: "Only admins can delete resource links." });
+    response.status(403).json({ message: "Only operational managers can delete resource links." });
     return;
   }
 
@@ -185,7 +186,7 @@ resourcesRouter.delete("/:resourceId", asyncRoute(async (request, response) => {
 }));
 
 export function canPermanentlyDeleteResourceLink(role: Role) {
-  return role === Role.ADMIN;
+  return canManageOperationalData(role);
 }
 
 const resourceInclude = {

@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { canManageOperationalData } from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 import { bandLevels, documentCategories, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
@@ -61,7 +62,7 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
     ...(bandLevel ? { bandLevel } : {}),
     ...(category ? { category } : {}),
     ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
-    ...(user.role === Role.ADMIN ? (status ? { status } : {}) : { status: "ACTIVE" })
+    ...(canManageOperationalData(user) ? (status ? { status } : {}) : { status: "ACTIVE" })
   };
 
   if (user.role === Role.STUDENT) {
@@ -118,8 +119,8 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
 documentsRouter.post("/", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can add documents." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can add documents." });
     return;
   }
 
@@ -161,7 +162,7 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
       clubId,
       category: data.category ?? "Other",
       uploadedById: user.id,
-      status: user.role === Role.ADMIN ? data.status ?? "ACTIVE" : "ACTIVE"
+      status: canManageOperationalData(user) ? data.status ?? "ACTIVE" : "ACTIVE"
     },
     include: documentInclude
   });
@@ -172,8 +173,8 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
 documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can edit documents." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can edit documents." });
     return;
   }
 
@@ -224,7 +225,7 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
       sessionModule: parsed.data.sessionModule === undefined ? undefined : parsed.data.sessionModule || null,
       clubId: targetClubId,
       category: parsed.data.category,
-      status: user.role === Role.ADMIN ? parsed.data.status : undefined
+      status: canManageOperationalData(user) ? parsed.data.status : undefined
     },
     include: documentInclude
   });
@@ -236,7 +237,7 @@ documentsRouter.delete("/:documentId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
   if (!canPermanentlyDeleteDocument(user.role)) {
-    response.status(403).json({ message: "Only admins can delete documents." });
+    response.status(403).json({ message: "Only operational managers can delete documents." });
     return;
   }
 
@@ -257,7 +258,7 @@ documentsRouter.delete("/:documentId", asyncRoute(async (request, response) => {
 }));
 
 export function canPermanentlyDeleteDocument(role: Role) {
-  return role === Role.ADMIN;
+  return canManageOperationalData(role);
 }
 
 const documentInclude = {
@@ -268,7 +269,7 @@ const documentInclude = {
 } satisfies Prisma.BandDocumentInclude;
 
 async function getVisibleClubIds(userId: string, role: Role) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return null;
   }
 
@@ -329,7 +330,7 @@ async function getStudentDocumentContext(userId: string) {
 }
 
 async function canManageDocumentClub(userId: string, role: Role, clubId: string) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       select: { isActive: true, centre: { select: { isActive: true } } }
@@ -354,7 +355,7 @@ async function canManageDocumentClub(userId: string, role: Role, clubId: string)
 }
 
 export function canEditDocumentScope(role: Role, existingClubId: string | null, targetClubId: string | null) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return true;
   }
 

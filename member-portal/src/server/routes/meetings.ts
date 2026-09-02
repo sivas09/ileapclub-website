@@ -4,6 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
+import { canManageOperationalData } from "../permissions.js";
 import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
 import { memberUserSelect } from "../services/safeUser.js";
 import { standardIleapRoleNames } from "../services/standardRoles.js";
@@ -154,7 +155,7 @@ meetingsRouter.get("/role-definitions", asyncRoute(async (request, response) => 
   const user = request.user!;
 
   const roleDefinitions = await prisma.roleDefinition.findMany({
-    where: user.role === Role.ADMIN ? {} : { isActive: true },
+    where: canManageOperationalData(user) ? {} : { isActive: true },
     orderBy: [{ programLevel: "asc" }, { sortOrder: "asc" }, { name: "asc" }]
   });
 
@@ -165,7 +166,7 @@ meetingsRouter.post("/role-definitions", asyncRoute(async (request, response) =>
   const user = request.user!;
 
   if (!canManageRoleDefinitions(user.role)) {
-    response.status(403).json({ message: "Only admins can create role types." });
+    response.status(403).json({ message: "Only operational managers can create role types." });
     return;
   }
 
@@ -204,7 +205,7 @@ meetingsRouter.patch("/role-definitions/:roleDefinitionId", asyncRoute(async (re
   const user = request.user!;
 
   if (!canManageRoleDefinitions(user.role)) {
-    response.status(403).json({ message: "Only admins can edit role types." });
+    response.status(403).json({ message: "Only operational managers can edit role types." });
     return;
   }
 
@@ -244,7 +245,7 @@ meetingsRouter.delete("/role-definitions/:roleDefinitionId", asyncRoute(async (r
   const user = request.user!;
 
   if (!canManageRoleDefinitions(user.role)) {
-    response.status(403).json({ message: "Only admins can remove role types." });
+    response.status(403).json({ message: "Only operational managers can remove role types." });
     return;
   }
 
@@ -281,8 +282,8 @@ meetingsRouter.delete("/role-definitions/:roleDefinitionId", asyncRoute(async (r
 meetingsRouter.post("/", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can create meetings." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can create meetings." });
     return;
   }
 
@@ -346,8 +347,8 @@ meetingsRouter.post("/", asyncRoute(async (request, response) => {
 meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can generate meetings." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can generate meetings." });
     return;
   }
 
@@ -429,8 +430,8 @@ meetingsRouter.post("/bulk", asyncRoute(async (request, response) => {
 meetingsRouter.patch("/:meetingId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can edit meetings." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can edit meetings." });
     return;
   }
 
@@ -488,8 +489,8 @@ meetingsRouter.patch("/:meetingId", asyncRoute(async (request, response) => {
 meetingsRouter.delete("/:meetingId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can delete meetings." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can delete meetings." });
     return;
   }
 
@@ -557,8 +558,8 @@ meetingsRouter.get("/:meetingId/agenda.rtf", asyncRoute(async (request, response
 meetingsRouter.post("/:meetingId/slots", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can add role slots." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can add role slots." });
     return;
   }
 
@@ -788,8 +789,8 @@ meetingsRouter.post("/:meetingId/slots/:slotId/release", asyncRoute(async (reque
 meetingsRouter.patch("/:meetingId/slots/:slotId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can edit role slots." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can edit role slots." });
     return;
   }
 
@@ -856,8 +857,8 @@ meetingsRouter.patch("/:meetingId/slots/:slotId", asyncRoute(async (request, res
 meetingsRouter.delete("/:meetingId/slots/:slotId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can remove role slots." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can remove role slots." });
     return;
   }
 
@@ -896,8 +897,8 @@ meetingsRouter.delete("/:meetingId/slots/:slotId", asyncRoute(async (request, re
 meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can override role assignments." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can override role assignments." });
     return;
   }
 
@@ -983,8 +984,8 @@ meetingsRouter.put("/:meetingId/slots/:slotId", asyncRoute(async (request, respo
 meetingsRouter.patch("/:meetingId/lock", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can lock roles." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can lock roles." });
     return;
   }
 
@@ -1015,8 +1016,8 @@ meetingsRouter.patch("/:meetingId/lock", asyncRoute(async (request, response) =>
 meetingsRouter.put("/:meetingId/attendance", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can mark attendance." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can mark attendance." });
     return;
   }
 
@@ -1078,8 +1079,8 @@ meetingsRouter.put("/:meetingId/attendance", asyncRoute(async (request, response
 meetingsRouter.put("/:meetingId/slots/:slotId/score", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can score role performance." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can score role performance." });
     return;
   }
 
@@ -1146,8 +1147,8 @@ meetingsRouter.put("/:meetingId/slots/:slotId/score", asyncRoute(async (request,
 meetingsRouter.put("/:meetingId/student-feedback", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can save member feedback." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can save member feedback." });
     return;
   }
 
@@ -1359,7 +1360,7 @@ async function syncPairedReportAssignment(
 }
 
 async function getVisibleClubFilter(userId: string, role: Role) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return null;
   }
 
@@ -1397,7 +1398,7 @@ async function getVisibleClubFilter(userId: string, role: Role) {
 }
 
 async function canManageClubId(userId: string, role: Role, clubId: string) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return true;
   }
 
@@ -1452,7 +1453,7 @@ async function isActiveClub(clubId: string) {
 }
 
 async function canViewMeeting(userId: string, role: Role, clubId: string) {
-  if (role === Role.ADMIN) {
+  if (canManageOperationalData(role)) {
     return true;
   }
 
@@ -1531,11 +1532,11 @@ async function getAvailableRoleDefinitionForClub(roleDefinitionId: string, clubP
 }
 
 export function canManageRoleDefinitions(role: Role) {
-  return role === Role.ADMIN;
+  return canManageOperationalData(role);
 }
 
 export function canReleaseMeetingRole(role: Role, isOwnClaim = false) {
-  return role === Role.ADMIN || role === Role.FACILITATOR || (role === Role.STUDENT && isOwnClaim);
+  return canManageOperationalData(role) || role === Role.FACILITATOR || (role === Role.STUDENT && isOwnClaim);
 }
 
 export function isLeadershipRoleName(roleName: string) {

@@ -7,6 +7,14 @@ import { requireAuth, requireRole } from "../auth.js";
 import { isDemoCleanupEnabled } from "../config.js";
 import { prisma } from "../db.js";
 import {
+  canCreateAccountWithRole,
+  canEditAccount,
+  canManageAccountAccess,
+  canManageAdminAccounts,
+  isCenterDirector,
+  operationalManagerRoles
+} from "../permissions.js";
+import {
   facilitatorUserSelect,
   memberUserSelect,
   safeUserDto
@@ -30,7 +38,7 @@ const userSchema = z.object({
   password: z.string().min(8),
   firstName: z.string().trim().min(1),
   lastName: z.string().trim().min(1),
-  role: z.enum([Role.ADMIN, Role.FACILITATOR, Role.STUDENT]),
+  role: z.enum([Role.ADMIN, Role.CENTER_DIRECTOR, Role.FACILITATOR, Role.STUDENT]),
   grade: z.string().trim().optional(),
   programLevel: z.enum(["JUNIOR", "SENIOR"]).optional(),
   bandLevel: z.string().trim().optional(),
@@ -72,14 +80,14 @@ const validBandLevels = new Set([
   "Black II"
 ]);
 
-const editableRoles = new Set<Role>([Role.ADMIN, Role.FACILITATOR, Role.STUDENT]);
+const editableRoles = new Set<Role>([Role.ADMIN, Role.CENTER_DIRECTOR, Role.FACILITATOR, Role.STUDENT]);
 
 export const adminRouter = Router();
 
-adminRouter.use(requireAuth, requireRole([Role.ADMIN]));
+adminRouter.use(requireAuth, requireRole(operationalManagerRoles));
 
 export function canAdminResetPassword(role: Role) {
-  return role === Role.ADMIN;
+  return canManageAdminAccounts(role);
 }
 
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
@@ -95,7 +103,10 @@ function asyncRoute(handler: (request: Request, response: Response, next: NextFu
   };
 }
 
-adminRouter.get("/overview", asyncRoute(async (_request, response) => {
+adminRouter.get("/overview", asyncRoute(async (request, response) => {
+  const visibleUserRoles = isCenterDirector(request.user!)
+    ? [Role.FACILITATOR, Role.STUDENT]
+    : [Role.ADMIN, Role.CENTER_DIRECTOR, Role.FACILITATOR, Role.STUDENT];
   const [centres, clubs, users, students] = await Promise.all([
     prisma.centre.findMany({
       orderBy: [{ province: "asc" }, { city: "asc" }, { name: "asc" }],
@@ -119,7 +130,7 @@ adminRouter.get("/overview", asyncRoute(async (_request, response) => {
     }),
     prisma.user.findMany({
       where: {
-        role: { in: [Role.ADMIN, Role.FACILITATOR, Role.STUDENT] }
+        role: { in: visibleUserRoles }
       },
       orderBy: [{ role: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
       select: {
@@ -317,6 +328,12 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
   }
 
   const data = parsed.data;
+
+  if (!canCreateAccountWithRole(request.user!, data.role)) {
+    response.status(403).json({ message: "You cannot create an account with that role." });
+    return;
+  }
+
   const email = data.email.toLowerCase();
   const requestedClubIds = [...new Set([...data.clubIds, ...data.facilitatorClubIds])];
 
@@ -464,6 +481,11 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (!canEditAccount(request.user!, existingUser, data.role)) {
+    response.status(403).json({ message: "You cannot edit this account or assign that role." });
+    return;
+  }
+
   if (data.isActive !== existingUser.isActive) {
     response.status(400).json({ message: "Use the dedicated deactivate or reactivate action to change account status." });
     return;
@@ -570,8 +592,12 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
       throw new AdminActionError(404, "User not found.");
     }
 
-    if (user.role !== Role.STUDENT && user.role !== Role.FACILITATOR) {
-      throw new AdminActionError(400, "Only member and facilitator accounts can be reactivated with club access.");
+    if (!canManageAccountAccess(request.user!, user.role)) {
+      throw new AdminActionError(403, "You cannot reactivate this account.");
+    }
+
+    if (user.role !== Role.STUDENT && user.role !== Role.FACILITATOR && user.role !== Role.CENTER_DIRECTOR) {
+      throw new AdminActionError(400, "This account type cannot be reactivated here.");
     }
 
     if (user.isActive) {
@@ -586,8 +612,10 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
       }
 
       await syncStudentClubAccess(tx, user.studentProfile.id, clubIds);
-    } else {
+    } else if (user.role === Role.FACILITATOR) {
       await syncFacilitatorClubAccess(tx, user.id, clubIds);
+    } else if (clubIds.length) {
+      throw new AdminActionError(400, "Center Director accounts cannot be assigned to clubs.");
     }
 
     const updatedUser = await tx.user.update({
@@ -599,9 +627,9 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
     return {
       user: safeUserDto(updatedUser),
       activeClubIds: clubIds,
-      warning: clubIds.length
-        ? null
-        : "This account will reactivate, but the member/facilitator will not have active club access."
+      warning: user.role !== Role.CENTER_DIRECTOR && !clubIds.length
+        ? "This account will reactivate, but the member/facilitator will not have active club access."
+        : null
     };
   });
 
@@ -611,11 +639,6 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
 adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response) => {
   const userId = String(request.params.userId);
   const parsed = passwordResetSchema.safeParse(request.body);
-
-  if (!request.user || !canAdminResetPassword(request.user.role)) {
-    response.status(403).json({ message: "Only admins can reset passwords." });
-    return;
-  }
 
   if (!parsed.success) {
     response.status(400).json({ message: "Enter a new password of at least 8 characters." });
@@ -629,6 +652,11 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
 
   if (!user || !editableRoles.has(user.role)) {
     response.status(404).json({ message: "User not found." });
+    return;
+  }
+
+  if (!canManageAccountAccess(request.user!, user.role)) {
+    response.status(403).json({ message: "You cannot reset this account's password." });
     return;
   }
 
@@ -660,6 +688,11 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
 
   if (!user || !editableRoles.has(user.role)) {
     response.status(404).json({ message: "User not found." });
+    return;
+  }
+
+  if (!canManageAccountAccess(request.user!, user.role)) {
+    response.status(403).json({ message: "You cannot deactivate this account." });
     return;
   }
 
@@ -728,14 +761,14 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
   response.json(result);
 }));
 
-adminRouter.delete("/users/:userId/demo", requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
+adminRouter.delete("/users/:userId/demo", requireRole([Role.ADMIN]), requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
   const userId = String(request.params.userId);
   const result = await deleteSampleUser(userId, request.user!.id);
 
   response.json(result);
 }));
 
-adminRouter.get("/demo/cleanup-preview", requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
+adminRouter.get("/demo/cleanup-preview", requireRole([Role.ADMIN]), requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
   const sampleStudentIds = await getSampleStudentIds();
   const [sampleUsers, demoMeetingIds] = await Promise.all([
     prisma.user.count({
@@ -757,7 +790,7 @@ adminRouter.get("/demo/cleanup-preview", requireDemoCleanupEnabled, asyncRoute(a
   });
 }));
 
-adminRouter.post("/demo/delete-sample-users", requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
+adminRouter.post("/demo/delete-sample-users", requireRole([Role.ADMIN]), requireDemoCleanupEnabled, asyncRoute(async (request, response) => {
   const sampleUsers = await prisma.user.findMany({
     where: {
       id: { not: request.user!.id },
@@ -778,13 +811,13 @@ adminRouter.post("/demo/delete-sample-users", requireDemoCleanupEnabled, asyncRo
   });
 }));
 
-adminRouter.post("/demo/delete-sample-feedback", requireDemoCleanupEnabled, asyncRoute(async (_request, response) => {
+adminRouter.post("/demo/delete-sample-feedback", requireRole([Role.ADMIN]), requireDemoCleanupEnabled, asyncRoute(async (_request, response) => {
   const summary = await deleteSampleFeedback();
 
   response.json(summary);
 }));
 
-adminRouter.post("/demo/reset-meeting-data", requireDemoCleanupEnabled, asyncRoute(async (_request, response) => {
+adminRouter.post("/demo/reset-meeting-data", requireRole([Role.ADMIN]), requireDemoCleanupEnabled, asyncRoute(async (_request, response) => {
   const sampleStudentIds = await getSampleStudentIds();
   const demoMeetingIds = await getDemoMeetingIds(sampleStudentIds);
   const [roleScores, studentFeedback, attendance, roleSlots] = await prisma.$transaction([

@@ -22,6 +22,7 @@ import {
   formatProgramLevel,
   formatResourceScope,
   groupResourceLinks,
+  isOperationalManagerRole,
   programLevelOptions,
   ResourceActions,
   resourceGroupFor,
@@ -115,7 +116,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       category: "",
       search: "",
       session: "",
-      status: user.role === "ADMIN" ? "" : "ACTIVE"
+      status: isOperationalManagerRole(user.role) ? "" : "ACTIVE"
     };
 
     setFilters(nextFilters);
@@ -253,7 +254,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
             {documentCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
         </label>
-        {user.role === "ADMIN" ? (
+        {isOperationalManagerRole(user.role) ? (
           <label>
             Status
             <select value={filters.status} onChange={(event) => updateFilter("status", event.currentTarget.value)}>
@@ -318,7 +319,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
           <label>
             Club
             <select name="clubId" defaultValue={user.role === "FACILITATOR" && clubs.length === 1 ? clubs[0].id : ""} required={user.role === "FACILITATOR"}>
-              {user.role === "ADMIN" ? <option value="">All clubs</option> : null}
+              {isOperationalManagerRole(user.role) ? <option value="">All clubs</option> : null}
               {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
             </select>
           </label>
@@ -356,10 +357,10 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
                   key={document.id}
                   document={document}
                   clubs={clubs}
-                  canEdit={user.role === "ADMIN" || (user.role === "FACILITATOR" && Boolean(document.clubId))}
-                  canArchive={user.role === "ADMIN"}
-                  canDelete={user.role === "ADMIN"}
-                  canAssignGlobal={user.role === "ADMIN"}
+                  canEdit={isOperationalManagerRole(user.role) || (user.role === "FACILITATOR" && Boolean(document.clubId))}
+                  canArchive={isOperationalManagerRole(user.role)}
+                  canDelete={isOperationalManagerRole(user.role)}
+                  canAssignGlobal={isOperationalManagerRole(user.role)}
                   isEditing={editingDocument?.id === document.id}
                   isSubmitting={isSubmitting}
                   onEdit={() => setEditingDocument(document)}
@@ -786,7 +787,7 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
-  const canEdit = user.role === "ADMIN";
+  const canEdit = isOperationalManagerRole(user.role);
   const selectedResource = resources.find((resource) => resource.id === selectedResourceId)
     ?? (selectedResourceOverride?.id === selectedResourceId ? selectedResourceOverride : null);
 
@@ -947,7 +948,7 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
                 {resourceCategoryOptions.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             </label>
-            {user.role === "ADMIN" ? (
+            {isOperationalManagerRole(user.role) ? (
               <label>
                 Status
                 <select value={filters.status} onChange={(event) => updateFilter("status", event.currentTarget.value)}>
@@ -1217,5 +1218,4 @@ function resourcePayloadFromForm(form: HTMLFormElement) {
     category: String(formData.get("category") || "Other")
   };
 }
-
 

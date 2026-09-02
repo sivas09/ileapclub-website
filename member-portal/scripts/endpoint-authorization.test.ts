@@ -23,6 +23,7 @@ type MockFn = (...args: any[]) => any;
 
 const users = {
   admin: { id: "admin-user", email: "admin@example.com", firstName: "Admin", lastName: "User", role: Role.ADMIN, isActive: true },
+  director: { id: "director-user", email: "director@example.com", firstName: "Center", lastName: "Director", role: Role.CENTER_DIRECTOR, isActive: true },
   facilitator: { id: "facilitator-user", email: "facilitator@example.com", firstName: "Test", lastName: "Facilitator", role: Role.FACILITATOR, isActive: true },
   student: { id: "student-user", email: "student@example.com", firstName: "Current", lastName: "Student", role: Role.STUDENT, isActive: true }
 };
@@ -50,6 +51,7 @@ const state = {
   documentCreates: 0,
   noticeCreates: 0,
   resourceCreates: 0,
+  userCreates: 0,
   memberFeedbackCreates: 0,
   memberFeedbackUpdates: 0,
   memberFeedbackDeletes: 0,
@@ -77,8 +79,18 @@ patchModel("user", {
       : null;
   },
   findMany: ({ where, select }: any = {}) => where?.role?.in
-    ? [projectUser(rawUser(users.admin.id, Role.ADMIN), select)]
-    : []
+    ? Object.values(users)
+      .filter((user) => where.role.in.includes(user.role))
+      .map((user) => projectUser({ ...rawUser(user.id, user.role), ...user }, select))
+    : [],
+  create: ({ data, select }: any) => {
+    state.userCreates += 1;
+    return projectUser({ ...rawUser(`created-${state.userCreates}`, data.role), ...data, id: `created-${state.userCreates}`, isActive: true }, select);
+  },
+  update: ({ where, data, select }: any) => {
+    const existing = Object.values(users).find((candidate) => candidate.id === where.id) ?? rawUser(where.id, data.role ?? Role.STUDENT);
+    return projectUser({ ...rawUser(where.id, data.role ?? existing.role), ...existing, ...data }, select);
+  }
 });
 patchModel("club", {
   count: ({ where }: any) => where.id?.in?.every((clubId: string) => clubId === assignedClubId || clubId === otherClubId) ? where.id.in.length : 0,
@@ -108,17 +120,24 @@ patchModel("club", {
     : [],
   findUnique: ({ where }: any) => where.id === assignedClubId || where.id === otherClubId
     ? { id: where.id, isActive: true, centre: { isActive: true } }
-    : null
+    : null,
+  create: ({ data }: any) => ({ id: "created-club", ...data, isActive: true, centre: { id: data.centreId, name: "Centre", isActive: true } }),
+  update: ({ where, data }: any) => ({ id: where.id, centreId: "centre-1", name: "Updated Club", program: "Junior", isActive: data.isActive, centre: { id: "centre-1", name: "Centre", isActive: true }, studentMemberships: [], facilitators: [] })
 });
 patchModel("centre", {
-  findMany: () => []
+  findMany: () => [],
+  findUnique: ({ where }: any) => ({ id: where.id, name: "Centre", isActive: true }),
+  create: ({ data }: any) => ({ id: "created-centre", ...data, isActive: true }),
+  update: ({ where, data }: any) => ({ id: where.id, name: "Centre", province: "Ontario", city: "Ottawa", address: null, isActive: data.isActive, clubs: [] })
 });
 patchModel("clubFacilitator", {
   findMany: () => [{ clubId: assignedClubId }],
   findFirst: ({ where }: any) => where.facilitatorId === users.facilitator.id && includesClub(where.clubId, assignedClubId)
     ? { id: "club-facilitator" }
     : null,
-  count: ({ where }: any) => where.facilitatorId === users.facilitator.id && where.clubId === assignedClubId ? 1 : 0
+  count: ({ where }: any) => where.facilitatorId === users.facilitator.id && where.clubId === assignedClubId ? 1 : 0,
+  deleteMany: () => ({ count: 0 }),
+  createMany: ({ data }: any) => ({ count: data.length })
 });
 patchModel("centreFacilitator", {
   findFirst: () => null,
@@ -426,9 +445,36 @@ try {
 
   await assertStatus("auth me response excludes confidential fields", "GET", "/api/auth/me", Role.ADMIN, 200);
   await assertStatus("admin overview response excludes confidential fields", "GET", "/api/admin/overview", Role.ADMIN, 200);
+  const directorOverviewResponse = await assertStatus("center director can open operational setup", "GET", "/api/admin/overview", Role.CENTER_DIRECTOR, 200);
+  const directorOverview = await directorOverviewResponse.json() as { users: Array<{ role: Role }> };
+  assertEqual(directorOverview.users.some((user) => user.role === Role.ADMIN || user.role === Role.CENTER_DIRECTOR), false, "center director overview hides governed accounts");
+
+  await assertStatus("admin can create a center director", "POST", "/api/admin/users", Role.ADMIN, 201, adminUserPayload(Role.CENTER_DIRECTOR));
+  await assertStatus("center director can create a member", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 201, adminUserPayload(Role.STUDENT));
+  await assertStatus("center director can create a facilitator", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 201, adminUserPayload(Role.FACILITATOR));
+  await assertStatus("center director cannot create an admin", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 403, adminUserPayload(Role.ADMIN));
+  await assertStatus("center director cannot create another center director", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 403, adminUserPayload(Role.CENTER_DIRECTOR));
+  await assertStatus("center director can edit a member", "PATCH", `/api/admin/users/${users.student.id}`, Role.CENTER_DIRECTOR, 200, adminUserUpdatePayload(Role.STUDENT));
+  await assertStatus("center director can edit a facilitator", "PATCH", `/api/admin/users/${users.facilitator.id}`, Role.CENTER_DIRECTOR, 200, adminUserUpdatePayload(Role.FACILITATOR));
+  await assertStatus("center director cannot edit an admin", "PATCH", `/api/admin/users/${users.admin.id}`, Role.CENTER_DIRECTOR, 403, adminUserUpdatePayload(Role.ADMIN));
+  await assertStatus("center director cannot promote a member to admin", "PATCH", `/api/admin/users/${users.student.id}`, Role.CENTER_DIRECTOR, 403, adminUserUpdatePayload(Role.ADMIN));
+  await assertStatus("center director cannot change their own role", "PATCH", `/api/admin/users/${users.director.id}`, Role.CENTER_DIRECTOR, 403, adminUserUpdatePayload(Role.ADMIN));
+  await assertStatus("center director cannot reset an admin password", "PATCH", `/api/admin/users/${users.admin.id}/password`, Role.CENTER_DIRECTOR, 403, { newPassword: "new-password-123" });
+  await assertStatus("center director cannot deactivate an admin", "PATCH", `/api/admin/users/${users.admin.id}/deactivate`, Role.CENTER_DIRECTOR, 403);
+  await assertStatus("center director cannot reactivate an admin", "PATCH", `/api/admin/users/${users.admin.id}/active`, Role.CENTER_DIRECTOR, 403, { isActive: true, clubIds: [] });
+  await assertStatus("center director cannot access admin-only user deletion", "DELETE", `/api/admin/users/${users.admin.id}/demo`, Role.CENTER_DIRECTOR, 403);
+
+  await assertStatus("center director can create a centre", "POST", "/api/admin/centres", Role.CENTER_DIRECTOR, 201, { name: "Ottawa Centre", province: "Ontario", city: "Ottawa" });
+  await assertStatus("center director can edit a centre status", "PATCH", "/api/admin/centres/centre-1/archive", Role.CENTER_DIRECTOR, 200, { isActive: false });
+  await assertStatus("center director can create a club", "POST", "/api/admin/clubs", Role.CENTER_DIRECTOR, 201, { centreId: "centre-1", name: "Junior Club", program: "Junior Regular Meeting" });
+  await assertStatus("center director can edit a club status", "PATCH", `/api/admin/clubs/${assignedClubId}/archive`, Role.CENTER_DIRECTOR, 200, { isActive: false });
 
   await assertStatus("admin can view all members", "GET", "/api/members", Role.ADMIN, 200);
+  await assertStatus("center director can view all members", "GET", "/api/members", Role.CENTER_DIRECTOR, 200);
+  await assertStatus("center director can add a member", "POST", "/api/members", Role.CENTER_DIRECTOR, 201, memberPayload([assignedClubId]));
+  await assertStatus("center director can update a member", "PATCH", `/api/members/${otherStudentId}`, Role.CENTER_DIRECTOR, 200, { programLevel: "JUNIOR", bandLevel: "Yellow" });
   await assertStatus("admin member detail excludes confidential fields", "GET", `/api/members/${assignedStudentId}`, Role.ADMIN, 200);
+  await assertStatus("center director can view member details and feedback", "GET", `/api/members/${assignedStudentId}`, Role.CENTER_DIRECTOR, 200);
   const facilitatorMembersResponse = await assertStatus("facilitator can view assigned club members", "GET", `/api/members?clubId=${assignedClubId}`, Role.FACILITATOR, 200);
   assertNoPaymentResponseFields(await facilitatorMembersResponse.json(), "facilitator members response");
   const studentMemberResponse = await assertStatus("student can view an own-club member", "GET", `/api/members/${assignedStudentId}`, Role.STUDENT, 200);
@@ -444,10 +490,12 @@ try {
   await assertStatus("facilitator can write feedback for an assigned-club member", "POST", `/api/members/${assignedStudentId}/feedback`, Role.FACILITATOR, 201, memberFeedbackPayload(assignedClubId));
   await assertStatus("facilitator cannot write feedback for an unassigned-club member", "POST", `/api/members/${otherStudentId}/feedback`, Role.FACILITATOR, 403, memberFeedbackPayload(otherClubId));
   await assertStatus("admin can write feedback for any active member", "POST", `/api/members/${otherStudentId}/feedback`, Role.ADMIN, 201, memberFeedbackPayload(otherClubId));
+  await assertStatus("center director can write feedback for any active member", "POST", `/api/members/${otherStudentId}/feedback`, Role.CENTER_DIRECTOR, 201, memberFeedbackPayload(otherClubId));
   await assertStatus("member cannot write feedback", "POST", `/api/members/${assignedStudentId}/feedback`, Role.STUDENT, 403, memberFeedbackPayload(assignedClubId));
   await assertStatus("facilitator can edit feedback they created", "PATCH", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.FACILITATOR, 200, { feedback: "Updated by its author." });
   await assertStatus("facilitator cannot edit another facilitator's feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.FACILITATOR, 403, { feedback: "Tampered feedback." });
   await assertStatus("admin can edit any member feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.ADMIN, 200, { feedback: "Admin correction." });
+  await assertStatus("center director can edit operational feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.CENTER_DIRECTOR, 200, { feedback: "Director correction." });
   await assertStatus("member cannot edit feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.STUDENT, 403, { feedback: "Tampered feedback." });
   await assertStatus("facilitator can delete feedback they created", "DELETE", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.FACILITATOR, 200);
   await assertStatus("facilitator cannot delete another facilitator's feedback", "DELETE", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.FACILITATOR, 403);
@@ -455,6 +503,7 @@ try {
   await assertStatus("member cannot delete feedback", "DELETE", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.STUDENT, 403);
 
   await assertStatus("admin can assign a meeting role", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.ADMIN, 200, { studentId: assignedStudentId });
+  await assertStatus("center director can manage meeting role assignments", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.CENTER_DIRECTOR, 200, { studentId: assignedStudentId });
   await assertStatus("facilitator can assign a role in assigned club", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.FACILITATOR, 200, { studentId: assignedStudentId });
   await assertStatus("facilitator cannot assign a role in unassigned club", "PUT", "/api/meetings/other-meeting/slots/other-club-slot", Role.FACILITATOR, 403, { studentId: otherStudentId });
   await assertStatus("student cannot use manager role assignment endpoint", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.STUDENT, 403, { studentId: assignedStudentId });
@@ -475,6 +524,7 @@ try {
   await assertStatus("student cannot release another student's role", "POST", "/api/meetings/assigned-meeting/slots/other-student-slot/release", Role.STUDENT, 403);
   await assertStatus("student can release own claimed role", "POST", "/api/meetings/assigned-meeting/slots/student-slot/release", Role.STUDENT, 200);
   await assertStatus("facilitator can edit assigned-club meeting", "PATCH", "/api/meetings/assigned-meeting", Role.FACILITATOR, 200, { title: "Updated Saturday Meeting" });
+  await assertStatus("center director can edit meetings", "PATCH", "/api/meetings/other-meeting", Role.CENTER_DIRECTOR, 200, { title: "Director Updated Meeting" });
   await assertStatus("facilitator cannot edit another club meeting by tampering with id", "PATCH", "/api/meetings/other-meeting", Role.FACILITATOR, 403, { title: "Tampered Meeting" });
   await assertStatus("student cannot edit meeting directly", "PATCH", "/api/meetings/assigned-meeting", Role.STUDENT, 403, { title: "Tampered Meeting" });
   await assertStatus("invalid calendar meeting date is rejected", "POST", "/api/meetings", Role.ADMIN, 400, meetingPayload("2026-02-30"));
@@ -508,6 +558,7 @@ try {
   assertEqual(state.deletedMeetingIds.has("failure-delete-meeting"), false, "failed related-record deletion leaves meeting intact");
 
   await assertStatus("admin can add documents", "POST", "/api/documents", Role.ADMIN, 201, documentPayload(null));
+  await assertStatus("center director can add global documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 201, documentPayload(null));
   await assertStatus("facilitator can add assigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 201, documentPayload(assignedClubId));
   await assertStatus("facilitator cannot add unassigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 403, documentPayload(otherClubId));
   await assertStatus("student cannot add documents", "POST", "/api/documents", Role.STUDENT, 403, documentPayload(assignedClubId));
@@ -524,6 +575,7 @@ try {
   await assertStatus("admin can create Club A notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(assignedClubId));
   await assertStatus("admin can create Club B notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(otherClubId));
   await assertStatus("admin can create all-clubs notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(null));
+  await assertStatus("center director can create all-clubs notice", "POST", "/api/notices", Role.CENTER_DIRECTOR, 201, noticePayload(null));
   await assertStatus("notice title maximum is enforced", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), title: "x".repeat(121) });
   await assertStatus("notice message is required", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), message: "" });
   await assertStatus("notice expiry must be a valid timestamp", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), expiresAt: "not-a-date" });
@@ -565,12 +617,14 @@ try {
   await assertStatus("admin can permanently delete notice", "DELETE", "/api/notices/notice-a", Role.ADMIN, 200);
 
   await assertStatus("admin can add resources", "POST", "/api/resources", Role.ADMIN, 201, resourcePayload());
+  await assertStatus("center director can add resources", "POST", "/api/resources", Role.CENTER_DIRECTOR, 201, resourcePayload());
   await assertStatus("facilitator cannot add resources", "POST", "/api/resources", Role.FACILITATOR, 403, resourcePayload());
   await assertStatus("student cannot delete resources", "DELETE", "/api/resources/resource-1", Role.STUDENT, 403);
   await assertStatus("admin can delete resources", "DELETE", "/api/resources/resource-1", Role.ADMIN, 200);
   await assertStatus("admin resource list excludes confidential fields", "GET", "/api/resources", Role.ADMIN, 200);
 
   await assertStatus("admin feedback report excludes confidential fields", "GET", "/api/reports/facilitator-feedback", Role.ADMIN, 200);
+  await assertStatus("center director can view operational reports", "GET", "/api/reports/facilitator-feedback", Role.CENTER_DIRECTOR, 200);
   const studentProgressResponse = await assertStatus("student self progress excludes confidential fields", "GET", "/api/student/me/progress", Role.STUDENT, 200);
   const studentProgress = parseStudentProgressResponse(await studentProgressResponse.json());
   assertEqual(studentProgress.student.id, assignedStudentId, "student self progress includes the member id");
@@ -580,21 +634,24 @@ try {
   assertEqual(studentProgress.summary.programLevel, "JUNIOR", "student self progress includes the program level");
   assertEqual(studentProgress.summary.bandLevel, "White", "student self progress includes the current band");
   await assertStatus("admin student progress excludes confidential fields", "GET", `/api/student/${assignedStudentId}/progress`, Role.ADMIN, 200);
+  await assertStatus("center director can view student progress", "GET", `/api/student/${assignedStudentId}/progress`, Role.CENTER_DIRECTOR, 200);
 
   await assertStatus("admin can update student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.ADMIN, 200, progressPayload());
+  await assertStatus("center director can update student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.CENTER_DIRECTOR, 200, progressPayload());
   await assertStatus("facilitator can update assigned student band progress", "PUT", `/api/student/${assignedStudentId}/requirements/requirement-1`, Role.FACILITATOR, 200, progressPayload());
   await assertStatus("facilitator cannot update unassigned student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.FACILITATOR, 403, progressPayload());
   await assertStatus("student cannot update band progress", "PUT", `/api/student/${assignedStudentId}/requirements/requirement-1`, Role.STUDENT, 403, progressPayload());
   await assertStatus("student cannot manage band requirement definitions", "POST", "/api/student/requirements", Role.STUDENT, 403, requirementPayload());
   await assertStatus("admin can manage band requirement definitions", "POST", "/api/student/requirements", Role.ADMIN, 201, requirementPayload());
+  await assertStatus("center director can manage band requirement definitions", "POST", "/api/student/requirements", Role.CENTER_DIRECTOR, 201, requirementPayload());
 
   assertEqual(state.roleUpdates > 0, true, "role claim/release tests executed update paths");
   assertEqual(state.documentCreates > 0, true, "document create tests executed create path");
   assertEqual(state.noticeCreates > 0, true, "notice create tests executed create path");
   assertEqual(state.resourceCreates > 0, true, "resource create tests executed create path");
   assertEqual(state.studentRequirementUpserts > 0, true, "band progress tests executed upsert path");
-  assertEqual(state.memberFeedbackCreates, 2, "authorized member feedback creates reached persistence");
-  assertEqual(state.memberFeedbackUpdates, 2, "only authorized member feedback edits reached persistence");
+  assertEqual(state.memberFeedbackCreates, 3, "authorized member feedback creates reached persistence");
+  assertEqual(state.memberFeedbackUpdates, 3, "only authorized member feedback edits reached persistence");
   assertEqual(state.memberFeedbackDeletes, 2, "only authorized member feedback deletes reached persistence");
 
   console.log("Endpoint authorization tests passed.");
@@ -699,6 +756,10 @@ function tokenUser(role: Role) {
     return users.admin;
   }
 
+  if (role === Role.CENTER_DIRECTOR) {
+    return users.director;
+  }
+
   if (role === Role.FACILITATOR) {
     return users.facilitator;
   }
@@ -761,6 +822,27 @@ function memberPayload(clubIds: string[]) {
     bandLevel: "White",
     clubIds
   };
+}
+
+function adminUserPayload(role: Role) {
+  return {
+    email: `${role.toLowerCase().replace("_", ".")}@example.com`,
+    password: "password123",
+    firstName: "Test",
+    lastName: role === Role.CENTER_DIRECTOR ? "Center Director" : role,
+    role,
+    grade: role === Role.STUDENT ? "6" : undefined,
+    programLevel: role === Role.STUDENT ? "JUNIOR" : undefined,
+    bandLevel: role === Role.STUDENT ? "White" : undefined,
+    clubIds: [],
+    facilitatorClubIds: []
+  };
+}
+
+function adminUserUpdatePayload(role: Role) {
+  const payload = adminUserPayload(role);
+  const { password: _password, ...updatePayload } = payload;
+  return { ...updatePayload, isActive: true };
 }
 
 function meetingPayload(meetingDate: string) {

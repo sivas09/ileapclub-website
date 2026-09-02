@@ -27,6 +27,7 @@ import {
   DataPanel,
   formatDate,
   formatProgramLevel,
+  isOperationalManagerRole,
   programLevelOptions,
   splitDisplayName,
   SummaryTile
@@ -68,7 +69,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     try {
       const [result, paymentResult] = await Promise.all([
         getMembers(nextFilters),
-        user.role === "ADMIN" ? getMemberPaymentStatuses(paymentMonth) : Promise.resolve(null)
+        isOperationalManagerRole(user.role) ? getMemberPaymentStatuses(paymentMonth) : Promise.resolve(null)
       ]);
       if (requestId === loadRequestId.current) {
         setData(result);
@@ -257,7 +258,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       };
 
       if (editingMember) {
-        if (user.role === "ADMIN") {
+        if (isOperationalManagerRole(user.role)) {
           if (!editingMember.userId) {
             throw new Error("This member account cannot be edited from the Members page.");
           }
@@ -366,7 +367,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
             {isAddFormOpen ? "Cancel" : "Add Member"}
           </button>
           <button type="button" onClick={() => loadMembers()} disabled={isLoading}>Refresh</button>
-          {user.role === "ADMIN" ? (
+          {isOperationalManagerRole(user.role) ? (
             <button type="button" className="danger-action" onClick={resetPaymentStatuses} disabled={isLoading || isSubmitting}>
               Reset All to Not Paid
             </button>
@@ -413,7 +414,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       ) : null}
 
       <div className="member-filter-form">
-        {user.role === "ADMIN" ? (
+        {isOperationalManagerRole(user.role) ? (
           <label>
             Centre
             <select value={filters.centreId} onChange={(event) => updateFilter("centreId", event.currentTarget.value)}>
@@ -472,7 +473,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       {showMemberResults && data?.members.length ? (
         <>
           <div className="feedback-table-wrap">
-            <table className={`feedback-table members-table${user.role === "ADMIN" ? " has-payment-status" : ""}`}>
+            <table className={`feedback-table members-table${isOperationalManagerRole(user.role) ? " has-payment-status" : ""}`}>
               <thead>
                 <tr>
                   <th>Member Name</th>
@@ -480,7 +481,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                   <th>Club</th>
                   <th>Program Level</th>
                   <th>Current Band</th>
-                  {user.role === "ADMIN" ? <th>Payment Status</th> : null}
+                  {isOperationalManagerRole(user.role) ? <th>Payment Status</th> : null}
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -492,7 +493,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                     <td>{member.clubName}</td>
                     <td>{formatProgramLevel(member.programLevel)}</td>
                     <td>{member.currentBandLevel}</td>
-                    {user.role === "ADMIN" ? (
+                    {isOperationalManagerRole(user.role) ? (
                       <td className="payment-status-cell">
                         <PaymentStatusButton
                           memberName={member.displayName}
@@ -518,7 +519,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                         >
                           Write Feedback
                         </button>
-                        {user.role === "ADMIN" ? (
+                        {isOperationalManagerRole(user.role) ? (
                           <button
                             type="button"
                             className="danger-action"
@@ -530,7 +531,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                             {member.isActive === false ? "Reactivate" : "Deactivate"}
                           </button>
                         ) : null}
-                        {user.role === "ADMIN" ? (
+                        {isOperationalManagerRole(user.role) ? (
                           <button type="button" className="danger-action" onClick={() => deleteMember(member)} disabled={isSubmitting}>
                             Delete Member
                           </button>
@@ -665,9 +666,9 @@ function MemberForm({
   const singleClub = clubs.length === 1 ? clubs[0] : null;
   const [selectedRole, setSelectedRole] = useState<Role>(member?.role ?? "STUDENT");
   const isFacilitatorEdit = Boolean(member) && viewerRole === "FACILITATOR";
-  const showIdentityFields = !member || viewerRole === "ADMIN";
+  const showIdentityFields = !member || isOperationalManagerRole(viewerRole);
   const showStudentFields = !member || isFacilitatorEdit || selectedRole === "STUDENT";
-  const showClubAssignment = !member || (viewerRole === "ADMIN" && selectedRole !== "ADMIN");
+  const showClubAssignment = !member || (isOperationalManagerRole(viewerRole) && selectedRole !== "ADMIN" && selectedRole !== "CENTER_DIRECTOR");
 
   return (
     <form id="member-form" className="admin-form wide member-editor-form" onSubmit={onSubmit}>
@@ -692,6 +693,7 @@ function MemberForm({
             <select name="role" value={selectedRole} onChange={(event) => setSelectedRole(event.currentTarget.value as Role)} required>
               <option value="STUDENT">Member</option>
               <option value="FACILITATOR">Facilitator</option>
+              <option value="CENTER_DIRECTOR">Center Director</option>
               <option value="ADMIN">Admin</option>
             </select>
           </label>
@@ -911,7 +913,7 @@ function MemberDetailPanel({
                       <>
                         <span>{entry.feedback}</span>
                         <small>{entry.clubName}{entry.updatedAt !== entry.createdAt ? ` - updated ${formatDate(entry.updatedAt)}` : ""}</small>
-                        {entry.canEdit && (viewerRole === "ADMIN" || viewerRole === "FACILITATOR") ? (
+                        {entry.canEdit && (isOperationalManagerRole(viewerRole) || viewerRole === "FACILITATOR") ? (
                           <div className="member-row-actions">
                             <button type="button" className="text-action" onClick={() => { setEditingFeedbackId(entry.id); setEditingFeedbackText(entry.feedback); }} disabled={isSubmitting}>Edit</button>
                             <button type="button" className="danger-action" onClick={() => removeFeedback(entry.id)} disabled={isSubmitting}>Delete</button>

@@ -35,6 +35,16 @@ export const portalNavigationItems: Record<Role, Array<{ href: string; label: st
     { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
   ],
+  CENTER_DIRECTOR: [
+    { href: "#overview", label: "Overview" },
+    { href: "#admin", label: "Setup" },
+    { href: "#members", label: "Members" },
+    { href: "#notices", label: "Notices" },
+    { href: "#documents", label: "Documents" },
+    { href: "#meetings", label: "Meetings" },
+    { href: "#feedback", label: "Feedback" },
+    { href: "#requirements", label: "Band Progress" }
+  ],
   FACILITATOR: [
     { href: "#overview", label: "Overview" },
     { href: "#members", label: "Members" },
@@ -66,6 +76,14 @@ export function sectionHrefForHash(role: Role, hash: string) {
 const overviewLinks: Record<Role, OverviewLink[]> = {
   ADMIN: [
     { href: "#admin", label: "Setup", description: "Centres, clubs, and portal setup" },
+    { href: "#members", label: "Members", description: "Member accounts and club access" },
+    { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
+    { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
+    { href: "#feedback", label: "Feedback", description: "Scores and facilitator feedback" },
+    { href: "#requirements", label: "Band Progress", description: "Requirements and member advancement" }
+  ],
+  CENTER_DIRECTOR: [
+    { href: "#admin", label: "Setup", description: "Centres, clubs, and operational setup" },
     { href: "#members", label: "Members", description: "Member accounts and club access" },
     { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
     { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
@@ -247,7 +265,7 @@ export function StatusBadge({ isActive }: { isActive: boolean }) {
 }
 
 export function isDemoUser(user: { id: string; email: string; firstName: string; lastName: string; role: Role }, currentUserId: string) {
-  if (user.id === currentUserId || user.role === "ADMIN") {
+  if (user.id === currentUserId || user.role === "ADMIN" || user.role === "CENTER_DIRECTOR") {
     return false;
   }
 
@@ -451,7 +469,20 @@ export function documentLink(document: { fileUrl?: string | null }) {
 }
 
 export function formatRole(role: Role) {
-  return role.charAt(0) + role.slice(1).toLowerCase();
+  return role === "CENTER_DIRECTOR"
+    ? "Center Director"
+    : role.charAt(0) + role.slice(1).toLowerCase();
+}
+
+export function isOperationalManagerRole(role: Role) {
+  return role === "ADMIN" || role === "CENTER_DIRECTOR";
+}
+
+export function canManageUserFromSetup(viewer: { id: string; role: Role }, target: { id: string; role: Role }) {
+  return viewer.role === "ADMIN"
+    || (viewer.role === "CENTER_DIRECTOR"
+      && viewer.id !== target.id
+      && (target.role === "STUDENT" || target.role === "FACILITATOR"));
 }
 
 export function isStudentInClub(student: MeetingsOverview["students"][number], clubId: string) {
@@ -490,4 +521,3 @@ export function isTodayOrFuture(value: string) {
   return Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate())
     >= Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
 }
-

@@ -22,6 +22,7 @@ const inactiveStudentId = "inactive-student";
 const assignedClubId = "assigned-club";
 const users = {
   admin: { id: "admin-user", email: "admin@example.com", role: Role.ADMIN, isActive: true },
+  director: { id: "director-user", email: "director@example.com", role: Role.CENTER_DIRECTOR, isActive: true },
   facilitator: { id: "facilitator-user", email: "facilitator@example.com", role: Role.FACILITATOR, isActive: true },
   student: { id: "student-user", email: "student@example.com", role: Role.STUDENT, isActive: true }
 };
@@ -169,6 +170,22 @@ try {
   assert.equal(storedStatus(activeStudentId, previousMonth), PaymentStatus.PAID, "Reset preserves previous-month payment history.");
   assert.deepEqual(lastResetStudentIds, [activeStudentId], "Reset persistence is scoped to active members only.");
 
+  const directorPaidResponse = await request("PUT", `/api/members/payments/${activeStudentId}`, Role.CENTER_DIRECTOR, 200, {
+    paymentMonth: currentMonth,
+    status: PaymentStatus.PAID
+  });
+  assert.equal((await directorPaidResponse.json() as any).payment.status, PaymentStatus.PAID, "Center Director can mark a member Paid.");
+  const directorListResponse = await request("GET", `/api/members/payments?paymentMonth=${currentMonth}`, Role.CENTER_DIRECTOR, 200);
+  assertNoSensitiveFields(await directorListResponse.json());
+  const directorResetResponse = await request("POST", "/api/members/payments/reset", Role.CENTER_DIRECTOR, 200, {
+    paymentMonth: currentMonth,
+    confirmed: true
+  });
+  assert.equal((await directorResetResponse.json() as any).resetCount, 1, "Center Director can reset active member payment status.");
+  assert.equal(storedStatus(activeStudentId, currentMonth), PaymentStatus.NOT_PAID, "Center Director reset marks active members Not Paid.");
+  assert.equal(storedStatus(inactiveStudentId, currentMonth), PaymentStatus.PAID, "Center Director reset does not affect inactive members.");
+  assert.equal(storedStatus(activeStudentId, previousMonth), PaymentStatus.PAID, "Center Director reset preserves prior payment history.");
+
   await request("PUT", `/api/members/payments/${activeStudentId}`, Role.FACILITATOR, 403, {
     paymentMonth: currentMonth,
     status: PaymentStatus.PAID
@@ -246,6 +263,10 @@ async function request(method: string, path: string, role: Role, expectedStatus:
 function tokenUser(role: Role) {
   if (role === Role.ADMIN) {
     return users.admin;
+  }
+
+  if (role === Role.CENTER_DIRECTOR) {
+    return users.director;
   }
 
   if (role === Role.FACILITATOR) {

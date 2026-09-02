@@ -44,6 +44,7 @@ import {
   formatStudentName,
   HelpLabel,
   isLeadershipMeetingRole,
+  isOperationalManagerRole,
   isReportMeetingRole,
   isStudentInClub,
   programLevelOptions,
@@ -77,7 +78,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
   const [selectedMeetingId, setSelectedMeetingId] = useState("");
   const [meetingMode, setMeetingMode] = useState<MeetingMode>("view");
   const [meetingPendingDeletion, setMeetingPendingDeletion] = useState<Meeting | null>(null);
-  const canManageMeetings = user.role === "ADMIN" || user.role === "FACILITATOR";
+  const canManageMeetings = isOperationalManagerRole(user.role) || user.role === "FACILITATOR";
   const selectedMeeting = overview?.meetings.find((meeting) => meeting.id === selectedMeetingId) ?? overview?.meetings[0] ?? null;
   const selectedMeetingStudents = selectedMeeting && overview
     ? overview.students.filter((student) => isStudentInClub(student, selectedMeeting.clubId))
@@ -259,7 +260,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
         </form>
       ) : null}
 
-      {user.role === "ADMIN" ? (
+      {isOperationalManagerRole(user.role) ? (
         <RoleDefinitionManagementPanel onChanged={refreshMeetingsSafely} />
       ) : null}
 
@@ -586,7 +587,7 @@ function MeetingList({
   onAgendaDownload: (meeting: Meeting) => void;
   onDeleteRequest: (meeting: Meeting) => void;
 }) {
-  const canManage = user.role === "ADMIN" || user.role === "FACILITATOR";
+  const canManage = isOperationalManagerRole(user.role) || user.role === "FACILITATOR";
 
   return (
     <div className="meeting-list-panel">
@@ -1359,7 +1360,7 @@ function RequirementManagementPanel({
       {isLoading ? <p className="loading-state">Loading requirements...</p> : null}
       {progress ? (
         <>
-          {user.role === "ADMIN" ? (
+          {isOperationalManagerRole(user.role) ? (
             <BandRequirementDefinitionManager
               onChanged={() => {
                 refreshSelectedProgress().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to refresh requirements."));

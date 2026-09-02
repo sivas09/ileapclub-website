@@ -25,6 +25,7 @@ import { WorkspaceErrorBoundary } from "./components/PortalErrorBoundary";
 import { StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "./components/StudentProgressPanels";
 import {
   formatRole,
+  isOperationalManagerRole,
   overviewLinksForRole,
   portalNavigationItems,
   sectionHrefForHash
@@ -34,6 +35,10 @@ const roleCopy: Record<Role, { title: string; summary: string }> = {
   ADMIN: {
     title: "Admin Overview",
     summary: "Choose a section to manage club operations and member progress."
+  },
+  CENTER_DIRECTOR: {
+    title: "Center Director Overview",
+    summary: "Choose a section to manage centre operations and member progress."
   },
   FACILITATOR: {
     title: "Facilitator Overview",
@@ -223,7 +228,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
           <span>{initials}</span>
           <div>
             <strong>{displayName}</strong>
-            <small>{user.role.toLowerCase()}</small>
+            <small>{formatRole(user.role)}</small>
           </div>
           <button type="button" onClick={() => setIsPasswordPanelOpen((isOpen) => !isOpen)}>
             {isPasswordPanelOpen ? "Close" : "Change Password"}
@@ -240,7 +245,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
             <p className="eyebrow">{formatRole(user.role)}</p>
             <h2 id="overview-title">Welcome back, {user.firstName}.</h2>
             <p>{copy.summary}</p>
-            {user.role === "ADMIN" ? <small>To preview member experience, use a member test account.</small> : null}
+            {isOperationalManagerRole(user.role) ? <small>To preview member experience, use a member test account.</small> : null}
           </section>
 
           {user.role === "STUDENT" ? (
@@ -258,7 +263,7 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
 }
 
 function ActiveWorkspace({ activeHref, user }: { activeHref: string; user: PortalUser }) {
-  if (activeHref === "#admin" && user.role === "ADMIN") {
+  if (activeHref === "#admin" && isOperationalManagerRole(user.role)) {
     return <WorkspaceErrorBoundary workspace="Centres and Clubs" anchorId="admin"><AdminWorkspace currentUser={user} /></WorkspaceErrorBoundary>;
   }
 

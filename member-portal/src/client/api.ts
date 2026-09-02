@@ -1,4 +1,4 @@
-export type Role = "ADMIN" | "FACILITATOR" | "STUDENT";
+export type Role = "ADMIN" | "CENTER_DIRECTOR" | "FACILITATOR" | "STUDENT";
 
 export type PortalUser = {
   id: string;
@@ -1079,7 +1079,7 @@ function expectRecordArray(value: unknown, service: string) {
 }
 
 function isPortalRole(value: unknown): value is Role {
-  return value === "ADMIN" || value === "FACILITATOR" || value === "STUDENT";
+  return value === "ADMIN" || value === "CENTER_DIRECTOR" || value === "FACILITATOR" || value === "STUDENT";
 }
 
 function isPortalUserResponse(value: unknown): value is PortalUser {

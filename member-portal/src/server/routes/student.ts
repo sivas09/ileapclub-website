@@ -4,6 +4,7 @@ import { PaymentStatus, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
+import { canManageOperationalData, operationalManagerRoles } from "../permissions.js";
 import { memberUserSelect, publicUserSelect } from "../services/safeUser.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
@@ -340,7 +341,7 @@ studentRouter.get("/me/club-members", requireRole([Role.STUDENT]), asyncRoute(as
   });
 }));
 
-studentRouter.get("/requirements", requireRole([Role.ADMIN]), asyncRoute(async (_request, response) => {
+studentRouter.get("/requirements", requireRole(operationalManagerRoles), asyncRoute(async (_request, response) => {
   const requirements = await prisma.bandRequirement.findMany({
     orderBy: [{ programLevel: "asc" }, { bandOrder: "asc" }, { sortOrder: "asc" }, { name: "asc" }]
   });
@@ -348,7 +349,7 @@ studentRouter.get("/requirements", requireRole([Role.ADMIN]), asyncRoute(async (
   response.json({ requirements });
 }));
 
-studentRouter.post("/requirements", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+studentRouter.post("/requirements", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
   const parsed = bandRequirementSchema.safeParse(request.body);
 
   if (!parsed.success) {
@@ -382,7 +383,7 @@ studentRouter.post("/requirements", requireRole([Role.ADMIN]), asyncRoute(async 
   response.status(201).json({ requirement });
 }));
 
-studentRouter.patch("/requirements/:requirementId", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+studentRouter.patch("/requirements/:requirementId", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
   const parsed = bandRequirementSchema.partial().safeParse(request.body);
 
   if (!parsed.success || Object.keys(parsed.data).length === 0) {
@@ -426,7 +427,7 @@ studentRouter.patch("/requirements/:requirementId", requireRole([Role.ADMIN]), a
   response.json({ requirement });
 }));
 
-studentRouter.delete("/requirements/:requirementId", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
+studentRouter.delete("/requirements/:requirementId", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
   const requirementId = String(request.params.requirementId);
   const existing = await prisma.bandRequirement.findUnique({ where: { id: requirementId } });
 
@@ -463,8 +464,8 @@ studentRouter.delete("/requirements/:requirementId", requireRole([Role.ADMIN]), 
 studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can update band requirements." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can update band requirements." });
     return;
   }
 
@@ -517,7 +518,7 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
       facilitatorSignedOffAt: new Date()
     }
     : {};
-  const adminOverrideData = user.role === Role.ADMIN
+  const adminOverrideData = canManageOperationalData(user)
     ? {
       adminOverrideByUserId: user.id,
       adminOverrideAt: new Date()
@@ -572,8 +573,8 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
 studentRouter.post("/:studentId/requirements/backfill", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can backfill band requirements." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can backfill band requirements." });
     return;
   }
 
@@ -634,8 +635,8 @@ studentRouter.post("/:studentId/requirements/backfill", asyncRoute(async (reques
     updatedByUserId: user.id,
     facilitatorSignedOffByUserId: user.role === Role.FACILITATOR ? user.id : null,
     facilitatorSignedOffAt: user.role === Role.FACILITATOR ? completedAt : null,
-    adminOverrideByUserId: user.role === Role.ADMIN ? user.id : null,
-    adminOverrideAt: user.role === Role.ADMIN ? completedAt : null
+    adminOverrideByUserId: canManageOperationalData(user) ? user.id : null,
+    adminOverrideAt: canManageOperationalData(user) ? completedAt : null
   }));
 
   if (progressData.length > 0) {
@@ -667,8 +668,8 @@ studentRouter.post("/:studentId/requirements/backfill", asyncRoute(async (reques
 studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can update member band placement." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can update member band placement." });
     return;
   }
 
@@ -746,8 +747,8 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
 studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) => {
   const user = request.user!;
 
-  if (user.role !== Role.ADMIN && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only admins and facilitators can view managed member progress." });
+  if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
+    response.status(403).json({ message: "Only operational managers and facilitators can view managed member progress." });
     return;
   }
 
@@ -905,7 +906,7 @@ async function canFacilitatorAccessStudent(facilitatorId: string, studentId: str
 }
 
 export function canManageBandRequirementDefinitions(role: Role) {
-  return role === Role.ADMIN;
+  return canManageOperationalData(role);
 }
 
 function formatClubNames(memberships: Array<{ club: { name: string } }>) {
