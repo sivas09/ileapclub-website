@@ -157,9 +157,9 @@ patchModel("studentClubMembership", {
 
     return null;
   },
-  count: ({ where }: any = {}) => {
-    const isAssignedMembership = where.studentId === assignedStudentId && where.clubId === assignedClubId;
-    const isOtherMembership = where.studentId === otherStudentId && where.clubId === otherClubId;
+  count: async ({ where }: any = {}) => {
+    const isAssignedMembership = where.studentId === assignedStudentId && includesClub(where.clubId, assignedClubId);
+    const isOtherMembership = where.studentId === otherStudentId && includesClub(where.clubId, otherClubId);
     return isAssignedMembership || isOtherMembership ? 1 : 0;
   },
   deleteMany: () => ({ count: 0 }),
@@ -429,7 +429,10 @@ try {
 
   await assertStatus("admin can view all members", "GET", "/api/members", Role.ADMIN, 200);
   await assertStatus("admin member detail excludes confidential fields", "GET", `/api/members/${assignedStudentId}`, Role.ADMIN, 200);
-  await assertStatus("facilitator can view assigned club members", "GET", `/api/members?clubId=${assignedClubId}`, Role.FACILITATOR, 200);
+  const facilitatorMembersResponse = await assertStatus("facilitator can view assigned club members", "GET", `/api/members?clubId=${assignedClubId}`, Role.FACILITATOR, 200);
+  assertNoPaymentResponseFields(await facilitatorMembersResponse.json(), "facilitator members response");
+  const studentMemberResponse = await assertStatus("student can view an own-club member", "GET", `/api/members/${assignedStudentId}`, Role.STUDENT, 200);
+  assertNoPaymentResponseFields(await studentMemberResponse.json(), "student member response");
   await assertStatus("facilitator cannot view unassigned club members", "GET", `/api/members?clubId=${otherClubId}`, Role.FACILITATOR, 403);
   await assertStatus("student cannot create members", "POST", "/api/members", Role.STUDENT, 403, memberPayload([assignedClubId]));
   await assertStatus("facilitator cannot assign student to unassigned club", "POST", "/api/members", Role.FACILITATOR, 403, memberPayload([otherClubId]));
@@ -636,6 +639,25 @@ function assertNoSensitiveResponseFields(value: unknown, label: string, path = "
     }
 
     assertNoSensitiveResponseFields(entry, label, `${path}.${key}`);
+  }
+}
+
+function assertNoPaymentResponseFields(value: unknown, label: string, path = "response") {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertNoPaymentResponseFields(entry, label, `${path}[${index}]`));
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (/payment|paid/i.test(key)) {
+      throw new Error(`${label}: payment field found at ${path}.${key}`);
+    }
+
+    assertNoPaymentResponseFields(entry, label, `${path}.${key}`);
   }
 }
 

@@ -224,6 +224,20 @@ export type MemberListEntry = {
   isActive?: boolean;
 };
 
+export type PaymentStatus = "PAID" | "NOT_PAID";
+
+export type MonthlyMemberPayment = {
+  studentId: string;
+  status: PaymentStatus;
+  updatedByAdminId: string;
+  updatedAt: string;
+};
+
+export type MemberPaymentsResponse = {
+  paymentMonth: string;
+  payments: MonthlyMemberPayment[];
+};
+
 export type MemberDetail = {
   id: string;
   userId?: string;
@@ -891,6 +905,25 @@ export async function getMembers(params: {
   });
 
   return parseMembersResponse(await request<unknown>(`/api/members${query.toString() ? `?${query.toString()}` : ""}`));
+}
+
+export async function getMemberPaymentStatuses(paymentMonth: string) {
+  const query = new URLSearchParams({ paymentMonth });
+  return request<MemberPaymentsResponse>(`/api/members/payments?${query.toString()}`);
+}
+
+export async function setMemberPaymentStatus(studentId: string, paymentMonth: string, status: PaymentStatus) {
+  return request<{ paymentMonth: string; payment: MonthlyMemberPayment }>(`/api/members/payments/${studentId}`, {
+    method: "PUT",
+    body: JSON.stringify({ paymentMonth, status })
+  });
+}
+
+export async function resetMemberPaymentStatuses(paymentMonth: string) {
+  return request<{ paymentMonth: string; resetCount: number; status: PaymentStatus }>("/api/members/payments/reset", {
+    method: "POST",
+    body: JSON.stringify({ paymentMonth, confirmed: true })
+  });
 }
 
 export async function getBandDocuments(params: {

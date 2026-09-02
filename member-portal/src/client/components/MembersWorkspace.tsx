@@ -5,13 +5,17 @@ import {
   createMember,
   deleteMemberFeedback,
   getMemberDetail,
+  getMemberPaymentStatuses,
   getMembers,
   MemberDetail,
   MemberListEntry,
   MembersResponse,
+  PaymentStatus,
   permanentlyDeleteMember,
   PortalUser,
   Role,
+  resetMemberPaymentStatuses,
+  setMemberPaymentStatus,
   setUserActive,
   updateMember,
   updateMemberFeedback,
@@ -27,6 +31,9 @@ import {
   splitDisplayName,
   SummaryTile
 } from "./portalShared";
+
+export const paymentResetConfirmationMessage = "Are you sure you want to reset all active members to Not Paid for this month?";
+
 export function MembersWorkspace({ user }: { user: PortalUser }) {
   const loadRequestId = useRef(0);
   const [data, setData] = useState<MembersResponse | null>(null);
@@ -50,6 +57,8 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentMonth] = useState(currentPaymentMonth);
+  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
 
   async function loadMembers(nextFilters = filters) {
     const requestId = ++loadRequestId.current;
@@ -57,9 +66,15 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     setIsLoading(true);
 
     try {
-      const result = await getMembers(nextFilters);
+      const [result, paymentResult] = await Promise.all([
+        getMembers(nextFilters),
+        user.role === "ADMIN" ? getMemberPaymentStatuses(paymentMonth) : Promise.resolve(null)
+      ]);
       if (requestId === loadRequestId.current) {
         setData(result);
+        if (paymentResult) {
+          setPaymentStatuses(Object.fromEntries(paymentResult.payments.map((payment) => [payment.studentId, payment.status])));
+        }
       }
     } catch (loadError) {
       if (requestId === loadRequestId.current) {
@@ -95,6 +110,45 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       }, 0);
     } catch (detailError) {
       setError(detailError instanceof Error ? detailError.message : "Unable to load member detail.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function updatePaymentStatus(member: MemberListEntry, nextStatus: PaymentStatus) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await setMemberPaymentStatus(member.id, paymentMonth, nextStatus);
+      setPaymentStatuses((current) => ({ ...current, [member.id]: result.payment.status }));
+      setStatus(`${member.displayName} marked ${paymentStatusLabel(result.payment.status)}.`);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Unable to update payment status.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function resetPaymentStatuses() {
+    const confirmed = window.confirm(paymentResetConfirmationMessage);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await resetMemberPaymentStatuses(paymentMonth);
+      const refreshedPayments = await getMemberPaymentStatuses(paymentMonth);
+      setPaymentStatuses(Object.fromEntries(refreshedPayments.payments.map((payment) => [payment.studentId, payment.status])));
+      setStatus(`${result.resetCount} active member${result.resetCount === 1 ? "" : "s"} reset to Not Paid.`);
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Unable to reset payment statuses.");
     } finally {
       setIsSubmitting(false);
     }
@@ -312,6 +366,11 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
             {isAddFormOpen ? "Cancel" : "Add Member"}
           </button>
           <button type="button" onClick={() => loadMembers()} disabled={isLoading}>Refresh</button>
+          {user.role === "ADMIN" ? (
+            <button type="button" className="danger-action" onClick={resetPaymentStatuses} disabled={isLoading || isSubmitting}>
+              Reset All to Not Paid
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -413,7 +472,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       {showMemberResults && data?.members.length ? (
         <>
           <div className="feedback-table-wrap">
-            <table className="feedback-table members-table">
+            <table className={`feedback-table members-table${user.role === "ADMIN" ? " has-payment-status" : ""}`}>
               <thead>
                 <tr>
                   <th>Member Name</th>
@@ -421,6 +480,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                   <th>Club</th>
                   <th>Program Level</th>
                   <th>Current Band</th>
+                  {user.role === "ADMIN" ? <th>Payment Status</th> : null}
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -432,6 +492,16 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                     <td>{member.clubName}</td>
                     <td>{formatProgramLevel(member.programLevel)}</td>
                     <td>{member.currentBandLevel}</td>
+                    {user.role === "ADMIN" ? (
+                      <td className="payment-status-cell">
+                        <PaymentStatusButton
+                          memberName={member.displayName}
+                          status={paymentStatuses[member.id] ?? "NOT_PAID"}
+                          disabled={isSubmitting}
+                          onToggle={(nextStatus) => updatePaymentStatus(member, nextStatus)}
+                        />
+                      </td>
+                    ) : null}
                     <td className="members-actions-cell">
                       <div className="member-row-actions">
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Details</button>
@@ -536,6 +606,43 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       ) : null}
     </section>
   );
+}
+
+export function PaymentStatusButton({
+  memberName,
+  status,
+  disabled,
+  onToggle
+}: {
+  memberName: string;
+  status: PaymentStatus;
+  disabled: boolean;
+  onToggle: (nextStatus: PaymentStatus) => void;
+}) {
+  const nextStatus = status === "PAID" ? "NOT_PAID" : "PAID";
+
+  return (
+    <button
+      type="button"
+      className={`payment-status-button ${status === "PAID" ? "is-paid" : "is-not-paid"}`}
+      aria-label={`Mark ${memberName} as ${paymentStatusLabel(nextStatus)}`}
+      onClick={() => onToggle(nextStatus)}
+      disabled={disabled}
+    >
+      {paymentStatusLabel(status)}
+    </button>
+  );
+}
+
+function currentPaymentMonth() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function paymentStatusLabel(status: PaymentStatus) {
+  return status === "PAID" ? "Paid" : "Not Paid";
 }
 
 function MemberForm({

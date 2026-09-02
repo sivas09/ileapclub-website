@@ -14,6 +14,11 @@ enum Role {
   STUDENT
 }
 
+enum PaymentStatus {
+  PAID
+  NOT_PAID
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -34,6 +39,7 @@ model User {
   updatedResourceLinks ResourceLink[] @relation("ResourceLinkUpdatedBy")
   createdNotices Notice[] @relation("NoticeCreatedBy")
   createdMemberFeedback MemberFeedback[] @relation("MemberFeedbackCreatedBy")
+  updatedMonthlyMemberPayments MonthlyMemberPayment[] @relation("MonthlyMemberPaymentUpdatedBy")
 }
 
 model Centre {
@@ -86,6 +92,7 @@ model Student {
   meetingFeedbacks StudentMeetingFeedback[]
   memberFeedback MemberFeedback[]
   requirementProgress StudentRequirementProgress[]
+  monthlyPayments MonthlyMemberPayment[]
 }
 
 model StudentClubMembership {
@@ -274,6 +281,23 @@ model MemberFeedback {
   @@index([studentId, createdAt])
   @@index([clubId, createdAt])
   @@index([createdByUserId])
+}
+
+model MonthlyMemberPayment {
+  id               String        @id @default(cuid())
+  studentId        String
+  paymentMonth     DateTime      @db.Date
+  status           PaymentStatus @default(NOT_PAID)
+  updatedByAdminId String
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  student        Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  updatedByAdmin User    @relation("MonthlyMemberPaymentUpdatedBy", fields: [updatedByAdminId], references: [id])
+
+  @@unique([studentId, paymentMonth])
+  @@index([paymentMonth, status])
+  @@index([updatedByAdminId])
 }
 
 model BandRequirement {

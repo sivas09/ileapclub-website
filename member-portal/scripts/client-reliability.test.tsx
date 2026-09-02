@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type Meeting, type ResourceLink } from "../src/client/api";
 import { MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
+import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import {
@@ -53,6 +54,21 @@ assert.match(memberProgressMarkup, /Member Progress Dashboard/, "Member progress
 assert.doesNotMatch(memberProgressMarkup, /Student Progress Dashboard/, "Legacy student dashboard wording is hidden.");
 const clubMembersMarkup = renderToStaticMarkup(<StudentClubMembersPanel />);
 assert.match(clubMembersMarkup, /Club Members/, "My Club uses member-facing terminology.");
+
+const paidButtonMarkup = renderToStaticMarkup(
+  <PaymentStatusButton memberName="Max Mao" status="PAID" disabled={false} onToggle={() => undefined} />
+);
+assert.match(paidButtonMarkup, />Paid<\/button>/, "Admin payment control clearly displays Paid.");
+assert.match(paidButtonMarkup, /Mark Max Mao as Not Paid/, "Paid control clearly describes its toggle action.");
+const notPaidButtonMarkup = renderToStaticMarkup(
+  <PaymentStatusButton memberName="Max Mao" status="NOT_PAID" disabled={false} onToggle={() => undefined} />
+);
+assert.match(notPaidButtonMarkup, />Not Paid<\/button>/, "Admin payment control clearly displays Not Paid.");
+assert.equal(
+  paymentResetConfirmationMessage,
+  "Are you sure you want to reset all active members to Not Paid for this month?",
+  "Monthly reset uses the required confirmation wording."
+);
 
 const parsedProgress = parseStudentProgressResponse({
   student: {

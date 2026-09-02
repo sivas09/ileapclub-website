@@ -2001,6 +2001,18 @@ button {
 .members-table th:nth-child(5) { width: 10%; }
 .members-table th:nth-child(6) { width: 27%; }
 
+.feedback-table.members-table.has-payment-status {
+  min-width: 980px;
+}
+
+.members-table.has-payment-status th:nth-child(1) { width: 14%; }
+.members-table.has-payment-status th:nth-child(2) { width: 18%; }
+.members-table.has-payment-status th:nth-child(3) { width: 12%; }
+.members-table.has-payment-status th:nth-child(4) { width: 11%; }
+.members-table.has-payment-status th:nth-child(5) { width: 9%; }
+.members-table.has-payment-status th:nth-child(6) { width: 13%; }
+.members-table.has-payment-status th:nth-child(7) { width: 23%; }
+
 .members-table th,
 .members-table td {
   padding: 10px;
@@ -2009,6 +2021,44 @@ button {
 
 .members-actions-cell {
   min-width: 220px;
+}
+
+.payment-status-cell {
+  min-width: 112px;
+}
+
+.payment-status-button {
+  min-width: 96px;
+  min-height: 34px;
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.payment-status-button.is-paid {
+  border-color: #86d3ad;
+  color: #166534;
+  background: #dcfce7;
+}
+
+.payment-status-button.is-not-paid {
+  border-color: #fda4af;
+  color: #9f1239;
+  background: #fff1f2;
+}
+
+.payment-status-button:hover:not(:disabled),
+.payment-status-button:focus-visible:not(:disabled) {
+  border-color: var(--portal-teal);
+  color: var(--portal-teal);
+}
+
+.payment-status-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
 }
 
 .member-row-actions {
