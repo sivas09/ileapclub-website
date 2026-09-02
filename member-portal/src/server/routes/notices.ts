@@ -4,7 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
-import { canManageOperationalData } from "../permissions.js";
+import { canManageOperationalData, getOperationalScope, isCenterDirector, scopeIncludesClub } from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 import { noticeLimits, noticeStatuses } from "../../shared/portalConstants.js";
 
@@ -69,7 +69,11 @@ noticesRouter.get("/", asyncRoute(async (request, response) => {
     }
 
     if (visibleClubIds !== null) {
-      where.OR = [{ clubId: null }, { clubId: { in: visibleClubIds } }];
+      if (isCenterDirector(user)) {
+        where.clubId = { in: visibleClubIds };
+      } else {
+        where.OR = [{ clubId: null }, { clubId: { in: visibleClubIds } }];
+      }
     }
 
     if (clubId) {
@@ -118,6 +122,11 @@ noticesRouter.post("/", asyncRoute(async (request, response) => {
 
   const data = parsed.data;
   const clubId = data.clubId ?? null;
+
+  if (isCenterDirector(user) && !clubId) {
+    response.status(403).json({ message: "Center Directors must assign notices to a club in their centre scope." });
+    return;
+  }
 
   if (user.role === Role.FACILITATOR && !clubId) {
     response.status(403).json({ message: "Facilitators must select one of their assigned clubs." });
@@ -169,6 +178,18 @@ noticesRouter.patch("/:noticeId", asyncRoute(async (request, response) => {
 
   const targetClubId = parsed.data.clubId === undefined ? existing.clubId : parsed.data.clubId;
 
+  if (isCenterDirector(user)) {
+    if (!existing.clubId || !(await canManageNoticeClub(user.id, user.role, existing.clubId))) {
+      response.status(403).json({ message: "You cannot edit a notice outside your centre scope." });
+      return;
+    }
+
+    if (!targetClubId || !(await canManageNoticeClub(user.id, user.role, targetClubId))) {
+      response.status(403).json({ message: "You cannot move this notice outside your centre scope." });
+      return;
+    }
+  }
+
   if (user.role === Role.FACILITATOR) {
     if (!existing.clubId || !(await canManageNoticeClub(user.id, user.role, existing.clubId))) {
       response.status(403).json({ message: "You cannot edit this notice." });
@@ -218,6 +239,11 @@ noticesRouter.delete("/:noticeId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (isCenterDirector(user) && (!existing.clubId || !(await canManageNoticeClub(user.id, user.role, existing.clubId)))) {
+    response.status(403).json({ message: "You cannot delete a notice outside your centre scope." });
+    return;
+  }
+
   await prisma.notice.delete({ where: { id: existing.id } });
   response.json({ deletedNotice: serializeNotice(existing) });
 }));
@@ -231,7 +257,7 @@ const noticeInclude = {
 
 async function getVisibleClubIds(userId: string, role: Role) {
   if (canManageOperationalData(role)) {
-    return null;
+    return (await getOperationalScope({ id: userId, role })).clubIds;
   }
 
   if (role === Role.FACILITATOR) {
@@ -264,6 +290,12 @@ async function getVisibleClubIds(userId: string, role: Role) {
 
 async function canManageNoticeClub(userId: string, role: Role, clubId: string) {
   if (canManageOperationalData(role)) {
+    const scope = await getOperationalScope({ id: userId, role });
+
+    if (!scopeIncludesClub(scope, clubId)) {
+      return false;
+    }
+
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       select: { isActive: true, centre: { select: { isActive: true } } }

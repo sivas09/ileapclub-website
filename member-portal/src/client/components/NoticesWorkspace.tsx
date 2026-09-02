@@ -177,7 +177,7 @@ function ManagerNoticesPanel({ user }: { user: PortalUser }) {
       {isAddFormOpen ? (
         <form className="document-form notice-form" onSubmit={handleCreate}>
           <h3>Add New Notice</h3>
-          <NoticeFields clubs={clubs} allowAllClubs={isOperationalManagerRole(user.role)} />
+          <NoticeFields clubs={clubs} allowAllClubs={user.role === "ADMIN"} />
           <button type="submit" disabled={isSubmitting}>Post Notice</button>
         </form>
       ) : null}
@@ -206,7 +206,7 @@ function ManagerNoticesPanel({ user }: { user: PortalUser }) {
                   key={notice.id}
                   notice={notice}
                   clubs={clubs}
-                  allowAllClubs={isOperationalManagerRole(user.role)}
+                  allowAllClubs={user.role === "ADMIN"}
                   canEdit={isOperationalManagerRole(user.role) || Boolean(notice.clubId)}
                   canDelete={isOperationalManagerRole(user.role)}
                   isEditing={editingNotice?.id === notice.id}

@@ -4,7 +4,13 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
-import { canManageOperationalData } from "../permissions.js";
+import {
+  canManageOperationalData,
+  getOperationalScope,
+  isAdmin,
+  isCenterDirector,
+  scopeIncludesClub
+} from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 import { bandLevels, documentCategories, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
@@ -78,10 +84,14 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
       { clubId: { in: studentContext.clubIds } }
     ];
   } else if (visibleClubIds !== null) {
-    where.OR = [
-      { clubId: null },
-      { clubId: { in: visibleClubIds } }
-    ];
+    if (isCenterDirector(user)) {
+      where.clubId = { in: visibleClubIds };
+    } else {
+      where.OR = [
+        { clubId: null },
+        { clubId: { in: visibleClubIds } }
+      ];
+    }
   }
 
   if (clubId) {
@@ -133,6 +143,11 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
 
   const data = parsed.data;
   let clubId = data.clubId || null;
+
+  if (isCenterDirector(user) && !clubId) {
+    response.status(403).json({ message: "Center Directors must assign documents to a club in their centre scope." });
+    return;
+  }
 
   if (user.role === Role.FACILITATOR && !clubId) {
     const assignedClubIds = await getVisibleClubIds(user.id, user.role);
@@ -195,6 +210,16 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
 
   const targetClubId = parsed.data.clubId === undefined ? existing.clubId : parsed.data.clubId || null;
 
+  if (isCenterDirector(user) && (!existing.clubId || !targetClubId)) {
+    response.status(403).json({ message: "Center Directors can edit only club-scoped documents." });
+    return;
+  }
+
+  if (isCenterDirector(user) && existing.clubId && !(await canManageDocumentClub(user.id, user.role, existing.clubId))) {
+    response.status(403).json({ message: "You cannot edit a document outside your centre scope." });
+    return;
+  }
+
   if (!canEditDocumentScope(user.role, existing.clubId, targetClubId)) {
     response.status(403).json({ message: "Facilitators can only edit documents assigned to their clubs." });
     return;
@@ -252,6 +277,11 @@ documentsRouter.delete("/:documentId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (isCenterDirector(user) && (!existing.clubId || !(await canManageDocumentClub(user.id, user.role, existing.clubId)))) {
+    response.status(403).json({ message: "You cannot delete a document outside your centre scope." });
+    return;
+  }
+
   await prisma.bandDocument.delete({ where: { id: existing.id } });
 
   response.json({ deletedDocument: serializeDocument(existing) });
@@ -270,7 +300,7 @@ const documentInclude = {
 
 async function getVisibleClubIds(userId: string, role: Role) {
   if (canManageOperationalData(role)) {
-    return null;
+    return (await getOperationalScope({ id: userId, role })).clubIds;
   }
 
   if (role === Role.FACILITATOR) {
@@ -331,6 +361,12 @@ async function getStudentDocumentContext(userId: string) {
 
 async function canManageDocumentClub(userId: string, role: Role, clubId: string) {
   if (canManageOperationalData(role)) {
+    const scope = await getOperationalScope({ id: userId, role });
+
+    if (!scopeIncludesClub(scope, clubId)) {
+      return false;
+    }
+
     const club = await prisma.club.findUnique({
       where: { id: clubId },
       select: { isActive: true, centre: { select: { isActive: true } } }
@@ -355,8 +391,12 @@ async function canManageDocumentClub(userId: string, role: Role, clubId: string)
 }
 
 export function canEditDocumentScope(role: Role, existingClubId: string | null, targetClubId: string | null) {
-  if (canManageOperationalData(role)) {
+  if (isAdmin(role)) {
     return true;
+  }
+
+  if (isCenterDirector(role)) {
+    return Boolean(existingClubId && targetClubId);
   }
 
   if (role !== Role.FACILITATOR) {

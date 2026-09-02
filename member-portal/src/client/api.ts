@@ -351,6 +351,8 @@ export type ResourceLink = {
   roleKey?: string | null;
   requirementId?: string | null;
   requirementName?: string | null;
+  centreId?: string | null;
+  centreName?: string | null;
   category: ResourceCategory | string;
   status: "ACTIVE" | "ARCHIVED" | string;
   createdAt: string;
@@ -371,6 +373,7 @@ export type DocumentsResponse = {
 
 export type ResourcesResponse = {
   resources: ResourceLink[];
+  centres: Centre[];
   studentContext?: {
     programLevel: string | null;
     currentBandLevel: string;
@@ -427,8 +430,13 @@ export type AdminOverview = {
       bandLevel: string;
       clubMemberships?: StudentClubMembership[];
     } | null;
+    centerDirectorAssignments?: Array<{ centreId: string }>;
   }>;
   students: Student[];
+  scope: {
+    assignedCentres: Array<{ id: string; name: string }>;
+    hasAssignedCentre: boolean;
+  };
 };
 
 export type DemoCleanupSummary = {
@@ -628,6 +636,7 @@ export async function createUser(payload: {
   bandLevel?: string;
   clubIds?: string[];
   facilitatorClubIds?: string[];
+  centreIds?: string[];
 }) {
   return request<{ user: PortalUser }>("/api/admin/users", {
     method: "POST",
@@ -646,6 +655,7 @@ export async function updateUser(userId: string, payload: {
   bandLevel?: string;
   clubIds?: string[];
   facilitatorClubIds?: string[];
+  centreIds?: string[];
 }) {
   return request<{ user: PortalUser & { isActive: boolean } }>(`/api/admin/users/${userId}`, {
     method: "PATCH",
@@ -1168,7 +1178,10 @@ function parseAdminOverviewResponse(value: unknown): AdminOverview {
     centres: expectRecordArray(result.centres, "administration") as Centre[],
     clubs: expectRecordArray(result.clubs, "administration") as Club[],
     users: expectRecordArray(result.users, "administration") as AdminOverview["users"],
-    students: expectRecordArray(result.students, "administration") as Student[]
+    students: expectRecordArray(result.students, "administration") as Student[],
+    scope: isRecord(result.scope)
+      ? result.scope as AdminOverview["scope"]
+      : { assignedCentres: [], hasAssignedCentre: false }
   };
 }
 
@@ -1206,6 +1219,7 @@ function parseResourcesResponse(value: unknown): ResourcesResponse {
 
   return {
     resources: expectRecordArray(result.resources, "resources") as ResourceLink[],
+    centres: Array.isArray(result.centres) ? result.centres as Centre[] : [],
     studentContext: isRecord(result.studentContext)
       ? result.studentContext as ResourcesResponse["studentContext"]
       : null
@@ -1298,6 +1312,7 @@ export async function createResourceLink(payload: {
   bandLevel?: string | null;
   roleKey?: string | null;
   requirementId?: string | null;
+  centreId?: string | null;
   category: string;
   status?: string;
 }) {
@@ -1316,6 +1331,7 @@ export async function updateResourceLink(resourceId: string, payload: Partial<{
   bandLevel: string | null;
   roleKey: string | null;
   requirementId: string | null;
+  centreId: string | null;
   category: string;
   status: string;
 }>) {

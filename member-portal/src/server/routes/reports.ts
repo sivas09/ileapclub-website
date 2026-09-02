@@ -3,7 +3,7 @@ import { Router } from "express";
 import { Role } from "@prisma/client";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
-import { canManageOperationalData } from "../permissions.js";
+import { getOperationalScope, isAdmin, isCenterDirector } from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 
 export const reportsRouter = Router();
@@ -108,8 +108,13 @@ function roleNamesForFeedback(score: FeedbackWithMeetingRoles) {
 }
 
 async function feedbackVisibilityFilter(userId: string, role: Role) {
-  if (canManageOperationalData(role)) {
+  if (isAdmin(role)) {
     return {};
+  }
+
+  if (isCenterDirector(role)) {
+    const scope = await getOperationalScope({ id: userId, role });
+    return { meeting: { clubId: { in: scope.clubIds ?? [] } } };
   }
 
   if (role === Role.FACILITATOR) {

@@ -4,7 +4,7 @@ import { PaymentStatus, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
-import { canManageOperationalData, operationalManagerRoles } from "../permissions.js";
+import { canAccessStudent, canManageOperationalData, getOperationalScope, isAdmin, isCenterDirector } from "../permissions.js";
 import { memberUserSelect, publicUserSelect } from "../services/safeUser.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
@@ -341,7 +341,7 @@ studentRouter.get("/me/club-members", requireRole([Role.STUDENT]), asyncRoute(as
   });
 }));
 
-studentRouter.get("/requirements", requireRole(operationalManagerRoles), asyncRoute(async (_request, response) => {
+studentRouter.get("/requirements", requireRole([Role.ADMIN]), asyncRoute(async (_request, response) => {
   const requirements = await prisma.bandRequirement.findMany({
     orderBy: [{ programLevel: "asc" }, { bandOrder: "asc" }, { sortOrder: "asc" }, { name: "asc" }]
   });
@@ -349,7 +349,7 @@ studentRouter.get("/requirements", requireRole(operationalManagerRoles), asyncRo
   response.json({ requirements });
 }));
 
-studentRouter.post("/requirements", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
+studentRouter.post("/requirements", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
   const parsed = bandRequirementSchema.safeParse(request.body);
 
   if (!parsed.success) {
@@ -383,7 +383,7 @@ studentRouter.post("/requirements", requireRole(operationalManagerRoles), asyncR
   response.status(201).json({ requirement });
 }));
 
-studentRouter.patch("/requirements/:requirementId", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
+studentRouter.patch("/requirements/:requirementId", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
   const parsed = bandRequirementSchema.partial().safeParse(request.body);
 
   if (!parsed.success || Object.keys(parsed.data).length === 0) {
@@ -427,7 +427,7 @@ studentRouter.patch("/requirements/:requirementId", requireRole(operationalManag
   response.json({ requirement });
 }));
 
-studentRouter.delete("/requirements/:requirementId", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
+studentRouter.delete("/requirements/:requirementId", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
   const requirementId = String(request.params.requirementId);
   const existing = await prisma.bandRequirement.findUnique({ where: { id: requirementId } });
 
@@ -504,7 +504,15 @@ studentRouter.put("/:studentId/requirements/:requirementId", asyncRoute(async (r
     return;
   }
 
-  const selectedProgramLevel = getStudentProgramLevel(student);
+  if (isCenterDirector(user) && !(await canAccessStudent(user, student.id))) {
+    response.status(403).json({ message: "You cannot update band progress outside your centre scope." });
+    return;
+  }
+
+  const selectedProgramLevel = getStudentProgramLevel({
+    ...student,
+    clubMemberships: await scopedClubMemberships(user, student.clubMemberships)
+  });
 
   if (!selectedProgramLevel || requirement.programLevel !== selectedProgramLevel) {
     response.status(400).json({ message: "Choose a requirement from this member's program ladder." });
@@ -602,7 +610,15 @@ studentRouter.post("/:studentId/requirements/backfill", asyncRoute(async (reques
     return;
   }
 
-  const selectedProgramLevel = getStudentProgramLevel(student);
+  if (isCenterDirector(user) && !(await canAccessStudent(user, student.id))) {
+    response.status(403).json({ message: "You cannot backfill band progress outside your centre scope." });
+    return;
+  }
+
+  const selectedProgramLevel = getStudentProgramLevel({
+    ...student,
+    clubMemberships: await scopedClubMemberships(user, student.clubMemberships)
+  });
 
   if (!selectedProgramLevel) {
     response.status(400).json({ message: programLevelWarning });
@@ -705,6 +721,11 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
     return;
   }
 
+  if (isCenterDirector(user) && !(await canAccessStudent(user, student.id))) {
+    response.status(403).json({ message: "You cannot update a member outside your centre scope." });
+    return;
+  }
+
   const updatedStudent = await prisma.student.update({
     where: { id: student.id },
     data: {
@@ -722,10 +743,11 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
       }
     }
   });
-  const selectedProgramLevel = getStudentProgramLevel(updatedStudent);
+  const visibleMemberships = await scopedClubMemberships(user, updatedStudent.clubMemberships);
+  const selectedProgramLevel = getStudentProgramLevel({ ...updatedStudent, clubMemberships: visibleMemberships });
 
   response.json({
-    student: updatedStudent,
+    student: { ...updatedStudent, clubMemberships: visibleMemberships },
     feedback: [],
     memberFeedback: [],
     requirements: await buildRequirementProgress(updatedStudent.id, selectedProgramLevel),
@@ -733,8 +755,8 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
       bandLevel: updatedStudent.bandLevel,
       programLevel: selectedProgramLevel,
       programLevelWarning: selectedProgramLevel ? null : programLevelWarning,
-      clubName: formatClubNames(updatedStudent.clubMemberships),
-      centreName: formatCentreNames(updatedStudent.clubMemberships),
+      clubName: formatClubNames(visibleMemberships),
+      centreName: formatCentreNames(visibleMemberships),
       attendanceRate: null,
       totalMeetingsMarked: 0,
       rolesCompleted: 0,
@@ -777,10 +799,16 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
     return;
   }
 
-  const selectedProgramLevel = getStudentProgramLevel(student);
+  if (isCenterDirector(user) && !(await canAccessStudent(user, student.id))) {
+    response.status(403).json({ message: "You cannot view progress outside your centre scope." });
+    return;
+  }
+
+  const visibleMemberships = await scopedClubMemberships(user, student.clubMemberships);
+  const selectedProgramLevel = getStudentProgramLevel({ ...student, clubMemberships: visibleMemberships });
 
   response.json({
-    student,
+    student: { ...student, clubMemberships: visibleMemberships },
     feedback: [],
     memberFeedback: [],
     requirements: await buildRequirementProgress(student.id, selectedProgramLevel),
@@ -788,8 +816,8 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
       bandLevel: student.bandLevel,
       programLevel: selectedProgramLevel,
       programLevelWarning: selectedProgramLevel ? null : programLevelWarning,
-      clubName: formatClubNames(student.clubMemberships),
-      centreName: formatCentreNames(student.clubMemberships),
+      clubName: formatClubNames(visibleMemberships),
+      centreName: formatCentreNames(visibleMemberships),
       attendanceRate: null,
       totalMeetingsMarked: 0,
       rolesCompleted: 0,
@@ -798,6 +826,19 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
     }
   });
 }));
+
+async function scopedClubMemberships<T extends { club: { centre: { id: string } } }>(
+  user: { id: string; role: Role },
+  memberships: T[]
+) {
+  if (!isCenterDirector(user)) {
+    return memberships;
+  }
+
+  const scope = await getOperationalScope(user);
+  const centreIdSet = new Set(scope.centreIds ?? []);
+  return memberships.filter((membership) => centreIdSet.has(membership.club.centre.id));
+}
 
 async function buildRequirementProgress(studentId: string, programLevel: ProgramLevel | null) {
   if (!programLevel) {
@@ -906,7 +947,7 @@ async function canFacilitatorAccessStudent(facilitatorId: string, studentId: str
 }
 
 export function canManageBandRequirementDefinitions(role: Role) {
-  return canManageOperationalData(role);
+  return isAdmin(role);
 }
 
 function formatClubNames(memberships: Array<{ club: { name: string } }>) {

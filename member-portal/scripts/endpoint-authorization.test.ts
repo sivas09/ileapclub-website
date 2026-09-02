@@ -25,7 +25,9 @@ const users = {
   admin: { id: "admin-user", email: "admin@example.com", firstName: "Admin", lastName: "User", role: Role.ADMIN, isActive: true },
   director: { id: "director-user", email: "director@example.com", firstName: "Center", lastName: "Director", role: Role.CENTER_DIRECTOR, isActive: true },
   facilitator: { id: "facilitator-user", email: "facilitator@example.com", firstName: "Test", lastName: "Facilitator", role: Role.FACILITATOR, isActive: true },
-  student: { id: "student-user", email: "student@example.com", firstName: "Current", lastName: "Student", role: Role.STUDENT, isActive: true }
+  otherFacilitator: { id: "other-facilitator-user", email: "other-facilitator@example.com", firstName: "Other", lastName: "Facilitator", role: Role.FACILITATOR, isActive: true },
+  student: { id: "student-user", email: "student@example.com", firstName: "Current", lastName: "Student", role: Role.STUDENT, isActive: true },
+  otherStudent: { id: "other-student-user", email: "other-student@example.com", firstName: "Other", lastName: "Student", role: Role.STUDENT, isActive: true }
 };
 
 const assignedClubId = "assigned-club";
@@ -46,12 +48,15 @@ const meetingClubIds = new Map([
 ]);
 
 const state = {
+  directorHasCentreAssignment: true,
   roleUpdates: 0,
   studentRequirementUpserts: 0,
   documentCreates: 0,
   noticeCreates: 0,
   resourceCreates: 0,
   userCreates: 0,
+  centerDirectorAssignmentCreates: 0,
+  centerDirectorAssignmentUpserts: 0,
   memberFeedbackCreates: 0,
   memberFeedbackUpdates: 0,
   memberFeedbackDeletes: 0,
@@ -61,6 +66,7 @@ const state = {
   meetingRelatedDeleteCounts: {} as Record<string, Record<string, number>>,
   lastDocumentWhere: null as any,
   lastNoticeWhere: null as any,
+  lastReportWhere: null as any,
   lastStudentUpdate: null as any,
   roleAssignmentUpdates: [] as Array<{ where: any; data: any }>
 };
@@ -81,6 +87,9 @@ patchModel("user", {
   findMany: ({ where, select }: any = {}) => where?.role?.in
     ? Object.values(users)
       .filter((user) => where.role.in.includes(user.role))
+      .filter((user) => !where.OR
+        || user.id === users.facilitator.id
+        || user.id === users.student.id)
       .map((user) => projectUser({ ...rawUser(user.id, user.role), ...user }, select))
     : [],
   create: ({ data, select }: any) => {
@@ -94,7 +103,12 @@ patchModel("user", {
 });
 patchModel("club", {
   count: ({ where }: any) => where.id?.in?.every((clubId: string) => clubId === assignedClubId || clubId === otherClubId) ? where.id.in.length : 0,
-  findMany: ({ include }: any = {}) => include?.studentMemberships
+  findMany: ({ where, include, select }: any = {}) => select?.id
+    ? [
+      { id: assignedClubId, centreId: "centre-1" },
+      { id: otherClubId, centreId: "centre-2" }
+    ].filter((club) => !where?.centreId?.in || where.centreId.in.includes(club.centreId))
+    : include?.studentMemberships
     ? [{
       id: assignedClubId,
       name: "Assigned Club",
@@ -116,7 +130,7 @@ patchModel("club", {
           include.facilitators.include.facilitator.select
         )
       }]
-    }]
+    }].filter((club) => !where?.id?.in || where.id.in.includes(club.id))
     : [],
   findUnique: ({ where }: any) => where.id === assignedClubId || where.id === otherClubId
     ? { id: where.id, isActive: true, centre: { isActive: true } }
@@ -125,17 +139,39 @@ patchModel("club", {
   update: ({ where, data }: any) => ({ id: where.id, centreId: "centre-1", name: "Updated Club", program: "Junior", isActive: data.isActive, centre: { id: "centre-1", name: "Centre", isActive: true }, studentMemberships: [], facilitators: [] })
 });
 patchModel("centre", {
-  findMany: () => [],
+  findMany: ({ where }: any = {}) => [
+    { id: "centre-1", name: "Assigned Centre", province: "Ontario", city: "Ottawa", isActive: true, clubs: [] },
+    { id: "centre-2", name: "Other Centre", province: "Ontario", city: "Toronto", isActive: true, clubs: [] }
+  ].filter((centre) => !where?.id?.in || where.id.in.includes(centre.id)),
   findUnique: ({ where }: any) => ({ id: where.id, name: "Centre", isActive: true }),
+  count: ({ where }: any) => where.id?.in?.filter((id: string) => id === "centre-1" || id === "centre-2").length ?? 0,
   create: ({ data }: any) => ({ id: "created-centre", ...data, isActive: true }),
   update: ({ where, data }: any) => ({ id: where.id, name: "Centre", province: "Ontario", city: "Ottawa", address: null, isActive: data.isActive, clubs: [] })
 });
+patchModel("centerDirectorAssignment", {
+  findMany: ({ where }: any) => state.directorHasCentreAssignment && where.userId === users.director.id && where.isActive
+    ? [{ centreId: "centre-1" }]
+    : [],
+  createMany: ({ data }: any) => {
+    state.centerDirectorAssignmentCreates += data.length;
+    return { count: data.length };
+  },
+  updateMany: () => ({ count: 0 }),
+  upsert: ({ create }: any) => {
+    state.centerDirectorAssignmentUpserts += 1;
+    return create;
+  }
+});
 patchModel("clubFacilitator", {
-  findMany: () => [{ clubId: assignedClubId }],
+  findMany: () => [{ clubId: assignedClubId, club: { centreId: "centre-1" } }],
   findFirst: ({ where }: any) => where.facilitatorId === users.facilitator.id && includesClub(where.clubId, assignedClubId)
     ? { id: "club-facilitator" }
     : null,
-  count: ({ where }: any) => where.facilitatorId === users.facilitator.id && where.clubId === assignedClubId ? 1 : 0,
+  count: ({ where }: any) => {
+    if (where.facilitatorId !== users.facilitator.id) return 0;
+    if (where.clubId?.notIn) return where.clubId.notIn.includes(assignedClubId) ? 0 : 1;
+    return includesClub(where.clubId, assignedClubId) ? 1 : 0;
+  },
   deleteMany: () => ({ count: 0 }),
   createMany: ({ data }: any) => ({ count: data.length })
 });
@@ -155,6 +191,13 @@ patchModel("studentClubMembership", {
 
     if (where?.studentId === otherStudentId) {
       return [{ clubId: otherClubId, status: "ACTIVE", club: { centreId: "centre-2" } }];
+    }
+
+    if (where?.student?.user?.role === Role.STUDENT) {
+      return [
+        memberListMembership(assignedStudentId, users.student.id, assignedClubId, "centre-1"),
+        memberListMembership(otherStudentId, users.otherStudent.id, otherClubId, "centre-2")
+      ].filter((membership) => !where.clubId?.in || where.clubId.in.includes(membership.clubId));
     }
 
     if (select?.clubId) {
@@ -177,13 +220,21 @@ patchModel("studentClubMembership", {
     return null;
   },
   count: async ({ where }: any = {}) => {
+    if (where?.student?.userId === users.student.id) {
+      if (where.clubId?.notIn) return where.clubId.notIn.includes(assignedClubId) ? 0 : 1;
+      return includesClub(where.clubId, assignedClubId) ? 1 : 0;
+    }
     const isAssignedMembership = where.studentId === assignedStudentId && includesClub(where.clubId, assignedClubId);
     const isOtherMembership = where.studentId === otherStudentId && includesClub(where.clubId, otherClubId);
+    if (where?.student?.user?.role === Role.STUDENT) {
+      return where.clubId?.in ? [assignedClubId, otherClubId].filter((clubId) => where.clubId.in.includes(clubId)).length : 2;
+    }
     return isAssignedMembership || isOtherMembership ? 1 : 0;
   },
   deleteMany: () => ({ count: 0 }),
   createMany: () => ({ count: 1 }),
-  updateMany: () => ({ count: 1 })
+  updateMany: () => ({ count: 1 }),
+  upsert: ({ create }: any) => create
 });
 patchModel("student", {
   findMany: ({ where, include }: any = {}) => where?.user?.role === Role.STUDENT
@@ -195,7 +246,7 @@ patchModel("student", {
     }
 
     if (where.id === otherStudentId) {
-      return studentRecord(otherStudentId, "other-user", otherClubId, include?.user?.select);
+      return studentRecord(otherStudentId, users.otherStudent.id, otherClubId, include?.user?.select);
     }
 
     return null;
@@ -211,8 +262,9 @@ patchModel("roleDefinition", {
   findMany: () => []
 });
 patchModel("meeting", {
-  findMany: ({ include }: any = {}) => Array.from(meetingClubIds.entries())
+  findMany: ({ where, include }: any = {}) => Array.from(meetingClubIds.entries())
     .filter(([meetingId]) => !state.deletedMeetingIds.has(meetingId))
+    .filter(([, clubId]) => !where?.clubId?.in || where.clubId.in.includes(clubId))
     .map(([meetingId, clubId]) => meetingRecord(clubId, meetingId, include)),
   findUnique: ({ where }: any) => meetingRecordForId(where.id),
   findUniqueOrThrow: ({ include }: any = {}) => meetingRecord(assignedClubId, "assigned-meeting", include),
@@ -289,7 +341,9 @@ patchModel("meetingRoleScore", {
   }
 });
 patchModel("studentMeetingFeedback", {
-  findMany: ({ include }: any = {}) => [{
+  findMany: ({ where, include }: any = {}) => {
+    state.lastReportWhere = where;
+    return [{
     id: "feedback-report-1",
     roleSlotId: null,
     studentId: assignedStudentId,
@@ -310,7 +364,8 @@ patchModel("studentMeetingFeedback", {
       assignedClubId,
       include?.student?.include?.user?.select
     )
-  }],
+    }];
+  },
   count: ({ where }: any = {}) => where?.roleSlotId === "feedback-slot" ? 1 : 0,
   groupBy: () => [],
   deleteMany: ({ where }: any) => recordMeetingDelete(where.meetingId, "studentFeedbacks", 1)
@@ -375,13 +430,23 @@ patchModel("notice", {
   delete: ({ where }: any) => noticeRecords().find((notice) => notice.id === where.id) ?? noticeRecord(where.id, assignedClubId)
 });
 patchModel("resourceLink", {
-  findMany: () => [resourceRecord()],
-  create: () => {
+  findMany: ({ where }: any = {}) => [
+    resourceRecord(null),
+    resourceRecord("centre-1"),
+    resourceRecord("centre-2")
+  ].filter((resource) => {
+    if (where?.centreId?.in) return Boolean(resource.centreId && where.centreId.in.includes(resource.centreId));
+    if (where?.OR) return where.OR.some((clause: any) => clause.centreId === null
+      ? resource.centreId === null
+      : Boolean(resource.centreId && clause.centreId?.in?.includes(resource.centreId)));
+    return true;
+  }),
+  create: ({ data }: any) => {
     state.resourceCreates += 1;
-    return resourceRecord();
+    return resourceRecord(data.centreId ?? null);
   },
-  findUnique: ({ where }: any) => where.id === "resource-1" ? resourceRecord() : null,
-  delete: () => resourceRecord(),
+  findUnique: ({ where }: any) => where.id === "resource-1" ? resourceRecord("centre-1") : null,
+  delete: () => resourceRecord("centre-1"),
   count: () => 0,
   updateMany: () => ({ count: 0 })
 });
@@ -444,37 +509,67 @@ try {
   await assertStatus("unauthenticated members request is rejected", "GET", "/api/members", null, 401);
 
   await assertStatus("auth me response excludes confidential fields", "GET", "/api/auth/me", Role.ADMIN, 200);
-  await assertStatus("admin overview response excludes confidential fields", "GET", "/api/admin/overview", Role.ADMIN, 200);
+  const adminOverviewResponse = await assertStatus("admin overview response excludes confidential fields", "GET", "/api/admin/overview", Role.ADMIN, 200);
+  const adminOverview = await adminOverviewResponse.json() as { centres: Array<{ id: string }> };
+  assertEqual(adminOverview.centres.some((centre) => centre.id === "centre-1"), true, "admin sees the assigned centre");
+  assertEqual(adminOverview.centres.some((centre) => centre.id === "centre-2"), true, "admin retains organization-wide centre access");
   const directorOverviewResponse = await assertStatus("center director can open operational setup", "GET", "/api/admin/overview", Role.CENTER_DIRECTOR, 200);
-  const directorOverview = await directorOverviewResponse.json() as { users: Array<{ role: Role }> };
+  const directorOverview = await directorOverviewResponse.json() as {
+    centres: Array<{ id: string }>;
+    clubs: Array<{ id: string }>;
+    users: Array<{ role: Role }>;
+    scope: { hasAssignedCentre: boolean; assignedCentres: Array<{ id: string }> };
+  };
+  assertEqual(directorOverview.centres.length === 1 && directorOverview.centres[0]?.id === "centre-1", true, "center director sees only assigned centres");
+  assertEqual(directorOverview.clubs.every((club) => club.id === assignedClubId), true, "center director sees only clubs under assigned centres");
+  assertEqual(directorOverview.scope.hasAssignedCentre, true, "center director scope reports an active centre assignment");
   assertEqual(directorOverview.users.some((user) => user.role === Role.ADMIN || user.role === Role.CENTER_DIRECTOR), false, "center director overview hides governed accounts");
+  assertEqual(directorOverview.users.some((user) => user.id === users.otherFacilitator.id || user.id === users.otherStudent.id), false, "center director overview hides members and facilitators outside assigned centres");
+  state.directorHasCentreAssignment = false;
+  const unassignedDirectorResponse = await assertStatus("unassigned center director receives an empty scoped overview", "GET", "/api/admin/overview", Role.CENTER_DIRECTOR, 200);
+  const unassignedDirectorOverview = await unassignedDirectorResponse.json() as typeof directorOverview;
+  assertEqual(unassignedDirectorOverview.centres.length === 0 && unassignedDirectorOverview.clubs.length === 0, true, "unassigned center director cannot see organization data");
+  assertEqual(unassignedDirectorOverview.scope.hasAssignedCentre, false, "unassigned center director scope reports no centre assignment");
+  state.directorHasCentreAssignment = true;
 
-  await assertStatus("admin can create a center director", "POST", "/api/admin/users", Role.ADMIN, 201, adminUserPayload(Role.CENTER_DIRECTOR));
-  await assertStatus("center director can create a member", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 201, adminUserPayload(Role.STUDENT));
-  await assertStatus("center director can create a facilitator", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 201, adminUserPayload(Role.FACILITATOR));
+  await assertStatus("admin can create and assign a center director", "POST", "/api/admin/users", Role.ADMIN, 201, { ...adminUserPayload(Role.CENTER_DIRECTOR), centreIds: ["centre-1", "centre-2"] });
+  assertEqual(state.centerDirectorAssignmentCreates === 2, true, "admin persists all selected center director centre assignments");
+  await assertStatus("admin can update center director centre assignments", "PATCH", `/api/admin/users/${users.director.id}`, Role.ADMIN, 200, { ...adminUserUpdatePayload(Role.CENTER_DIRECTOR), centreIds: ["centre-1", "centre-2"] });
+  assertEqual(state.centerDirectorAssignmentUpserts === 2, true, "admin synchronizes each selected center director centre assignment");
+  await assertStatus("center director can create a member in assigned scope", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 201, { ...adminUserPayload(Role.STUDENT), clubIds: [assignedClubId] });
+  await assertStatus("center director can create a facilitator in assigned scope", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 201, { ...adminUserPayload(Role.FACILITATOR), facilitatorClubIds: [assignedClubId] });
+  await assertStatus("center director cannot create a member outside assigned scope", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 403, { ...adminUserPayload(Role.STUDENT), clubIds: [otherClubId] });
   await assertStatus("center director cannot create an admin", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 403, adminUserPayload(Role.ADMIN));
   await assertStatus("center director cannot create another center director", "POST", "/api/admin/users", Role.CENTER_DIRECTOR, 403, adminUserPayload(Role.CENTER_DIRECTOR));
-  await assertStatus("center director can edit a member", "PATCH", `/api/admin/users/${users.student.id}`, Role.CENTER_DIRECTOR, 200, adminUserUpdatePayload(Role.STUDENT));
-  await assertStatus("center director can edit a facilitator", "PATCH", `/api/admin/users/${users.facilitator.id}`, Role.CENTER_DIRECTOR, 200, adminUserUpdatePayload(Role.FACILITATOR));
+  await assertStatus("center director can edit a member", "PATCH", `/api/admin/users/${users.student.id}`, Role.CENTER_DIRECTOR, 200, { ...adminUserUpdatePayload(Role.STUDENT), clubIds: [assignedClubId] });
+  await assertStatus("center director can edit a facilitator", "PATCH", `/api/admin/users/${users.facilitator.id}`, Role.CENTER_DIRECTOR, 200, { ...adminUserUpdatePayload(Role.FACILITATOR), facilitatorClubIds: [assignedClubId] });
   await assertStatus("center director cannot edit an admin", "PATCH", `/api/admin/users/${users.admin.id}`, Role.CENTER_DIRECTOR, 403, adminUserUpdatePayload(Role.ADMIN));
   await assertStatus("center director cannot promote a member to admin", "PATCH", `/api/admin/users/${users.student.id}`, Role.CENTER_DIRECTOR, 403, adminUserUpdatePayload(Role.ADMIN));
   await assertStatus("center director cannot change their own role", "PATCH", `/api/admin/users/${users.director.id}`, Role.CENTER_DIRECTOR, 403, adminUserUpdatePayload(Role.ADMIN));
+  await assertStatus("center director cannot assign themselves to another centre", "PATCH", `/api/admin/users/${users.director.id}`, Role.CENTER_DIRECTOR, 400, { ...adminUserUpdatePayload(Role.CENTER_DIRECTOR), centreIds: ["centre-2"] });
   await assertStatus("center director cannot reset an admin password", "PATCH", `/api/admin/users/${users.admin.id}/password`, Role.CENTER_DIRECTOR, 403, { newPassword: "new-password-123" });
   await assertStatus("center director cannot deactivate an admin", "PATCH", `/api/admin/users/${users.admin.id}/deactivate`, Role.CENTER_DIRECTOR, 403);
   await assertStatus("center director cannot reactivate an admin", "PATCH", `/api/admin/users/${users.admin.id}/active`, Role.CENTER_DIRECTOR, 403, { isActive: true, clubIds: [] });
   await assertStatus("center director cannot access admin-only user deletion", "DELETE", `/api/admin/users/${users.admin.id}/demo`, Role.CENTER_DIRECTOR, 403);
 
-  await assertStatus("center director can create a centre", "POST", "/api/admin/centres", Role.CENTER_DIRECTOR, 201, { name: "Ottawa Centre", province: "Ontario", city: "Ottawa" });
+  await assertStatus("center director cannot create an unassigned centre", "POST", "/api/admin/centres", Role.CENTER_DIRECTOR, 403, { name: "Ottawa Centre", province: "Ontario", city: "Ottawa" });
   await assertStatus("center director can edit a centre status", "PATCH", "/api/admin/centres/centre-1/archive", Role.CENTER_DIRECTOR, 200, { isActive: false });
+  await assertStatus("center director cannot edit an out-of-scope centre", "PATCH", "/api/admin/centres/centre-2/archive", Role.CENTER_DIRECTOR, 403, { isActive: false });
   await assertStatus("center director can create a club", "POST", "/api/admin/clubs", Role.CENTER_DIRECTOR, 201, { centreId: "centre-1", name: "Junior Club", program: "Junior Regular Meeting" });
+  await assertStatus("center director cannot create a club outside scope", "POST", "/api/admin/clubs", Role.CENTER_DIRECTOR, 403, { centreId: "centre-2", name: "Other Club", program: "Junior Regular Meeting" });
   await assertStatus("center director can edit a club status", "PATCH", `/api/admin/clubs/${assignedClubId}/archive`, Role.CENTER_DIRECTOR, 200, { isActive: false });
+  await assertStatus("center director cannot edit an out-of-scope club", "PATCH", `/api/admin/clubs/${otherClubId}/archive`, Role.CENTER_DIRECTOR, 403, { isActive: false });
 
   await assertStatus("admin can view all members", "GET", "/api/members", Role.ADMIN, 200);
-  await assertStatus("center director can view all members", "GET", "/api/members", Role.CENTER_DIRECTOR, 200);
+  const directorMembersResponse = await assertStatus("center director can view scoped members", "GET", "/api/members", Role.CENTER_DIRECTOR, 200);
+  const directorMembers = await directorMembersResponse.json() as { members: Array<{ centreId: string }> };
+  assertEqual(directorMembers.members.length === 1 && directorMembers.members[0]?.centreId === "centre-1", true, "center director member list contains only assigned-centre members");
   await assertStatus("center director can add a member", "POST", "/api/members", Role.CENTER_DIRECTOR, 201, memberPayload([assignedClubId]));
-  await assertStatus("center director can update a member", "PATCH", `/api/members/${otherStudentId}`, Role.CENTER_DIRECTOR, 200, { programLevel: "JUNIOR", bandLevel: "Yellow" });
+  await assertStatus("center director can update an assigned-centre member", "PATCH", `/api/members/${assignedStudentId}`, Role.CENTER_DIRECTOR, 200, { programLevel: "JUNIOR", bandLevel: "Yellow" });
+  await assertStatus("center director cannot update an out-of-scope member", "PATCH", `/api/members/${otherStudentId}`, Role.CENTER_DIRECTOR, 403, { programLevel: "JUNIOR", bandLevel: "Yellow" });
   await assertStatus("admin member detail excludes confidential fields", "GET", `/api/members/${assignedStudentId}`, Role.ADMIN, 200);
   await assertStatus("center director can view member details and feedback", "GET", `/api/members/${assignedStudentId}`, Role.CENTER_DIRECTOR, 200);
+  await assertStatus("center director cannot view an out-of-scope member", "GET", `/api/members/${otherStudentId}`, Role.CENTER_DIRECTOR, 403);
   const facilitatorMembersResponse = await assertStatus("facilitator can view assigned club members", "GET", `/api/members?clubId=${assignedClubId}`, Role.FACILITATOR, 200);
   assertNoPaymentResponseFields(await facilitatorMembersResponse.json(), "facilitator members response");
   const studentMemberResponse = await assertStatus("student can view an own-club member", "GET", `/api/members/${assignedStudentId}`, Role.STUDENT, 200);
@@ -490,7 +585,8 @@ try {
   await assertStatus("facilitator can write feedback for an assigned-club member", "POST", `/api/members/${assignedStudentId}/feedback`, Role.FACILITATOR, 201, memberFeedbackPayload(assignedClubId));
   await assertStatus("facilitator cannot write feedback for an unassigned-club member", "POST", `/api/members/${otherStudentId}/feedback`, Role.FACILITATOR, 403, memberFeedbackPayload(otherClubId));
   await assertStatus("admin can write feedback for any active member", "POST", `/api/members/${otherStudentId}/feedback`, Role.ADMIN, 201, memberFeedbackPayload(otherClubId));
-  await assertStatus("center director can write feedback for any active member", "POST", `/api/members/${otherStudentId}/feedback`, Role.CENTER_DIRECTOR, 201, memberFeedbackPayload(otherClubId));
+  await assertStatus("center director can write feedback in assigned scope", "POST", `/api/members/${assignedStudentId}/feedback`, Role.CENTER_DIRECTOR, 201, memberFeedbackPayload(assignedClubId));
+  await assertStatus("center director cannot write feedback outside scope", "POST", `/api/members/${otherStudentId}/feedback`, Role.CENTER_DIRECTOR, 403, memberFeedbackPayload(otherClubId));
   await assertStatus("member cannot write feedback", "POST", `/api/members/${assignedStudentId}/feedback`, Role.STUDENT, 403, memberFeedbackPayload(assignedClubId));
   await assertStatus("facilitator can edit feedback they created", "PATCH", `/api/members/${assignedStudentId}/feedback/own-feedback`, Role.FACILITATOR, 200, { feedback: "Updated by its author." });
   await assertStatus("facilitator cannot edit another facilitator's feedback", "PATCH", `/api/members/${assignedStudentId}/feedback/other-feedback`, Role.FACILITATOR, 403, { feedback: "Tampered feedback." });
@@ -504,6 +600,9 @@ try {
 
   await assertStatus("admin can assign a meeting role", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.ADMIN, 200, { studentId: assignedStudentId });
   await assertStatus("center director can manage meeting role assignments", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.CENTER_DIRECTOR, 200, { studentId: assignedStudentId });
+  const directorMeetingsResponse = await assertStatus("center director sees scoped meeting list", "GET", "/api/meetings", Role.CENTER_DIRECTOR, 200);
+  const directorMeetings = await responseMeetings(directorMeetingsResponse);
+  assertEqual(directorMeetings.every((meeting) => meeting.clubId === assignedClubId), true, "center director meeting list contains only assigned-centre clubs");
   await assertStatus("facilitator can assign a role in assigned club", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.FACILITATOR, 200, { studentId: assignedStudentId });
   await assertStatus("facilitator cannot assign a role in unassigned club", "PUT", "/api/meetings/other-meeting/slots/other-club-slot", Role.FACILITATOR, 403, { studentId: otherStudentId });
   await assertStatus("student cannot use manager role assignment endpoint", "PUT", "/api/meetings/assigned-meeting/slots/assigned-slot", Role.STUDENT, 403, { studentId: assignedStudentId });
@@ -524,7 +623,8 @@ try {
   await assertStatus("student cannot release another student's role", "POST", "/api/meetings/assigned-meeting/slots/other-student-slot/release", Role.STUDENT, 403);
   await assertStatus("student can release own claimed role", "POST", "/api/meetings/assigned-meeting/slots/student-slot/release", Role.STUDENT, 200);
   await assertStatus("facilitator can edit assigned-club meeting", "PATCH", "/api/meetings/assigned-meeting", Role.FACILITATOR, 200, { title: "Updated Saturday Meeting" });
-  await assertStatus("center director can edit meetings", "PATCH", "/api/meetings/other-meeting", Role.CENTER_DIRECTOR, 200, { title: "Director Updated Meeting" });
+  await assertStatus("center director can edit assigned-centre meetings", "PATCH", "/api/meetings/assigned-meeting", Role.CENTER_DIRECTOR, 200, { title: "Director Updated Meeting" });
+  await assertStatus("center director cannot edit out-of-scope meetings", "PATCH", "/api/meetings/other-meeting", Role.CENTER_DIRECTOR, 403, { title: "Tampered Meeting" });
   await assertStatus("facilitator cannot edit another club meeting by tampering with id", "PATCH", "/api/meetings/other-meeting", Role.FACILITATOR, 403, { title: "Tampered Meeting" });
   await assertStatus("student cannot edit meeting directly", "PATCH", "/api/meetings/assigned-meeting", Role.STUDENT, 403, { title: "Tampered Meeting" });
   await assertStatus("invalid calendar meeting date is rejected", "POST", "/api/meetings", Role.ADMIN, 400, meetingPayload("2026-02-30"));
@@ -558,7 +658,9 @@ try {
   assertEqual(state.deletedMeetingIds.has("failure-delete-meeting"), false, "failed related-record deletion leaves meeting intact");
 
   await assertStatus("admin can add documents", "POST", "/api/documents", Role.ADMIN, 201, documentPayload(null));
-  await assertStatus("center director can add global documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 201, documentPayload(null));
+  await assertStatus("center director can add assigned-club documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 201, documentPayload(assignedClubId));
+  await assertStatus("center director cannot add global documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 403, documentPayload(null));
+  await assertStatus("center director cannot add out-of-scope documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 403, documentPayload(otherClubId));
   await assertStatus("facilitator can add assigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 201, documentPayload(assignedClubId));
   await assertStatus("facilitator cannot add unassigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 403, documentPayload(otherClubId));
   await assertStatus("student cannot add documents", "POST", "/api/documents", Role.STUDENT, 403, documentPayload(assignedClubId));
@@ -575,7 +677,9 @@ try {
   await assertStatus("admin can create Club A notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(assignedClubId));
   await assertStatus("admin can create Club B notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(otherClubId));
   await assertStatus("admin can create all-clubs notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(null));
-  await assertStatus("center director can create all-clubs notice", "POST", "/api/notices", Role.CENTER_DIRECTOR, 201, noticePayload(null));
+  await assertStatus("center director can create assigned-club notice", "POST", "/api/notices", Role.CENTER_DIRECTOR, 201, noticePayload(assignedClubId));
+  await assertStatus("center director cannot create all-clubs notice", "POST", "/api/notices", Role.CENTER_DIRECTOR, 403, noticePayload(null));
+  await assertStatus("center director cannot create out-of-scope notice", "POST", "/api/notices", Role.CENTER_DIRECTOR, 403, noticePayload(otherClubId));
   await assertStatus("notice title maximum is enforced", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), title: "x".repeat(121) });
   await assertStatus("notice message is required", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), message: "" });
   await assertStatus("notice expiry must be a valid timestamp", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), expiresAt: "not-a-date" });
@@ -617,7 +721,12 @@ try {
   await assertStatus("admin can permanently delete notice", "DELETE", "/api/notices/notice-a", Role.ADMIN, 200);
 
   await assertStatus("admin can add resources", "POST", "/api/resources", Role.ADMIN, 201, resourcePayload());
-  await assertStatus("center director can add resources", "POST", "/api/resources", Role.CENTER_DIRECTOR, 201, resourcePayload());
+  await assertStatus("center director can add assigned-centre resources", "POST", "/api/resources", Role.CENTER_DIRECTOR, 201, { ...resourcePayload(), centreId: "centre-1" });
+  await assertStatus("center director cannot add global resources", "POST", "/api/resources", Role.CENTER_DIRECTOR, 403, resourcePayload());
+  await assertStatus("center director cannot add out-of-scope resources", "POST", "/api/resources", Role.CENTER_DIRECTOR, 403, { ...resourcePayload(), centreId: "centre-2" });
+  const directorResourcesResponse = await assertStatus("center director sees assigned-centre resources", "GET", "/api/resources", Role.CENTER_DIRECTOR, 200);
+  const directorResources = await directorResourcesResponse.json() as { resources: Array<{ centreId: string | null }> };
+  assertEqual(directorResources.resources.length === 1 && directorResources.resources[0]?.centreId === "centre-1", true, "center director resource list contains only assigned-centre resources");
   await assertStatus("facilitator cannot add resources", "POST", "/api/resources", Role.FACILITATOR, 403, resourcePayload());
   await assertStatus("student cannot delete resources", "DELETE", "/api/resources/resource-1", Role.STUDENT, 403);
   await assertStatus("admin can delete resources", "DELETE", "/api/resources/resource-1", Role.ADMIN, 200);
@@ -625,6 +734,7 @@ try {
 
   await assertStatus("admin feedback report excludes confidential fields", "GET", "/api/reports/facilitator-feedback", Role.ADMIN, 200);
   await assertStatus("center director can view operational reports", "GET", "/api/reports/facilitator-feedback", Role.CENTER_DIRECTOR, 200);
+  assertEqual(state.lastReportWhere?.meeting?.clubId?.in?.join(",") === assignedClubId, true, "center director report query is restricted to assigned-centre clubs");
   const studentProgressResponse = await assertStatus("student self progress excludes confidential fields", "GET", "/api/student/me/progress", Role.STUDENT, 200);
   const studentProgress = parseStudentProgressResponse(await studentProgressResponse.json());
   assertEqual(studentProgress.student.id, assignedStudentId, "student self progress includes the member id");
@@ -637,13 +747,14 @@ try {
   await assertStatus("center director can view student progress", "GET", `/api/student/${assignedStudentId}/progress`, Role.CENTER_DIRECTOR, 200);
 
   await assertStatus("admin can update student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.ADMIN, 200, progressPayload());
-  await assertStatus("center director can update student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.CENTER_DIRECTOR, 200, progressPayload());
+  await assertStatus("center director can update assigned student band progress", "PUT", `/api/student/${assignedStudentId}/requirements/requirement-1`, Role.CENTER_DIRECTOR, 200, progressPayload());
+  await assertStatus("center director cannot update out-of-scope band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.CENTER_DIRECTOR, 403, progressPayload());
   await assertStatus("facilitator can update assigned student band progress", "PUT", `/api/student/${assignedStudentId}/requirements/requirement-1`, Role.FACILITATOR, 200, progressPayload());
   await assertStatus("facilitator cannot update unassigned student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.FACILITATOR, 403, progressPayload());
   await assertStatus("student cannot update band progress", "PUT", `/api/student/${assignedStudentId}/requirements/requirement-1`, Role.STUDENT, 403, progressPayload());
   await assertStatus("student cannot manage band requirement definitions", "POST", "/api/student/requirements", Role.STUDENT, 403, requirementPayload());
   await assertStatus("admin can manage band requirement definitions", "POST", "/api/student/requirements", Role.ADMIN, 201, requirementPayload());
-  await assertStatus("center director can manage band requirement definitions", "POST", "/api/student/requirements", Role.CENTER_DIRECTOR, 201, requirementPayload());
+  await assertStatus("center director cannot manage organization-wide band requirement definitions", "POST", "/api/student/requirements", Role.CENTER_DIRECTOR, 403, requirementPayload());
 
   assertEqual(state.roleUpdates > 0, true, "role claim/release tests executed update paths");
   assertEqual(state.documentCreates > 0, true, "document create tests executed create path");
@@ -957,6 +1068,23 @@ function studentRecord(studentId: string, userId: string, clubId: string, userSe
   };
 }
 
+function memberListMembership(studentId: string, userId: string, clubId: string, centreId: string) {
+  return {
+    id: `${studentId}-${clubId}-membership`,
+    studentId,
+    clubId,
+    status: "ACTIVE",
+    student: studentRecord(studentId, userId, clubId),
+    club: {
+      id: clubId,
+      name: clubId === assignedClubId ? "Assigned Club" : "Other Club",
+      centreId,
+      program: "Junior Regular Meeting",
+      centre: { id: centreId, name: centreId === "centre-1" ? "Assigned Centre" : "Other Centre" }
+    }
+  };
+}
+
 function memberFeedbackRecord(
   id: string,
   studentId: string,
@@ -1209,9 +1337,9 @@ function withoutUndefined(value: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
-function resourceRecord() {
+function resourceRecord(centreId: string | null) {
   return {
-    id: "resource-1",
+    id: centreId ? `resource-${centreId}` : "resource-global",
     title: "Prepared Speech Guide",
     explanation: "A useful guide for students.",
     youtubeUrl: "https://example.com/video",
@@ -1223,6 +1351,8 @@ function resourceRecord() {
     requirementId: null,
     category: "Role Guide",
     status: "ACTIVE",
+    centreId,
+    centre: centreId ? { id: centreId, name: centreId === "centre-1" ? "Assigned Centre" : "Other Centre" } : null,
     createdAt: new Date(),
     requirement: null,
     createdBy: { firstName: "Admin", lastName: "User" },

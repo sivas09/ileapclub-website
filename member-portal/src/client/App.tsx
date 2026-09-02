@@ -4,6 +4,7 @@ import {
   changeMyPassword,
   clearToken,
   getCurrentUser,
+  getAdminOverview,
   getOwnMemberPaymentStatus,
   getStoredToken,
   getStudentProgress,
@@ -16,6 +17,7 @@ import {
   StudentProgress
 } from "./api";
 import { AdminWorkspace } from "./components/AdminWorkspace";
+import { CenterDirectorScopeView } from "./components/CenterDirectorScopeView";
 import { DocumentsWorkspace } from "./components/DocumentsWorkspace";
 import { FeedbackReportPanel } from "./components/FeedbackReportPanel";
 import { MeetingWorkspace } from "./components/MeetingWorkspace";
@@ -254,12 +256,26 @@ function Dashboard({ user, onLogout }: { user: PortalUser; onLogout: () => void 
             </WorkspaceErrorBoundary>
           ) : null}
 
+          {user.role === "CENTER_DIRECTOR" ? <CenterDirectorScopeSummary /> : null}
+
           <OverviewLaunchGrid role={user.role} />
         </>
       ) : <ActiveWorkspace activeHref={activeHref} user={user} />}
       </div>
     </main>
   );
+}
+
+function CenterDirectorScopeSummary() {
+  const [centres, setCentres] = useState<Array<{ id: string; name: string }> | null>(null);
+
+  useEffect(() => {
+    getAdminOverview()
+      .then((overview) => setCentres(overview.scope.assignedCentres))
+      .catch(() => setCentres([]));
+  }, []);
+
+  return <CenterDirectorScopeView centres={centres} />;
 }
 
 function ActiveWorkspace({ activeHref, user }: { activeHref: string; user: PortalUser }) {

@@ -4,7 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
-import { canManageOperationalData } from "../permissions.js";
+import { canManageOperationalData, getOperationalScope, isCenterDirector, scopeIncludesCentre } from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 import { roleResourceKey } from "../services/standardRoles.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
@@ -26,6 +26,7 @@ const resourceSchema = z.object({
   bandLevel: z.enum(bandLevels).nullable().optional(),
   roleKey: z.string().trim().nullable().optional(),
   requirementId: z.string().trim().nullable().optional(),
+  centreId: z.string().trim().nullable().optional(),
   category: z.string().trim().min(2).max(80),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional()
 });
@@ -44,6 +45,7 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
   const category = stringQuery(request.query.category);
   const search = stringQuery(request.query.search);
   const studentContext = user.role === Role.STUDENT ? await getStudentResourceContext(user.id) : null;
+  const scope = await getOperationalScope(user);
 
   const where: Prisma.ResourceLinkWhereInput = {
     ...(roleKey ? { roleKey } : {}),
@@ -61,6 +63,7 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
 
     where.AND = [
       { status: "ACTIVE" },
+      { OR: [{ centreId: null }, { centreId: { in: scope.centreIds ?? [] } }] },
       {
         OR: [
           studentContext.roleKeys.length ? { roleKey: { in: studentContext.roleKeys } } : {},
@@ -80,16 +83,29 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
       response.json({ resources: [], studentContext });
       return;
     }
+  } else if (isCenterDirector(user)) {
+    where.centreId = { in: scope.centreIds ?? [] };
+  } else if (user.role === Role.FACILITATOR) {
+    where.AND = [{ OR: [{ centreId: null }, { centreId: { in: scope.centreIds ?? [] } }] }];
   }
 
-  const resources = await prisma.resourceLink.findMany({
-    where,
-    orderBy: [{ category: "asc" }, { bandOrder: "asc" }, { title: "asc" }],
-    include: resourceInclude
-  });
+  const [resources, centres] = await Promise.all([
+    prisma.resourceLink.findMany({
+      where,
+      orderBy: [{ category: "asc" }, { bandOrder: "asc" }, { title: "asc" }],
+      include: resourceInclude
+    }),
+    canManageOperationalData(user)
+      ? prisma.centre.findMany({
+        where: scope.centreIds === null ? { isActive: true } : { id: { in: scope.centreIds }, isActive: true },
+        orderBy: { name: "asc" }
+      })
+      : Promise.resolve([])
+  ]);
 
   response.json({
     resources: resources.map(serializeResource),
+    centres,
     studentContext
   });
 }));
@@ -110,12 +126,20 @@ resourcesRouter.post("/", asyncRoute(async (request, response) => {
   }
 
   const data = await normalizeResourcePayload(parsed.data);
+  const centreId = parsed.data.centreId ?? null;
+
+  if (isCenterDirector(user) && (!centreId || !scopeIncludesCentre(await getOperationalScope(user), centreId))) {
+    response.status(403).json({ message: "Center Directors must assign resources to one of their centres." });
+    return;
+  }
+
   const resource = await prisma.resourceLink.create({
     data: {
       ...data,
       title: data.title!,
       explanation: data.explanation!,
       category: data.category!,
+      centreId,
       createdById: user.id,
       status: parsed.data.status ?? "ACTIVE"
     },
@@ -148,11 +172,24 @@ resourcesRouter.patch("/:resourceId", asyncRoute(async (request, response) => {
     return;
   }
 
+  const targetCentreId = parsed.data.centreId === undefined ? existing.centreId : parsed.data.centreId;
+
+  if (isCenterDirector(user)) {
+    const scope = await getOperationalScope(user);
+
+    if (!existing.centreId || !scopeIncludesCentre(scope, existing.centreId)
+      || !targetCentreId || !scopeIncludesCentre(scope, targetCentreId)) {
+      response.status(403).json({ message: "You cannot edit a resource outside your centre scope." });
+      return;
+    }
+  }
+
   const data = await normalizeResourcePayload(parsed.data);
   const resource = await prisma.resourceLink.update({
     where: { id: existing.id },
     data: {
       ...data,
+      centreId: targetCentreId,
       updatedById: user.id
     },
     include: resourceInclude
@@ -180,6 +217,11 @@ resourcesRouter.delete("/:resourceId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (isCenterDirector(user) && (!existing.centreId || !scopeIncludesCentre(await getOperationalScope(user), existing.centreId))) {
+    response.status(403).json({ message: "You cannot delete a resource outside your centre scope." });
+    return;
+  }
+
   await prisma.resourceLink.delete({ where: { id: existing.id } });
 
   response.json({ deletedResource: serializeResource(existing) });
@@ -191,6 +233,7 @@ export function canPermanentlyDeleteResourceLink(role: Role) {
 
 const resourceInclude = {
   requirement: true,
+  centre: true,
   createdBy: {
     select: publicUserSelect
   },
@@ -218,6 +261,7 @@ async function normalizeResourcePayload(data: Partial<z.infer<typeof resourceSch
     bandOrder: requirement?.bandOrder ?? (data.bandLevel ? getBandOrder(data.bandLevel) : data.bandLevel === null ? null : undefined),
     roleKey: normalizeRoleKeyInput(data.roleKey),
     requirementId: nullableString(data.requirementId),
+    centreId: data.centreId === undefined ? undefined : nullableString(data.centreId),
     category: data.category,
     status: data.status
   };
@@ -313,6 +357,8 @@ function serializeResource(resource: Prisma.ResourceLinkGetPayload<{ include: ty
     roleKey: resource.roleKey,
     requirementId: resource.requirementId,
     requirementName: resource.requirement?.name ?? null,
+    centreId: resource.centreId,
+    centreName: resource.centre?.name ?? "All centres",
     category: resource.category,
     status: resource.status,
     createdAt: resource.createdAt,

@@ -8,10 +8,15 @@ import { isDemoCleanupEnabled } from "../config.js";
 import { prisma } from "../db.js";
 import {
   canCreateAccountWithRole,
+  canAccessManagedUser,
+  canManageUserExclusively,
   canEditAccount,
   canManageAccountAccess,
   canManageAdminAccounts,
   isCenterDirector,
+  getOperationalScope,
+  scopeIncludesCentre,
+  scopeIncludesClub,
   operationalManagerRoles
 } from "../permissions.js";
 import {
@@ -43,7 +48,8 @@ const userSchema = z.object({
   programLevel: z.enum(["JUNIOR", "SENIOR"]).optional(),
   bandLevel: z.string().trim().optional(),
   clubIds: z.array(z.string()).default([]),
-  facilitatorClubIds: z.array(z.string()).default([])
+  facilitatorClubIds: z.array(z.string()).default([]),
+  centreIds: z.array(z.string()).default([])
 });
 
 const updateUserSchema = userSchema.omit({ password: true }).extend({
@@ -104,15 +110,18 @@ function asyncRoute(handler: (request: Request, response: Response, next: NextFu
 }
 
 adminRouter.get("/overview", asyncRoute(async (request, response) => {
+  const scope = await getOperationalScope(request.user!);
   const visibleUserRoles = isCenterDirector(request.user!)
     ? [Role.FACILITATOR, Role.STUDENT]
     : [Role.ADMIN, Role.CENTER_DIRECTOR, Role.FACILITATOR, Role.STUDENT];
   const [centres, clubs, users, students] = await Promise.all([
     prisma.centre.findMany({
+      where: scope.centreIds === null ? {} : { id: { in: scope.centreIds } },
       orderBy: [{ province: "asc" }, { city: "asc" }, { name: "asc" }],
       include: { clubs: true }
     }),
     prisma.club.findMany({
+      where: scope.clubIds === null ? {} : { id: { in: scope.clubIds } },
       orderBy: [{ name: "asc" }],
       include: {
         centre: true,
@@ -130,7 +139,13 @@ adminRouter.get("/overview", asyncRoute(async (request, response) => {
     }),
     prisma.user.findMany({
       where: {
-        role: { in: visibleUserRoles }
+        role: { in: visibleUserRoles },
+        ...(scope.clubIds === null ? {} : {
+          OR: [
+            { role: Role.STUDENT, studentProfile: { clubMemberships: { some: { clubId: { in: scope.clubIds } } } } },
+            { role: Role.FACILITATOR, facilitator: { some: { clubId: { in: scope.clubIds } } } }
+          ]
+        })
       },
       orderBy: [{ role: "asc" }, { lastName: "asc" }, { firstName: "asc" }],
       select: {
@@ -142,6 +157,7 @@ adminRouter.get("/overview", asyncRoute(async (request, response) => {
             programLevel: true,
             bandLevel: true,
             clubMemberships: {
+              ...(scope.clubIds === null ? {} : { where: { clubId: { in: scope.clubIds } } }),
               include: {
                 club: {
                   include: { centre: true }
@@ -149,19 +165,23 @@ adminRouter.get("/overview", asyncRoute(async (request, response) => {
               }
             }
           }
+        },
+        centerDirectorAssignments: {
+          where: { isActive: true },
+          select: { centreId: true }
         }
       }
     }),
     prisma.student.findMany({
       where: {
-        user: {
-          role: Role.STUDENT
-        }
+        user: { role: Role.STUDENT },
+        ...(scope.clubIds === null ? {} : { clubMemberships: { some: { clubId: { in: scope.clubIds } } } })
       },
       orderBy: [{ user: { lastName: "asc" } }],
       include: {
         user: { select: memberUserSelect },
         clubMemberships: {
+          ...(scope.clubIds === null ? {} : { where: { clubId: { in: scope.clubIds } } }),
           include: {
             club: {
               include: { centre: true }
@@ -176,11 +196,15 @@ adminRouter.get("/overview", asyncRoute(async (request, response) => {
     centres,
     clubs,
     users,
-    students
+    students,
+    scope: {
+      assignedCentres: centres.map((centre) => ({ id: centre.id, name: centre.name })),
+      hasAssignedCentre: scope.centreIds === null || scope.centreIds.length > 0
+    }
   });
 }));
 
-adminRouter.post("/centres", asyncRoute(async (request, response) => {
+adminRouter.post("/centres", requireRole([Role.ADMIN]), asyncRoute(async (request, response) => {
   const parsed = centreSchema.safeParse(request.body);
 
   if (!parsed.success) {
@@ -200,6 +224,13 @@ adminRouter.post("/centres", asyncRoute(async (request, response) => {
 
 adminRouter.patch("/centres/:centreId/archive", asyncRoute(async (request, response) => {
   const centreId = String(request.params.centreId);
+  const scope = await getOperationalScope(request.user!);
+
+  if (!scopeIncludesCentre(scope, centreId)) {
+    response.status(403).json({ message: "You cannot manage this centre." });
+    return;
+  }
+
   const isActive = request.body?.isActive === true;
   const centre = await prisma.centre.update({
     where: { id: centreId },
@@ -215,6 +246,13 @@ adminRouter.post("/clubs", asyncRoute(async (request, response) => {
 
   if (!parsed.success) {
     response.status(400).json({ message: "Select a centre and enter club details." });
+    return;
+  }
+
+  const scope = await getOperationalScope(request.user!);
+
+  if (!scopeIncludesCentre(scope, parsed.data.centreId)) {
+    response.status(403).json({ message: "You cannot create clubs for this centre." });
     return;
   }
 
@@ -235,6 +273,13 @@ adminRouter.post("/clubs", asyncRoute(async (request, response) => {
 
 adminRouter.patch("/clubs/:clubId/archive", asyncRoute(async (request, response) => {
   const clubId = String(request.params.clubId);
+  const scope = await getOperationalScope(request.user!);
+
+  if (!scopeIncludesClub(scope, clubId)) {
+    response.status(403).json({ message: "You cannot manage this club." });
+    return;
+  }
+
   const isActive = request.body?.isActive === true;
   const club = await prisma.club.update({
     where: { id: clubId },
@@ -276,6 +321,17 @@ adminRouter.post("/clubs/:clubId/facilitators", asyncRoute(async (request, respo
       select: facilitatorUserSelect
     })
   ]);
+  const scope = await getOperationalScope(request.user!);
+
+  if (!scopeIncludesClub(scope, clubId)) {
+    response.status(403).json({ message: "You cannot manage facilitator assignments for this club." });
+    return;
+  }
+
+  if (isCenterDirector(request.user!) && facilitator && !(await canAccessManagedUser(request.user!, facilitator.id, facilitator.role))) {
+    response.status(403).json({ message: "You cannot assign a facilitator from outside your centre scope." });
+    return;
+  }
 
   if (!club?.isActive || !club.centre.isActive) {
     response.status(400).json({ message: "Choose an active club in an active centre." });
@@ -308,6 +364,12 @@ adminRouter.post("/clubs/:clubId/facilitators", asyncRoute(async (request, respo
 adminRouter.delete("/clubs/:clubId/facilitators/:facilitatorId", asyncRoute(async (request, response) => {
   const clubId = String(request.params.clubId);
   const facilitatorId = String(request.params.facilitatorId);
+  const scope = await getOperationalScope(request.user!);
+
+  if (!scopeIncludesClub(scope, clubId)) {
+    response.status(403).json({ message: "You cannot manage facilitator assignments for this club." });
+    return;
+  }
 
   await prisma.clubFacilitator.deleteMany({
     where: {
@@ -336,6 +398,31 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
 
   const email = data.email.toLowerCase();
   const requestedClubIds = [...new Set([...data.clubIds, ...data.facilitatorClubIds])];
+  const requestedCentreIds = [...new Set(data.centreIds)];
+
+  if (data.role !== Role.CENTER_DIRECTOR && requestedCentreIds.length) {
+    response.status(400).json({ message: "Centre assignments apply only to Center Director accounts." });
+    return;
+  }
+
+  if (data.role === Role.CENTER_DIRECTOR && !(await areActiveCentres(requestedCentreIds))) {
+    response.status(400).json({ message: "Assign Center Directors only to active centres." });
+    return;
+  }
+
+  if (isCenterDirector(request.user!)) {
+    const scope = await getOperationalScope(request.user!);
+
+    if (!requestedClubIds.length) {
+      response.status(400).json({ message: "Assign the new user to at least one club in your centre scope." });
+      return;
+    }
+
+    if (requestedClubIds.some((clubId) => !scopeIncludesClub(scope, clubId))) {
+      response.status(403).json({ message: "You can assign users only within your centre scope." });
+      return;
+    }
+  }
 
   if (data.role === Role.STUDENT && data.bandLevel && !validBandLevels.has(data.bandLevel)) {
     response.status(400).json({ message: "Choose a valid current band level." });
@@ -404,6 +491,17 @@ adminRouter.post("/users", asyncRoute(async (request, response) => {
         });
       }
 
+      if (data.role === Role.CENTER_DIRECTOR && requestedCentreIds.length > 0) {
+        await tx.centerDirectorAssignment.createMany({
+          data: requestedCentreIds.map((centreId) => ({
+            userId: createdUser.id,
+            centreId,
+            assignedByAdminId: request.user!.id
+          })),
+          skipDuplicates: true
+        });
+      }
+
       return createdUser;
     });
 
@@ -437,6 +535,17 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
     ...(data.role === Role.STUDENT ? data.clubIds : []),
     ...(data.role === Role.FACILITATOR ? data.facilitatorClubIds : [])
   ])];
+  const requestedCentreIds = [...new Set(data.centreIds)];
+
+  if (data.role !== Role.CENTER_DIRECTOR && requestedCentreIds.length) {
+    response.status(400).json({ message: "Centre assignments apply only to Center Director accounts." });
+    return;
+  }
+
+  if (data.role === Role.CENTER_DIRECTOR && !(await areActiveCentres(requestedCentreIds))) {
+    response.status(400).json({ message: "Assign Center Directors only to active centres." });
+    return;
+  }
 
   if (userId === request.user?.id && data.role !== Role.ADMIN) {
     response.status(400).json({ message: "You cannot remove your own admin role." });
@@ -484,6 +593,25 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
   if (!canEditAccount(request.user!, existingUser, data.role)) {
     response.status(403).json({ message: "You cannot edit this account or assign that role." });
     return;
+  }
+
+  if (isCenterDirector(request.user!) && !(await canManageUserExclusively(request.user!, existingUser.id, existingUser.role))) {
+    response.status(403).json({ message: "You cannot edit a user outside your centre scope." });
+    return;
+  }
+
+  if (isCenterDirector(request.user!)) {
+    const scope = await getOperationalScope(request.user!);
+
+    if (!requestedClubIds.length) {
+      response.status(400).json({ message: "Keep the user assigned to at least one club in your centre scope." });
+      return;
+    }
+
+    if (requestedClubIds.some((clubId) => !scopeIncludesClub(scope, clubId))) {
+      response.status(403).json({ message: "You can assign users only within your centre scope." });
+      return;
+    }
   }
 
   if (data.isActive !== existingUser.isActive) {
@@ -551,6 +679,15 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
         }
       }
 
+      if (data.role === Role.CENTER_DIRECTOR) {
+        await syncCenterDirectorAssignments(tx, userId, requestedCentreIds, request.user!.id);
+      } else if (existingUser.role === Role.CENTER_DIRECTOR) {
+        await tx.centerDirectorAssignment.updateMany({
+          where: { userId, isActive: true },
+          data: { isActive: false }
+        });
+      }
+
       return updatedUser;
     });
 
@@ -594,6 +731,18 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
 
     if (!canManageAccountAccess(request.user!, user.role)) {
       throw new AdminActionError(403, "You cannot reactivate this account.");
+    }
+
+    if (isCenterDirector(request.user!) && !(await canManageUserExclusively(request.user!, user.id, user.role))) {
+      throw new AdminActionError(403, "You cannot reactivate a user outside your centre scope.");
+    }
+
+    if (isCenterDirector(request.user!)) {
+      const scope = await getOperationalScope(request.user!);
+
+      if (clubIds.some((clubId) => !scopeIncludesClub(scope, clubId))) {
+        throw new AdminActionError(403, "You can restore access only within your centre scope.");
+      }
     }
 
     if (user.role !== Role.STUDENT && user.role !== Role.FACILITATOR && user.role !== Role.CENTER_DIRECTOR) {
@@ -660,6 +809,11 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
     return;
   }
 
+  if (isCenterDirector(request.user!) && !(await canManageUserExclusively(request.user!, user.id, user.role))) {
+    response.status(403).json({ message: "You cannot reset a password outside your centre scope." });
+    return;
+  }
+
   const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
   const updatedUser = await prisma.user.update({
     where: { id: user.id },
@@ -693,6 +847,11 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
 
   if (!canManageAccountAccess(request.user!, user.role)) {
     response.status(403).json({ message: "You cannot deactivate this account." });
+    return;
+  }
+
+  if (isCenterDirector(request.user!) && !(await canManageUserExclusively(request.user!, user.id, user.role))) {
+    response.status(403).json({ message: "You cannot deactivate a user outside your centre scope." });
     return;
   }
 
@@ -1036,6 +1195,36 @@ async function requireActiveClubIds(tx: Prisma.TransactionClient, clubIds: strin
   if (activeClubCount !== clubIds.length) {
     throw new AdminActionError(400, "Restore access only to active clubs in active centres.");
   }
+}
+
+async function areActiveCentres(centreIds: string[]) {
+  if (!centreIds.length) {
+    return true;
+  }
+
+  return (await prisma.centre.count({
+    where: { id: { in: centreIds }, isActive: true }
+  })) === centreIds.length;
+}
+
+async function syncCenterDirectorAssignments(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  centreIds: string[],
+  assignedByAdminId: string
+) {
+  await tx.centerDirectorAssignment.updateMany({
+    where: centreIds.length
+      ? { userId, isActive: true, centreId: { notIn: centreIds } }
+      : { userId, isActive: true },
+    data: { isActive: false }
+  });
+
+  await Promise.all(centreIds.map((centreId) => tx.centerDirectorAssignment.upsert({
+    where: { userId_centreId: { userId, centreId } },
+    update: { isActive: true, assignedByAdminId },
+    create: { userId, centreId, assignedByAdminId }
+  })));
 }
 
 async function syncStudentClubAccess(tx: Prisma.TransactionClient, studentId: string, clubIds: string[]) {

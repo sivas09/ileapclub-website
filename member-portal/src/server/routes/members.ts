@@ -5,7 +5,15 @@ import { PaymentStatus, Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
-import { canManageOperationalData, operationalManagerRoles } from "../permissions.js";
+import {
+  canAccessStudent,
+  canManageOperationalData,
+  canManageUserExclusively,
+  getOperationalScope,
+  isCenterDirector,
+  operationalManagerRoles,
+  scopeIncludesClub
+} from "../permissions.js";
 import { memberUserSelect, publicUserSelect, safeUserDto } from "../services/safeUser.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
@@ -237,8 +245,14 @@ membersRouter.get("/payments", requireRole(operationalManagerRoles), asyncRoute(
   }
 
   const paymentMonth = paymentMonthStart(parsedMonth.data);
+  const scope = await getOperationalScope(request.user!);
   const payments = await prisma.monthlyMemberPayment.findMany({
-    where: { paymentMonth },
+    where: {
+      paymentMonth,
+      ...(scope.clubIds === null ? {} : {
+        student: { clubMemberships: { some: { clubId: { in: scope.clubIds } } } }
+      })
+    },
     select: {
       studentId: true,
       status: true,
@@ -274,6 +288,11 @@ membersRouter.put("/payments/:studentId", requireRole(operationalManagerRoles), 
 
   if (!student || student.user.role !== Role.STUDENT) {
     response.status(404).json({ message: "Member not found." });
+    return;
+  }
+
+  if (isCenterDirector(user) && !(await canAccessStudent(user, studentId))) {
+    response.status(403).json({ message: "You cannot update payment status outside your centre scope." });
     return;
   }
 
@@ -319,12 +338,14 @@ membersRouter.post("/payments/reset", requireRole(operationalManagerRoles), asyn
 
   const user = request.user!;
   const paymentMonth = paymentMonthStart(parsed.data.paymentMonth);
+  const scope = await getOperationalScope(user);
   const activeMembers = await prisma.student.findMany({
     where: {
       user: { role: Role.STUDENT, isActive: true },
       clubMemberships: {
         some: {
           status: "ACTIVE",
+          ...(scope.clubIds === null ? {} : { clubId: { in: scope.clubIds } }),
           club: { isActive: true, centre: { isActive: true } }
         }
       }
@@ -513,12 +534,19 @@ membersRouter.get("/:studentId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (isCenterDirector(user) && !(await canAccessStudent(user, student.id))) {
+    response.status(403).json({ message: "You cannot view a member outside your centre scope." });
+    return;
+  }
+
   if (!canManageOperationalData(user) && !(await canFacilitatorAccessStudent(user.id, student.id, true))) {
     response.status(403).json({ message: "You cannot view this member." });
     return;
   }
 
-  const detailClubIds = user.role === Role.FACILITATOR ? await getVisibleClubIds(user.id, Role.FACILITATOR) : null;
+  const detailClubIds = user.role === Role.FACILITATOR || user.role === Role.CENTER_DIRECTOR
+    ? await getVisibleClubIds(user.id, user.role)
+    : null;
   const visibleClubIdSet = detailClubIds === null ? null : new Set(detailClubIds);
   const visibleMemberships = visibleClubIdSet === null
     ? student.clubMemberships
@@ -770,6 +798,11 @@ membersRouter.patch("/:studentId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (isCenterDirector(user) && !(await canManageUserExclusively(user, student.userId, Role.STUDENT))) {
+    response.status(403).json({ message: "You cannot update a member outside your centre scope." });
+    return;
+  }
+
   await prisma.student.update({
     where: { id: student.id },
     data: {
@@ -816,6 +849,11 @@ membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
     return;
   }
 
+  if (isCenterDirector(user) && !(await canManageUserExclusively(user, student!.userId, Role.STUDENT))) {
+    response.status(403).json({ message: "You cannot delete a member outside your centre scope." });
+    return;
+  }
+
   const deletionSummary = await deleteStudentMemberRecords(student!.id, student!.userId);
 
   response.json({
@@ -831,7 +869,7 @@ membersRouter.delete("/:studentId", asyncRoute(async (request, response) => {
 
 async function getVisibleClubIds(userId: string, role: Role) {
   if (canManageOperationalData(role)) {
-    return null;
+    return (await getOperationalScope({ id: userId, role })).clubIds;
   }
 
   if (role === Role.FACILITATOR) {
@@ -878,6 +916,12 @@ async function canStudentViewPublicMember(userId: string, targetStudentId: strin
 
 export async function canManageRequestedClubs(userId: string, role: Role, clubIds: string[]) {
   if (canManageOperationalData(role)) {
+    const scope = await getOperationalScope({ id: userId, role });
+
+    if (clubIds.some((clubId) => !scopeIncludesClub(scope, clubId))) {
+      return false;
+    }
+
     const activeClubCount = await prisma.club.count({
       where: {
         id: { in: clubIds },
@@ -886,7 +930,7 @@ export async function canManageRequestedClubs(userId: string, role: Role, clubId
       }
     });
 
-    return canManageClubIdSet(role, clubIds, [], activeClubCount);
+    return activeClubCount === clubIds.length;
   }
 
   if (role === Role.FACILITATOR) {
@@ -903,7 +947,7 @@ export function canManageClubIdSet(role: Role, requestedClubIds: string[], visib
     return false;
   }
 
-  if (canManageOperationalData(role)) {
+  if (role === Role.ADMIN) {
     return activeClubCount === requestedClubIds.length;
   }
 
@@ -936,6 +980,14 @@ export async function canFacilitatorAccessStudent(facilitatorId: string, student
 export async function canWriteMemberFeedback(userId: string, role: Role, studentId: string, clubId: string) {
   if (!canManageOperationalData(role) && role !== Role.FACILITATOR) {
     return false;
+  }
+
+  if (isCenterDirector(role)) {
+    const scope = await getOperationalScope({ id: userId, role });
+
+    if (!scopeIncludesClub(scope, clubId)) {
+      return false;
+    }
   }
 
   const membershipCount = await prisma.studentClubMembership.count({
@@ -978,8 +1030,13 @@ async function canModifyMemberFeedback(
   role: Role,
   feedback: { studentId: string; clubId: string; createdByUserId: string | null }
 ) {
-  if (canManageOperationalData(role)) {
+  if (role === Role.ADMIN) {
     return true;
+  }
+
+  if (role === Role.CENTER_DIRECTOR) {
+    const scope = await getOperationalScope({ id: userId, role });
+    return scopeIncludesClub(scope, feedback.clubId);
   }
 
   return role === Role.FACILITATOR

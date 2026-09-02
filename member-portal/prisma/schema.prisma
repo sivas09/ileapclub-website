@@ -41,6 +41,8 @@ model User {
   createdNotices Notice[] @relation("NoticeCreatedBy")
   createdMemberFeedback MemberFeedback[] @relation("MemberFeedbackCreatedBy")
   updatedMonthlyMemberPayments MonthlyMemberPayment[] @relation("MonthlyMemberPaymentUpdatedBy")
+  centerDirectorAssignments CenterDirectorAssignment[] @relation("CenterDirectorUser")
+  assignedCenterDirectors CenterDirectorAssignment[] @relation("CenterDirectorAssignedBy")
 }
 
 model Centre {
@@ -55,6 +57,26 @@ model Centre {
 
   clubs Club[]
   facilitators CentreFacilitator[]
+  centerDirectors CenterDirectorAssignment[]
+  resourceLinks ResourceLink[]
+}
+
+model CenterDirectorAssignment {
+  id                String   @id @default(cuid())
+  userId            String
+  centreId          String
+  assignedByAdminId String
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user            User   @relation("CenterDirectorUser", fields: [userId], references: [id], onDelete: Cascade)
+  centre          Centre @relation(fields: [centreId], references: [id], onDelete: Cascade)
+  assignedByAdmin User   @relation("CenterDirectorAssignedBy", fields: [assignedByAdminId], references: [id])
+
+  @@unique([userId, centreId])
+  @@index([centreId, isActive])
+  @@index([assignedByAdminId])
 }
 
 model Club {
@@ -334,6 +356,7 @@ model ResourceLink {
   bandOrder     Int?
   roleKey       String?
   requirementId String?
+  centreId      String?
   category      String
   status        String   @default("ACTIVE")
   createdById   String
@@ -342,6 +365,7 @@ model ResourceLink {
   updatedAt     DateTime @updatedAt
 
   requirement BandRequirement? @relation(fields: [requirementId], references: [id])
+  centre      Centre?          @relation(fields: [centreId], references: [id])
   createdBy   User             @relation("ResourceLinkCreatedBy", fields: [createdById], references: [id])
   updatedBy   User?            @relation("ResourceLinkUpdatedBy", fields: [updatedById], references: [id])
 
@@ -349,6 +373,7 @@ model ResourceLink {
   @@index([roleKey])
   @@index([programLevel, bandOrder])
   @@index([requirementId])
+  @@index([centreId])
   @@index([category])
 }
 

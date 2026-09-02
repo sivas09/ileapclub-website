@@ -260,7 +260,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
         </form>
       ) : null}
 
-      {isOperationalManagerRole(user.role) ? (
+      {user.role === "ADMIN" ? (
         <RoleDefinitionManagementPanel onChanged={refreshMeetingsSafely} />
       ) : null}
 
@@ -1360,7 +1360,7 @@ function RequirementManagementPanel({
       {isLoading ? <p className="loading-state">Loading requirements...</p> : null}
       {progress ? (
         <>
-          {isOperationalManagerRole(user.role) ? (
+          {user.role === "ADMIN" ? (
             <BandRequirementDefinitionManager
               onChanged={() => {
                 refreshSelectedProgress().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to refresh requirements."));

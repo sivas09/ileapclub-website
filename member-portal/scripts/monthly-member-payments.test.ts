@@ -18,8 +18,10 @@ type StoredPayment = {
 };
 
 const activeStudentId = "active-student";
+const outsideActiveStudentId = "outside-active-student";
 const inactiveStudentId = "inactive-student";
 const assignedClubId = "assigned-club";
+const outsideClubId = "outside-club";
 const users = {
   admin: { id: "admin-user", email: "admin@example.com", role: Role.ADMIN, isActive: true },
   director: { id: "director-user", email: "director@example.com", role: Role.CENTER_DIRECTOR, isActive: true },
@@ -49,14 +51,46 @@ patchModel("student", {
       return { id: inactiveStudentId, user: { role: Role.STUDENT } };
     }
 
+    if (where.id === outsideActiveStudentId) {
+      return { id: outsideActiveStudentId, user: { role: Role.STUDENT } };
+    }
+
     return null;
   },
   findMany: ({ where }: any = {}) => {
     if (where?.user?.isActive === true && where?.clubMemberships?.some?.status === "ACTIVE") {
-      return [{ id: activeStudentId }];
+      const candidates = [
+        { id: activeStudentId, clubId: assignedClubId },
+        { id: outsideActiveStudentId, clubId: outsideClubId }
+      ];
+      const allowedClubIds = where.clubMemberships.some.clubId?.in;
+      return candidates
+        .filter((student) => !allowedClubIds || allowedClubIds.includes(student.clubId))
+        .map(({ id }) => ({ id }));
     }
 
     return [];
+  }
+});
+patchModel("centerDirectorAssignment", {
+  findMany: ({ where }: any) => where.userId === users.director.id && where.isActive
+    ? [{ centreId: "assigned-centre" }]
+    : []
+});
+patchModel("club", {
+  findMany: ({ where }: any) => [
+    { id: assignedClubId, centreId: "assigned-centre" },
+    { id: outsideClubId, centreId: "outside-centre" }
+  ].filter((club) => !where?.centreId?.in || where.centreId.in.includes(club.centreId))
+});
+patchModel("studentClubMembership", {
+  count: ({ where }: any) => {
+    const clubId = where.studentId === activeStudentId
+      ? assignedClubId
+      : where.studentId === outsideActiveStudentId
+        ? outsideClubId
+        : null;
+    return clubId && where.clubId?.in?.includes(clubId) ? 1 : 0;
   }
 });
 patchModel("monthlyMemberPayment", {
@@ -67,6 +101,12 @@ patchModel("monthlyMemberPayment", {
   },
   findMany: ({ where }: any) => Array.from(payments.values())
     .filter((payment) => monthKey(payment.paymentMonth) === monthKey(where.paymentMonth))
+    .filter((payment) => {
+      const allowedClubIds = where.student?.clubMemberships?.some?.clubId?.in;
+      if (!allowedClubIds) return true;
+      const clubId = payment.studentId === activeStudentId ? assignedClubId : outsideClubId;
+      return allowedClubIds.includes(clubId);
+    })
     .map(publicPayment),
   upsert: ({ where, create, update }: any) => {
     const compoundKey = where.studentId_paymentMonth;
@@ -154,6 +194,10 @@ try {
     paymentMonth: currentMonth,
     status: PaymentStatus.PAID
   });
+  await request("PUT", `/api/members/payments/${outsideActiveStudentId}`, Role.ADMIN, 200, {
+    paymentMonth: currentMonth,
+    status: PaymentStatus.PAID
+  });
 
   await request("POST", "/api/members/payments/reset", Role.ADMIN, 400, {
     paymentMonth: currentMonth,
@@ -164,27 +208,40 @@ try {
     confirmed: true
   });
   const resetBody = await resetResponse.json() as any;
-  assert.equal(resetBody.resetCount, 1, "Reset reports only active members.");
+  assert.equal(resetBody.resetCount, 2, "Admin reset reports all active members across the organization.");
   assert.equal(storedStatus(activeStudentId, currentMonth), PaymentStatus.NOT_PAID, "Reset marks active members Not Paid.");
+  assert.equal(storedStatus(outsideActiveStudentId, currentMonth), PaymentStatus.NOT_PAID, "Admin reset includes active members outside the director scope.");
   assert.equal(storedStatus(inactiveStudentId, currentMonth), PaymentStatus.PAID, "Inactive members are not reset.");
   assert.equal(storedStatus(activeStudentId, previousMonth), PaymentStatus.PAID, "Reset preserves previous-month payment history.");
-  assert.deepEqual(lastResetStudentIds, [activeStudentId], "Reset persistence is scoped to active members only.");
+  assert.deepEqual(lastResetStudentIds, [activeStudentId, outsideActiveStudentId], "Admin reset persistence is scoped to active members only.");
 
   const directorPaidResponse = await request("PUT", `/api/members/payments/${activeStudentId}`, Role.CENTER_DIRECTOR, 200, {
     paymentMonth: currentMonth,
     status: PaymentStatus.PAID
   });
   assert.equal((await directorPaidResponse.json() as any).payment.status, PaymentStatus.PAID, "Center Director can mark a member Paid.");
+  await request("PUT", `/api/members/payments/${outsideActiveStudentId}`, Role.CENTER_DIRECTOR, 403, {
+    paymentMonth: currentMonth,
+    status: PaymentStatus.PAID
+  });
+  await request("PUT", `/api/members/payments/${outsideActiveStudentId}`, Role.ADMIN, 200, {
+    paymentMonth: currentMonth,
+    status: PaymentStatus.PAID
+  });
   const directorListResponse = await request("GET", `/api/members/payments?paymentMonth=${currentMonth}`, Role.CENTER_DIRECTOR, 200);
-  assertNoSensitiveFields(await directorListResponse.json());
+  const directorListBody = await directorListResponse.json() as any;
+  assert.deepEqual(directorListBody.payments.map((payment: any) => payment.studentId), [activeStudentId], "Center Director payment list is limited to assigned-centre members.");
+  assertNoSensitiveFields(directorListBody);
   const directorResetResponse = await request("POST", "/api/members/payments/reset", Role.CENTER_DIRECTOR, 200, {
     paymentMonth: currentMonth,
     confirmed: true
   });
   assert.equal((await directorResetResponse.json() as any).resetCount, 1, "Center Director can reset active member payment status.");
   assert.equal(storedStatus(activeStudentId, currentMonth), PaymentStatus.NOT_PAID, "Center Director reset marks active members Not Paid.");
+  assert.equal(storedStatus(outsideActiveStudentId, currentMonth), PaymentStatus.PAID, "Center Director reset does not affect members outside assigned centres.");
   assert.equal(storedStatus(inactiveStudentId, currentMonth), PaymentStatus.PAID, "Center Director reset does not affect inactive members.");
   assert.equal(storedStatus(activeStudentId, previousMonth), PaymentStatus.PAID, "Center Director reset preserves prior payment history.");
+  assert.deepEqual(lastResetStudentIds, [activeStudentId], "Center Director reset persistence contains only assigned-centre active members.");
 
   await request("PUT", `/api/members/payments/${activeStudentId}`, Role.FACILITATOR, 403, {
     paymentMonth: currentMonth,

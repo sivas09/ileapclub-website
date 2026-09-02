@@ -319,7 +319,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
           <label>
             Club
             <select name="clubId" defaultValue={user.role === "FACILITATOR" && clubs.length === 1 ? clubs[0].id : ""} required={user.role === "FACILITATOR"}>
-              {isOperationalManagerRole(user.role) ? <option value="">All clubs</option> : null}
+              {user.role === "ADMIN" ? <option value="">All clubs</option> : null}
               {clubs.map((club) => <option key={club.id} value={club.id}>{club.name}</option>)}
             </select>
           </label>
@@ -360,7 +360,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
                   canEdit={isOperationalManagerRole(user.role) || (user.role === "FACILITATOR" && Boolean(document.clubId))}
                   canArchive={isOperationalManagerRole(user.role)}
                   canDelete={isOperationalManagerRole(user.role)}
-                  canAssignGlobal={isOperationalManagerRole(user.role)}
+                  canAssignGlobal={user.role === "ADMIN"}
                   isEditing={editingDocument?.id === document.id}
                   isSubmitting={isSubmitting}
                   onEdit={() => setEditingDocument(document)}
@@ -778,6 +778,7 @@ type ResourceFilters = {
 
 function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
   const [resources, setResources] = useState<ResourceLink[]>([]);
+  const [centres, setCentres] = useState<AdminOverview["centres"]>([]);
   const [filters, setFilters] = useState<ResourceFilters>({ category: "", search: "", status: "ACTIVE" });
   const [editingResource, setEditingResource] = useState<ResourceLink | null>(null);
   const [selectedResourceId, setSelectedResourceId] = useState(() => resourceIdFromHash());
@@ -794,6 +795,7 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
   async function refreshResources(nextFilters = filters) {
     const data = await getResourceLinks(nextFilters);
     setResources(data.resources);
+    setCentres(data.centres);
   }
 
   useEffect(() => {
@@ -925,6 +927,8 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
       {selectedResourceId ? (
         <ResourceLinkDetails
           resource={selectedResource}
+          centres={centres}
+          allowGlobal={user.role === "ADMIN"}
           canEdit={canEdit}
           isEditing={editingResource?.id === selectedResourceId}
           isLoading={isLoading}
@@ -972,7 +976,7 @@ function ManagerResourceLinksPanel({ user }: { user: PortalUser }) {
             </div>
           ) : null}
 
-          {canEdit && isAddFormOpen ? <ResourceLinkForm isSubmitting={isSubmitting} onSubmit={handleCreateResource} /> : null}
+          {canEdit && isAddFormOpen ? <ResourceLinkForm centres={centres} allowGlobal={user.role === "ADMIN"} isSubmitting={isSubmitting} onSubmit={handleCreateResource} /> : null}
           {isLoading ? <p className="loading-state">Loading resource links...</p> : null}
           {!isLoading && !resources.length ? <p className="loading-state">No resource links found.</p> : null}
 
@@ -1059,6 +1063,8 @@ function ResourceLinksTable({
 
 function ResourceLinkDetails({
   resource,
+  centres,
+  allowGlobal,
   canEdit,
   isEditing,
   isLoading,
@@ -1071,6 +1077,8 @@ function ResourceLinkDetails({
   onDelete
 }: {
   resource: ResourceLink | null;
+  centres: AdminOverview["centres"];
+  allowGlobal: boolean;
   canEdit: boolean;
   isEditing: boolean;
   isLoading: boolean;
@@ -1101,6 +1109,8 @@ function ResourceLinkDetails({
         <button type="button" className="text-action" onClick={onBack}>Back to Resources</button>
         <ResourceLinkForm
           resource={resource}
+          centres={centres}
+          allowGlobal={allowGlobal}
           isSubmitting={isSubmitting}
           onSubmit={(event) => {
             event.preventDefault();
@@ -1128,6 +1138,7 @@ function ResourceLinkDetails({
         <div><dt>Program</dt><dd>{formatProgramLevel(resource.programLevel)}</dd></div>
         <div><dt>Band</dt><dd>{resource.bandLevel || "Any"}</dd></div>
         <div><dt>Requirement</dt><dd>{resource.requirementName || resource.requirementId || "Any"}</dd></div>
+        <div><dt>Centre</dt><dd>{resource.centreName || "All centres"}</dd></div>
         <div><dt>Status</dt><dd>{resource.status === "ARCHIVED" ? "Archived" : "Active"}</dd></div>
       </dl>
       <div className="resource-detail-description">
@@ -1156,11 +1167,15 @@ function ResourceLinkDetails({
 
 function ResourceLinkForm({
   resource,
+  centres,
+  allowGlobal,
   isSubmitting,
   onSubmit,
   onCancel
 }: {
   resource?: ResourceLink;
+  centres: AdminOverview["centres"];
+  allowGlobal: boolean;
   isSubmitting: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onCancel?: () => void;
@@ -1192,6 +1207,13 @@ function ResourceLinkForm({
         </select>
       </label>
       <label>Requirement ID <span>Optional</span><input name="requirementId" defaultValue={resource?.requirementId ?? ""} /></label>
+      <label>
+        Centre
+        <select name="centreId" defaultValue={resource?.centreId ?? ""} required={!allowGlobal}>
+          {allowGlobal ? <option value="">All centres</option> : <option value="">Select centre</option>}
+          {centres.map((centre) => <option key={centre.id} value={centre.id}>{centre.name}</option>)}
+        </select>
+      </label>
       <label className="document-link-field">YouTube URL <span>Optional</span><input name="youtubeUrl" type="url" defaultValue={resource?.youtubeUrl ?? ""} /></label>
       <label className="document-link-field">Document URL <span>Optional</span><input name="documentUrl" type="url" defaultValue={resource?.documentUrl ?? ""} /></label>
       <label className="document-link-field">Description<textarea name="explanation" defaultValue={resource?.explanation ?? ""} rows={3} required /></label>
@@ -1215,7 +1237,7 @@ function resourcePayloadFromForm(form: HTMLFormElement) {
     bandLevel: String(formData.get("bandLevel") || "") || null,
     roleKey: String(formData.get("roleKey") || "") || null,
     requirementId: String(formData.get("requirementId") || "") || null,
+    centreId: String(formData.get("centreId") || "") || null,
     category: String(formData.get("category") || "Other")
   };
 }
-

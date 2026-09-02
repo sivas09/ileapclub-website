@@ -4,7 +4,7 @@ import { Prisma, Role } from "@prisma/client";
 import { z } from "zod";
 import { requireAuth } from "../auth.js";
 import { prisma } from "../db.js";
-import { canManageOperationalData } from "../permissions.js";
+import { canManageOperationalData, getOperationalScope, isAdmin, scopeIncludesClub } from "../permissions.js";
 import { agendaFileName, buildAgendaRtf } from "../services/agenda.js";
 import { memberUserSelect } from "../services/safeUser.js";
 import { standardIleapRoleNames } from "../services/standardRoles.js";
@@ -133,6 +133,7 @@ meetingsRouter.get("/", asyncRoute(async (request, response) => {
       include: {
         user: { select: memberUserSelect },
         clubMemberships: {
+          ...(clubFilter ? { where: { clubId: { in: clubFilter } } } : {}),
           include: {
             club: {
               include: { centre: true }
@@ -155,7 +156,7 @@ meetingsRouter.get("/role-definitions", asyncRoute(async (request, response) => 
   const user = request.user!;
 
   const roleDefinitions = await prisma.roleDefinition.findMany({
-    where: canManageOperationalData(user) ? {} : { isActive: true },
+    where: isAdmin(user) ? {} : { isActive: true },
     orderBy: [{ programLevel: "asc" }, { sortOrder: "asc" }, { name: "asc" }]
   });
 
@@ -1361,7 +1362,7 @@ async function syncPairedReportAssignment(
 
 async function getVisibleClubFilter(userId: string, role: Role) {
   if (canManageOperationalData(role)) {
-    return null;
+    return (await getOperationalScope({ id: userId, role })).clubIds;
   }
 
   if (role === Role.FACILITATOR) {
@@ -1399,7 +1400,7 @@ async function getVisibleClubFilter(userId: string, role: Role) {
 
 async function canManageClubId(userId: string, role: Role, clubId: string) {
   if (canManageOperationalData(role)) {
-    return true;
+    return scopeIncludesClub(await getOperationalScope({ id: userId, role }), clubId);
   }
 
   if (role !== Role.FACILITATOR) {
@@ -1454,7 +1455,7 @@ async function isActiveClub(clubId: string) {
 
 async function canViewMeeting(userId: string, role: Role, clubId: string) {
   if (canManageOperationalData(role)) {
-    return true;
+    return scopeIncludesClub(await getOperationalScope({ id: userId, role }), clubId);
   }
 
   if (role === Role.FACILITATOR) {
@@ -1532,7 +1533,7 @@ async function getAvailableRoleDefinitionForClub(roleDefinitionId: string, clubP
 }
 
 export function canManageRoleDefinitions(role: Role) {
-  return canManageOperationalData(role);
+  return isAdmin(role);
 }
 
 export function canReleaseMeetingRole(role: Role, isOwnClaim = false) {

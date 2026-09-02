@@ -306,6 +306,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     const formData = new FormData(form);
     const clubSelect = form.elements.namedItem("clubIds") as HTMLSelectElement | null;
     const facilitatorClubSelect = form.elements.namedItem("facilitatorClubIds") as HTMLSelectElement | null;
+    const centreSelect = form.elements.namedItem("centreIds") as HTMLSelectElement | null;
     const role = String(formData.get("role") || editingUser.role) as Role;
 
     setError("");
@@ -323,7 +324,8 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         programLevel: String(formData.get("programLevel") || "SENIOR"),
         bandLevel: String(formData.get("bandLevel") || "White"),
         clubIds: role === "STUDENT" && clubSelect ? Array.from(clubSelect.selectedOptions).map((option) => option.value) : [],
-        facilitatorClubIds: role === "FACILITATOR" && facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : []
+        facilitatorClubIds: role === "FACILITATOR" && facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : [],
+        centreIds: role === "CENTER_DIRECTOR" && centreSelect ? Array.from(centreSelect.selectedOptions).map((option) => option.value) : []
       });
       await refreshOverview();
       setEditingUser(null);
@@ -447,6 +449,20 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               </select>
             </label>
           ) : null}
+          {editingUserRole === "CENTER_DIRECTOR" && currentUser.role === "ADMIN" ? (
+            <label>
+              Assigned Centres
+              <select
+                name="centreIds"
+                multiple
+                defaultValue={portalUser.centerDirectorAssignments?.map((assignment) => assignment.centreId) ?? []}
+              >
+                {activeCentres.map((centre) => (
+                  <option key={centre.id} value={centre.id}>{centre.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
         <div className="edit-user-actions">
           <button type="submit" disabled={isSubmitting}>Save</button>
@@ -535,6 +551,14 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
 
       {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {currentUser.role === "CENTER_DIRECTOR" && overview && !overview.scope.hasAssignedCentre ? (
+        <p className="admin-status is-error" role="alert">No centre has been assigned to your account. Please contact the administrator.</p>
+      ) : null}
+      {currentUser.role === "CENTER_DIRECTOR" && overview?.scope.hasAssignedCentre ? (
+        <p className="admin-status is-success" role="status">
+          Assigned {overview.scope.assignedCentres.length === 1 ? "centre" : "centres"}: {overview.scope.assignedCentres.map((centre) => centre.name).join(", ")}
+        </p>
+      ) : null}
 
       <div className="admin-summary-grid">
         <SummaryTile label="Centres" value={overview?.centres.length ?? 0} />
@@ -544,7 +568,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
       </div>
 
       <div className="admin-form-grid">
-        <form
+        {currentUser.role === "ADMIN" ? <form
           className="admin-form"
           onSubmit={(event) =>
             submitAdminForm(
@@ -568,7 +592,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
           <label>City<input name="city" placeholder="Ottawa" required /></label>
           <label>Address<input name="address" placeholder="Optional address" /></label>
           <button type="submit" disabled={isSubmitting}>Save Centre</button>
-        </form>
+        </form> : null}
 
         <form
           className="admin-form"
@@ -611,6 +635,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                 const formData = new FormData(form);
                 const clubSelect = form.elements.namedItem("clubIds") as HTMLSelectElement | null;
                 const facilitatorClubSelect = form.elements.namedItem("facilitatorClubIds") as HTMLSelectElement | null;
+                const centreSelect = form.elements.namedItem("centreIds") as HTMLSelectElement | null;
                 await createUser({
                   firstName: String(formData.get("firstName") || ""),
                   lastName: String(formData.get("lastName") || ""),
@@ -621,7 +646,8 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                   programLevel: String(formData.get("programLevel") || "SENIOR"),
                   bandLevel: String(formData.get("bandLevel") || "White"),
                   clubIds: clubSelect ? Array.from(clubSelect.selectedOptions).map((option) => option.value) : [],
-                  facilitatorClubIds: facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : []
+                  facilitatorClubIds: facilitatorClubSelect ? Array.from(facilitatorClubSelect.selectedOptions).map((option) => option.value) : [],
+                  centreIds: centreSelect ? Array.from(centreSelect.selectedOptions).map((option) => option.value) : []
                 });
               },
               "User created and assigned."
@@ -678,6 +704,16 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                 <select name="facilitatorClubIds" multiple>
                   {activeClubs.map((club) => (
                     <option key={club.id} value={club.id}>{club.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {newUserRole === "CENTER_DIRECTOR" && currentUser.role === "ADMIN" ? (
+              <label>
+                Assigned Centres
+                <select name="centreIds" multiple>
+                  {activeCentres.map((centre) => (
+                    <option key={centre.id} value={centre.id}>{centre.name}</option>
                   ))}
                 </select>
               </label>

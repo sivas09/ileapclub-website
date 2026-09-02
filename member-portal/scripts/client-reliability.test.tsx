@@ -7,6 +7,7 @@ import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/cli
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
 import { StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
+import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import {
   claimableMeetingRoleSlots,
   canManageUserFromSetup,
@@ -214,6 +215,17 @@ assert.deepEqual(
   "Center Director Overview exposes operational management sections."
 );
 assert.equal(formatRole("CENTER_DIRECTOR"), "Center Director", "Center Director uses the visible role label.");
+const directorScopeMarkup = renderToStaticMarkup(
+  <CenterDirectorScopeView centres={[{ id: "centre-1", name: "Kanata Centre" }]} />
+);
+assert.match(directorScopeMarkup, /Assigned Centre/, "Center Director dashboard labels its assigned-centre scope.");
+assert.match(directorScopeMarkup, /Kanata Centre/, "Center Director dashboard lists the assigned centre.");
+const unassignedDirectorMarkup = renderToStaticMarkup(<CenterDirectorScopeView centres={[]} />);
+assert.match(
+  unassignedDirectorMarkup,
+  /No centre has been assigned to your account\. Please contact the administrator\./,
+  "Center Director dashboard explains an empty centre assignment clearly."
+);
 const directorViewer = { id: "director-1", role: "CENTER_DIRECTOR" as const };
 assert.equal(canManageUserFromSetup(directorViewer, { id: "student-1", role: "STUDENT" }), true, "Center Director can manage student controls.");
 assert.equal(canManageUserFromSetup(directorViewer, { id: "admin-1", role: "ADMIN" }), false, "Center Director cannot see Admin account controls.");
