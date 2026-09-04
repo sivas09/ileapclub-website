@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
+  addMemberPoints,
   backfillPreviousBandRequirements,
   createMemberFeedback,
   createMember,
@@ -7,10 +8,12 @@ import {
   getMemberLearningReflections,
   getMemberDetail,
   getMemberPaymentStatuses,
+  getMemberPointsProgress,
   getMembers,
   MemberDetail,
   LearningReflection,
   MemberListEntry,
+  MemberPointsProgress,
   MembersResponse,
   PaymentStatus,
   permanentlyDeleteMember,
@@ -22,6 +25,7 @@ import {
   setUserActive,
   updateMember,
   updateMemberFeedback,
+  updateMemberProgressNote,
   saveLearningReflectionResponse,
   updateUser,
   updateStudentRequirement
@@ -1062,7 +1066,9 @@ function MemberDetailPanel({
         </div>
       </div>
 
-      <div className="member-detail-anchor" id="member-band-progress">
+      <MemberPointsProgressPanel studentId={member.id} />
+
+      <div className="member-detail-anchor">
         <DataPanel title="Band Requirements">
           {member.requirements?.length ? (
             <ul className="requirement-list">
@@ -1116,5 +1122,133 @@ function MemberDetailPanel({
         </DataPanel>
       </div>
     </section>
+  );
+}
+
+export function MemberPointsProgressPanel({ studentId }: { studentId: string }) {
+  const [progress, setProgress] = useState<MemberPointsProgress | null>(null);
+  const [note, setNote] = useState("");
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    getMemberPointsProgress(studentId)
+      .then((result) => {
+        if (!isCurrent) return;
+        setProgress(result);
+        setNote(result.progressNote?.note ?? "");
+      })
+      .catch((loadError) => {
+        if (isCurrent) setError(loadError instanceof Error ? loadError.message : "Unable to load member points.");
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [studentId]);
+
+  async function handleAddPoints(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setStatus("");
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await addMemberPoints(studentId, {
+        points: Number(formData.get("points")),
+        reason: String(formData.get("reason") || "")
+      });
+      setProgress(result);
+      form.reset();
+      setStatus("Points added successfully.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to add points.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleSaveNote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("");
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const result = await updateMemberProgressNote(studentId, note);
+      setProgress(result);
+      setNote(result.progressNote?.note ?? "");
+      setStatus("Progress notes saved successfully.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save progress notes.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="member-points-panel" id="member-band-progress" aria-label="Member points and progress notes">
+      <div className="admin-heading">
+        <div>
+          <p className="eyebrow">Personal Tracking</p>
+          <h3>Points and Progress Notes</h3>
+        </div>
+        <strong className="points-total">Total Points: {progress?.totalPoints ?? 0}</strong>
+      </div>
+      {isLoading ? <p className="loading-state">Loading points and progress notes...</p> : null}
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {!isLoading && progress ? (
+        <>
+          <div className="member-points-forms">
+            <form className="meeting-form compact" onSubmit={handleAddPoints}>
+              <h4>Add Points</h4>
+              <label>Add Points<input name="points" type="number" min="1" step="1" required /></label>
+              <label>Reason<input name="reason" maxLength={500} placeholder="Optional reason" /></label>
+              <p className="field-note">This motivational total is separate from formal scores and band completion. Positive point awards only for now; deductions can be added later.</p>
+              <button type="submit" disabled={isSubmitting}>Add Points</button>
+            </form>
+            <form className="meeting-form compact" onSubmit={handleSaveNote}>
+              <h4>Progress Notes from Staff</h4>
+              <label>
+                Progress Notes from Staff
+                <textarea value={note} maxLength={1000} rows={6} onChange={(event) => setNote(event.currentTarget.value)} />
+              </label>
+              <small className="character-count">{note.length}/1000</small>
+              <button type="submit" disabled={isSubmitting}>Save Progress Notes</button>
+            </form>
+          </div>
+          <DataPanel title="Recent Point History">
+            <PointHistoryList progress={progress} />
+          </DataPanel>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+export function PointHistoryList({ progress }: { progress: MemberPointsProgress }) {
+  if (!progress.transactions.length) {
+    return <p>No points have been awarded yet.</p>;
+  }
+
+  return (
+    <ul className="record-list">
+      {progress.transactions.map((transaction) => (
+        <li key={transaction.id}>
+          <strong>{formatDate(transaction.awardedAt)} - +{transaction.pointsDelta} points</strong>
+          <span>{transaction.reason || "No reason entered."}{transaction.awardedBy ? ` - ${transaction.awardedBy.firstName} ${transaction.awardedBy.lastName}` : ""}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

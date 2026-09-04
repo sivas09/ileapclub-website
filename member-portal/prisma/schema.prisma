@@ -43,6 +43,8 @@ model User {
   createdMemberFeedback MemberFeedback[] @relation("MemberFeedbackCreatedBy")
   updatedMonthlyMemberPayments MonthlyMemberPayment[] @relation("MonthlyMemberPaymentUpdatedBy")
   learningReflectionResponses MemberLearningReflection[] @relation("LearningReflectionRespondedBy")
+  awardedMemberPoints MemberPointTransaction[] @relation("MemberPointAwardedBy")
+  updatedMemberProgressNotes MemberProgressNote[] @relation("MemberProgressNoteUpdatedBy")
   centerDirectorAssignments CenterDirectorAssignment[] @relation("CenterDirectorUser")
   assignedCenterDirectors CenterDirectorAssignment[] @relation("CenterDirectorAssignedBy")
 }
@@ -129,6 +131,8 @@ model Student {
   requirementProgress StudentRequirementProgress[]
   monthlyPayments MonthlyMemberPayment[]
   learningReflections MemberLearningReflection[]
+  pointTransactions MemberPointTransaction[]
+  progressNote MemberProgressNote?
 }
 
 model StudentClubMembership {
@@ -385,6 +389,36 @@ model MemberLearningReflection {
   @@index([meetingId])
   @@index([bandRequirementId])
   @@index([respondedByUserId])
+}
+
+model MemberPointTransaction {
+  id              String   @id @default(cuid())
+  studentId       String
+  pointsDelta     Int
+  reason          String?  @db.VarChar(500)
+  awardedByUserId String?
+  awardedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  awardedBy User?   @relation("MemberPointAwardedBy", fields: [awardedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, awardedAt])
+  @@index([awardedByUserId])
+}
+
+model MemberProgressNote {
+  id              String   @id @default(cuid())
+  studentId       String   @unique
+  note            String   @db.VarChar(1000)
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  updatedBy User?   @relation("MemberProgressNoteUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([updatedByUserId])
 }
 
 model ResourceLink {

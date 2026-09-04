@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type LearningReflection, type Meeting, type ResourceLink } from "../src/client/api";
+import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type LearningReflection, type Meeting, type MemberPointsProgress, type ResourceLink } from "../src/client/api";
 import { AttendanceRosterForm, BandProgressEmptyState, MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
-import { attendanceStatusLabel, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
+import { attendanceStatusLabel, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentPointsProgress, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import {
@@ -86,6 +86,29 @@ assert.doesNotMatch(memberProgressMarkup, /Student Progress Dashboard/, "Legacy 
 const clubMembersMarkup = renderToStaticMarkup(<StudentClubMembersPanel />);
 assert.match(clubMembersMarkup, /Club Members/, "My Club uses member-facing terminology.");
 assert.doesNotMatch(clubMembersMarkup, /Payment Status|Paid|Not Paid/, "My Club does not expose payment status.");
+assert.doesNotMatch(clubMembersMarkup, /My Points|Progress Notes from Staff|Recent Point History|Add Points/, "My Club does not expose points or progress notes.");
+
+const pointsFixture: MemberPointsProgress = {
+  studentId: "student-1",
+  totalPoints: 12,
+  progressNote: {
+    note: "Shows confidence and supports other members.",
+    updatedAt: "2026-09-04T18:00:00.000Z",
+    updatedBy: { firstName: "Pat", lastName: "Facilitator", role: "FACILITATOR" }
+  },
+  transactions: [{
+    id: "point-1",
+    pointsDelta: 5,
+    reason: "Great participation",
+    awardedAt: "2026-09-04T18:00:00.000Z",
+    awardedBy: { firstName: "Pat", lastName: "Facilitator", role: "FACILITATOR" }
+  }]
+};
+const studentPointsMarkup = renderToStaticMarkup(<StudentPointsProgress progress={pointsFixture} />);
+assert.match(studentPointsMarkup, /Progress Notes from Staff/, "Student progress shows staff progress notes.");
+assert.match(studentPointsMarkup, /Shows confidence and supports other members\./, "Student progress renders the current staff note.");
+assert.match(studentPointsMarkup, /\+5 points/, "Student progress renders recent point history.");
+assert.doesNotMatch(studentPointsMarkup, /Add Points|Save Progress Notes/, "Student points view is read-only.");
 
 const paidButtonMarkup = renderToStaticMarkup(
   <PaymentStatusButton memberName="Max Mao" status="PAID" disabled={false} onToggle={() => undefined} />

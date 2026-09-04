@@ -9,6 +9,7 @@ import { adminRouter } from "./routes/admin.js";
 import { authRouter } from "./routes/auth.js";
 import { documentsRouter } from "./routes/documents.js";
 import { meetingsRouter } from "./routes/meetings.js";
+import { memberProgressRouter } from "./routes/memberProgress.js";
 import { membersRouter } from "./routes/members.js";
 import { noticesRouter } from "./routes/notices.js";
 import { reportsRouter } from "./routes/reports.js";
@@ -75,6 +76,7 @@ export function createApp({
   app.use("/api/admin", adminRouter);
   app.use("/api/documents", documentsRouter);
   app.use("/api/meetings", meetingsRouter);
+  app.use("/api/member-progress", memberProgressRouter);
   app.use("/api/members", membersRouter);
   app.use("/api/notices", noticesRouter);
   app.use("/api/reports", reportsRouter);

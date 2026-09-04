@@ -3,6 +3,7 @@ import {
   createLearningReflection,
   deleteLearningReflection,
   getMemberDetail,
+  getOwnMemberPointsProgress,
   getMembers,
   getResourceLinks,
   getOwnLearningReflections,
@@ -10,6 +11,7 @@ import {
   LearningReflection,
   MemberDetail,
   MemberListEntry,
+  MemberPointsProgress,
   OwnMemberPaymentStatus,
   PortalUser,
   ResourceLink,
@@ -184,16 +186,18 @@ export function StudentClubMembersPanel() {
 
 export function StudentProgressDashboard() {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
+  const [pointsProgress, setPointsProgress] = useState<MemberPointsProgress | null>(null);
   const [resources, setResources] = useState<ResourceLink[]>([]);
   const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getStudentProgress(), getResourceLinks()])
-      .then(([progressResult, resourceResult]) => {
+    Promise.all([getStudentProgress(), getResourceLinks(), getOwnMemberPointsProgress()])
+      .then(([progressResult, resourceResult, pointsResult]) => {
         setProgress(progressResult);
         setResources(resourceResult.resources);
+        setPointsProgress(pointsResult);
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load progress."))
       .finally(() => setIsLoading(false));
@@ -246,6 +250,7 @@ export function StudentProgressDashboard() {
             <SummaryTile label="Attendance" valueText={progress.summary.attendanceRate === null ? "N/A" : `${progress.summary.attendanceRate}%`} />
             <SummaryTile label="Roles Completed" value={progress.summary.rolesCompleted} />
             <SummaryTile label="Average Score" valueText={progress.summary.averageScore === null ? "N/A" : `${progress.summary.averageScore}`} />
+            <SummaryTile label="My Points" value={pointsProgress?.totalPoints ?? 0} />
           </div>
               </>
             );
@@ -256,6 +261,8 @@ export function StudentProgressDashboard() {
             <strong>{progress.summary.clubName}</strong>
             <span>{progress.summary.centreName} - {formatBandLadder(progress.summary.programLevel)}</span>
           </div>
+
+          <StudentPointsProgress progress={pointsProgress} />
 
           <LearningReflectionPanel progress={progress} />
 
@@ -367,6 +374,36 @@ export function StudentProgressDashboard() {
       ) : null}
       <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
+  );
+}
+
+export function StudentPointsProgress({ progress }: { progress: MemberPointsProgress | null }) {
+  return (
+    <div className="student-progress-grid student-points-progress">
+      <DataPanel title="Progress Notes from Staff">
+        {progress?.progressNote?.note ? (
+          <>
+            <p>{progress.progressNote.note}</p>
+            <small>
+              Updated {formatDate(progress.progressNote.updatedAt)}
+              {progress.progressNote.updatedBy ? ` by ${progress.progressNote.updatedBy.firstName} ${progress.progressNote.updatedBy.lastName}` : ""}
+            </small>
+          </>
+        ) : <p>No progress notes from staff yet.</p>}
+      </DataPanel>
+      <DataPanel title="Recent Point History">
+        {progress?.transactions.length ? (
+          <ul className="record-list">
+            {progress.transactions.map((transaction) => (
+              <li key={transaction.id}>
+                <strong>{formatDate(transaction.awardedAt)} - +{transaction.pointsDelta} points</strong>
+                <span>{transaction.reason || "No reason entered."}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p>No points have been awarded yet.</p>}
+      </DataPanel>
+    </div>
   );
 }
 

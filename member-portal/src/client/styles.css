@@ -884,6 +884,7 @@ button {
 
 .meeting-form input,
 .meeting-form select,
+.meeting-form textarea,
 .role-slot select,
 .role-slot input,
 .attendance-grid select {
@@ -892,6 +893,12 @@ button {
   border-radius: 8px;
   padding: 0 12px;
   background: #ffffff;
+}
+
+.meeting-form textarea {
+  min-height: 110px;
+  padding: 10px 12px;
+  resize: vertical;
 }
 
 .meeting-form select[multiple] {
@@ -966,6 +973,49 @@ button {
 .meeting-detail-panel,
 .member-detail-panel {
   margin-top: 22px;
+}
+
+.member-points-panel {
+  padding: 20px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.member-points-panel .admin-heading {
+  margin-bottom: 0;
+}
+
+.points-total {
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: #14532d;
+  background: #dcfce7;
+  font-size: 1.05rem;
+}
+
+.member-points-forms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.member-points-forms .meeting-form {
+  align-content: start;
+}
+
+.member-points-forms .meeting-form h4 {
+  margin: 0;
+  color: var(--portal-blue);
+}
+
+.character-count {
+  justify-self: end;
+  color: var(--portal-muted);
+}
+
+.student-points-progress {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .member-filter-form,
@@ -3204,6 +3254,8 @@ button {
   .student-progress-grid,
   .form-two-column,
   .role-slot-grid,
+  .member-points-forms,
+  .student-points-progress,
   .attendance-grid {
     grid-template-columns: 1fr;
   }

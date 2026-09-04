@@ -290,6 +290,23 @@ export type MemberPaymentsResponse = {
   payments: MonthlyMemberPayment[];
 };
 
+export type MemberPointsProgress = {
+  studentId: string;
+  totalPoints: number;
+  progressNote: {
+    note: string;
+    updatedAt: string;
+    updatedBy: Pick<PublicPortalUser, "firstName" | "lastName" | "role"> | null;
+  } | null;
+  transactions: Array<{
+    id: string;
+    pointsDelta: number;
+    reason: string | null;
+    awardedAt: string;
+    awardedBy: Pick<PublicPortalUser, "firstName" | "lastName" | "role"> | null;
+  }>;
+};
+
 export type MemberDetail = {
   id: string;
   userId?: string;
@@ -1443,6 +1460,28 @@ export async function deleteResourceLink(resourceId: string) {
 
 export async function getMemberDetail(studentId: string) {
   return request<{ member: MemberDetail }>(`/api/members/${studentId}`);
+}
+
+export async function getMemberPointsProgress(studentId: string) {
+  return request<MemberPointsProgress>(`/api/member-progress/${studentId}`);
+}
+
+export async function getOwnMemberPointsProgress() {
+  return request<MemberPointsProgress>("/api/member-progress/me");
+}
+
+export async function addMemberPoints(studentId: string, payload: { points: number; reason?: string }) {
+  return request<MemberPointsProgress>(`/api/member-progress/${studentId}/points`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateMemberProgressNote(studentId: string, note: string) {
+  return request<MemberPointsProgress>(`/api/member-progress/${studentId}/note`, {
+    method: "PUT",
+    body: JSON.stringify({ note })
+  });
 }
 
 export async function createMemberFeedback(studentId: string, payload: { clubId: string; feedback: string }) {
