@@ -1040,8 +1040,7 @@ function MemberDetailPanel({
                   return (
                     <article key={reflection.id}>
                       <div className="reflection-heading">
-                        <strong>{formatDate(reflection.createdAt)}</strong>
-                        <span>{reflection.meeting ? `${reflection.meeting.title} - ${formatDate(reflection.meeting.meetingDate)}` : "No session selected"}</span>
+                        <strong>Reflection Date: {formatDate(reflection.reflectionDate)}</strong>
                       </div>
                       <dl>
                         <div><dt>What I learned</dt><dd>{reflection.whatLearned}</dd></div>

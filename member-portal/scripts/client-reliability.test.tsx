@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type Meeting, type ResourceLink } from "../src/client/api";
+import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type LearningReflection, type Meeting, type ResourceLink } from "../src/client/api";
 import { MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
-import { StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
+import { LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import {
@@ -132,6 +132,34 @@ const parsedProgress = parseStudentProgressResponse({
 });
 assert.equal(parsedProgress.memberFeedback[0]?.feedback, "Excellent preparation.", "Member-level feedback is retained in My Progress responses.");
 assert.equal("email" in parsedProgress.student.user, false, "Student progress validates without exposing the member email.");
+const reflectionFormMarkup = renderToStaticMarkup(<LearningReflectionPanel progress={parsedProgress} />);
+assert.match(reflectionFormMarkup, /Reflection Date/, "Student reflection form renders the reflection date field.");
+assert.match(reflectionFormMarkup, /type="date"[^>]*value="\d{4}-\d{2}-\d{2}"/, "Reflection date defaults to today's local date.");
+assert.match(reflectionFormMarkup, />Save Reflection<\/button>/, "Student reflection form renders the Save Reflection button.");
+assert.doesNotMatch(reflectionFormMarkup, /Session \(optional\)|No session selected/, "Student reflection form no longer renders meeting selection.");
+const reflectionFixture: LearningReflection = {
+  id: "reflection-1",
+  studentId: "student-1",
+  meeting: null,
+  reflectionDate: "2026-08-20T00:00:00.000Z",
+  whatLearned: "How to structure a speech.",
+  whatDidWell: "Spoke clearly.",
+  whatToImprove: "Use more eye contact.",
+  bandRequirement: null,
+  thinksBandRequirementCompleted: true,
+  facilitatorResponse: "Keep practising.",
+  respondedBy: "Pat Facilitator",
+  respondedAt: "2026-08-21T12:00:00.000Z",
+  createdAt: "2026-08-20T12:00:00.000Z",
+  updatedAt: "2026-08-21T12:00:00.000Z",
+  canDelete: false
+};
+const reflectionHistoryMarkup = renderToStaticMarkup(
+  <LearningReflectionHistory reflections={[reflectionFixture]} onEdit={() => undefined} onDelete={() => undefined} />
+);
+assert.match(reflectionHistoryMarkup, /Reflection Date:.*Aug.*20.*2026/, "Previous reflections display the reflection date.");
+assert.match(reflectionHistoryMarkup, /How to structure a speech\./, "Previous reflections display what the member learned.");
+assert.match(reflectionHistoryMarkup, /Staff response.*Keep practising\./, "Previous reflections display an available staff response.");
 const studentOverviewMarkup = renderToStaticMarkup(
   <StudentHomeSummaryView
     user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}

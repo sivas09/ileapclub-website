@@ -12,6 +12,7 @@ type StoredReflection = {
   id: string;
   studentId: string;
   meetingId: string | null;
+  reflectionDate: Date;
   whatLearned: string;
   whatDidWell: string;
   whatToImprove: string;
@@ -127,14 +128,19 @@ try {
   const createResponse = await request("POST", "/api/reflections", users.student, 201, validReflection);
   const created = (await createResponse.json() as any).reflection;
   assert.equal(created.studentId, assignedStudentId, "A student creates a reflection owned by their own profile.");
+  assert.equal(created.reflectionDate.slice(0, 10), todayInToronto(), "Reflection date defaults to today's date when omitted.");
+  assert.equal(created.meeting, null, "A student can save without selecting a meeting or session.");
   assert.equal(created.thinksBandRequirementCompleted, true, "The self-check is stored separately.");
   assert.equal(officialProgressWrites, 0, "Creating a reflection never writes official band progress.");
 
   const updateResponse = await request("PATCH", `/api/reflections/${created.id}`, users.student, 200, {
     ...validReflection,
+    reflectionDate: "2026-08-20",
     whatToImprove: "I want to pause more often."
   });
-  assert.equal((await updateResponse.json() as any).reflection.whatToImprove, "I want to pause more often.", "A student can update their own reflection.");
+  const updatedReflection = (await updateResponse.json() as any).reflection;
+  assert.equal(updatedReflection.whatToImprove, "I want to pause more often.", "A student can update their own reflection.");
+  assert.equal(updatedReflection.reflectionDate.slice(0, 10), "2026-08-20", "A student can edit the reflection date.");
 
   const ownList = await request("GET", "/api/reflections/me", users.student, 200);
   const ownBody = await ownList.json() as any;
@@ -195,6 +201,7 @@ function seedReflection(studentId: string) {
     id: `reflection-${nextReflectionId++}`,
     studentId,
     meetingId: null,
+    reflectionDate: new Date("2026-08-19T00:00:00.000Z"),
     whatLearned: "A useful lesson",
     whatDidWell: "A strong contribution",
     whatToImprove: "A clear next step",
@@ -218,6 +225,15 @@ function withRelations(reflection: StoredReflection) {
     bandRequirement: null,
     respondedBy: responder ? { firstName: "Test", lastName: "Staff", role: responder.role } : null
   };
+}
+
+function todayInToronto() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
 }
 
 function patchModel(model: string, methods: Record<string, MockFn>) {

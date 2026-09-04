@@ -204,6 +204,7 @@ export type LearningReflection = {
   id: string;
   studentId: string;
   meeting: { id: string; title: string; meetingDate: string } | null;
+  reflectionDate: string;
   whatLearned: string;
   whatDidWell: string;
   whatToImprove: string;
@@ -219,6 +220,7 @@ export type LearningReflection = {
 
 export type LearningReflectionInput = {
   meetingId?: string | null;
+  reflectionDate?: string;
   whatLearned: string;
   whatDidWell: string;
   whatToImprove: string;

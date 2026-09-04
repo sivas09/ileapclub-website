@@ -2132,6 +2132,7 @@ button {
 }
 
 .learning-reflection-form textarea,
+.learning-reflection-form input[type="date"],
 .learning-reflection-form select,
 .learning-reflection-list textarea {
   width: 100%;
@@ -2230,6 +2231,28 @@ button {
 
 .learning-reflection-list.is-staff-view article > button {
   justify-self: start;
+}
+
+.reflection-submit-actions {
+  margin-top: 2px;
+  border-top: 1px solid #dbe4f0;
+  padding-top: 14px;
+}
+
+.member-row-actions .reflection-primary-action {
+  min-height: 44px;
+  border-color: var(--portal-blue);
+  padding: 10px 18px;
+  color: #ffffff;
+  background: var(--portal-blue);
+  font-size: 0.92rem;
+}
+
+.member-row-actions .reflection-primary-action:hover,
+.member-row-actions .reflection-primary-action:focus-visible {
+  border-color: var(--portal-sky);
+  color: #ffffff;
+  background: var(--portal-sky);
 }
 
 .pagination-row {

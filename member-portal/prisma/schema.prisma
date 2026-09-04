@@ -364,6 +364,7 @@ model MemberLearningReflection {
   id                             String   @id @default(cuid())
   studentId                      String
   meetingId                      String?
+  reflectionDate                 DateTime @default(now()) @db.Date
   whatLearned                    String   @db.VarChar(200)
   whatDidWell                    String   @db.VarChar(200)
   whatToImprove                  String   @db.VarChar(200)

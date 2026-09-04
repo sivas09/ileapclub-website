@@ -12,6 +12,7 @@ reflectionsRouter.use(requireAuth);
 
 const reflectionFields = {
   meetingId: z.string().trim().min(1).nullable().optional(),
+  reflectionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate).optional(),
   whatLearned: z.string().trim().min(1).max(200),
   whatDidWell: z.string().trim().min(1).max(200),
   whatToImprove: z.string().trim().min(1).max(200),
@@ -49,7 +50,7 @@ reflectionsRouter.get("/me", requireRole([Role.STUDENT]), asyncRoute(async (requ
   const reflections = await prisma.memberLearningReflection.findMany({
     where: { studentId: student.id },
     include: reflectionInclude,
-    orderBy: { createdAt: "desc" }
+    orderBy: [{ reflectionDate: "desc" }, { createdAt: "desc" }]
   });
 
   response.json({ reflections: reflections.map(serializeReflection) });
@@ -79,6 +80,7 @@ reflectionsRouter.post("/", requireRole([Role.STUDENT]), asyncRoute(async (reque
     data: {
       studentId: student.id,
       meetingId: parsed.data.meetingId ?? null,
+      reflectionDate: reflectionDateValue(parsed.data.reflectionDate),
       whatLearned: parsed.data.whatLearned,
       whatDidWell: parsed.data.whatDidWell,
       whatToImprove: parsed.data.whatToImprove,
@@ -117,7 +119,8 @@ reflectionsRouter.patch("/:reflectionId", requireRole([Role.STUDENT]), asyncRout
   const reflection = await prisma.memberLearningReflection.update({
     where: { id: existing.id },
     data: {
-      meetingId: parsed.data.meetingId ?? null,
+      meetingId: parsed.data.meetingId === undefined ? existing.meetingId : parsed.data.meetingId,
+      reflectionDate: parsed.data.reflectionDate ? reflectionDateValue(parsed.data.reflectionDate) : existing.reflectionDate,
       whatLearned: parsed.data.whatLearned,
       whatDidWell: parsed.data.whatDidWell,
       whatToImprove: parsed.data.whatToImprove,
@@ -161,7 +164,7 @@ reflectionsRouter.get("/student/:studentId", requireRole(staffRoles), asyncRoute
   const reflections = await prisma.memberLearningReflection.findMany({
     where: { studentId },
     include: reflectionInclude,
-    orderBy: { createdAt: "desc" }
+    orderBy: [{ reflectionDate: "desc" }, { createdAt: "desc" }]
   });
 
   response.json({ reflections: reflections.map(serializeReflection) });
@@ -256,6 +259,7 @@ function serializeReflection(reflection: NonNullable<ReflectionRecord>) {
     id: reflection.id,
     studentId: reflection.studentId,
     meeting: reflection.meeting ?? null,
+    reflectionDate: reflection.reflectionDate,
     whatLearned: reflection.whatLearned,
     whatDidWell: reflection.whatDidWell,
     whatToImprove: reflection.whatToImprove,
@@ -270,4 +274,20 @@ function serializeReflection(reflection: NonNullable<ReflectionRecord>) {
     updatedAt: reflection.updatedAt,
     canDelete: !reflection.facilitatorResponse
   };
+}
+
+function reflectionDateValue(value?: string) {
+  const dateText = value ?? new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+
+  return new Date(`${dateText}T00:00:00.000Z`);
+}
+
+function isCalendarDate(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
