@@ -200,6 +200,32 @@ export type MemberFeedbackEntry = {
   canEdit?: boolean;
 };
 
+export type LearningReflection = {
+  id: string;
+  studentId: string;
+  meeting: { id: string; title: string; meetingDate: string } | null;
+  whatLearned: string;
+  whatDidWell: string;
+  whatToImprove: string;
+  bandRequirement: { id: string; name: string; bandLevel: string } | null;
+  thinksBandRequirementCompleted: boolean;
+  facilitatorResponse: string | null;
+  respondedBy: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canDelete: boolean;
+};
+
+export type LearningReflectionInput = {
+  meetingId?: string | null;
+  whatLearned: string;
+  whatDidWell: string;
+  whatToImprove: string;
+  bandRequirementId?: string | null;
+  thinksBandRequirementCompleted: boolean;
+};
+
 export type StudentClubMember = {
   id?: string;
   displayName: string;
@@ -894,6 +920,41 @@ export async function saveStudentMeetingFeedback(meetingId: string, payload: {
 
 export async function getStudentProgress() {
   return parseStudentProgressResponse(await request<unknown>("/api/student/me/progress"));
+}
+
+export async function getOwnLearningReflections() {
+  return request<{ reflections: LearningReflection[] }>("/api/reflections/me");
+}
+
+export async function createLearningReflection(payload: LearningReflectionInput) {
+  return request<{ reflection: LearningReflection }>("/api/reflections", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateLearningReflection(reflectionId: string, payload: LearningReflectionInput) {
+  return request<{ reflection: LearningReflection }>(`/api/reflections/${reflectionId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteLearningReflection(reflectionId: string) {
+  return request<{ deletedReflection: { id: string } }>(`/api/reflections/${reflectionId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function getMemberLearningReflections(studentId: string) {
+  return request<{ reflections: LearningReflection[] }>(`/api/reflections/student/${studentId}`);
+}
+
+export async function saveLearningReflectionResponse(reflectionId: string, facilitatorResponse: string | null) {
+  return request<{ reflection: LearningReflection }>(`/api/reflections/${reflectionId}/response`, {
+    method: "PATCH",
+    body: JSON.stringify({ facilitatorResponse })
+  });
 }
 
 export async function getOwnMemberPaymentStatus() {

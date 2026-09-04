@@ -12,6 +12,7 @@ import { meetingsRouter } from "./routes/meetings.js";
 import { membersRouter } from "./routes/members.js";
 import { noticesRouter } from "./routes/notices.js";
 import { reportsRouter } from "./routes/reports.js";
+import { reflectionsRouter } from "./routes/reflections.js";
 import { resourcesRouter } from "./routes/resources.js";
 import { studentRouter } from "./routes/student.js";
 
@@ -77,6 +78,7 @@ export function createApp({
   app.use("/api/members", membersRouter);
   app.use("/api/notices", noticesRouter);
   app.use("/api/reports", reportsRouter);
+  app.use("/api/reflections", reflectionsRouter);
   app.use("/api/resources", resourcesRouter);
   app.use("/api/student", studentRouter);
 

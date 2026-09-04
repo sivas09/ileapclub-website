@@ -4,10 +4,12 @@ import {
   createMemberFeedback,
   createMember,
   deleteMemberFeedback,
+  getMemberLearningReflections,
   getMemberDetail,
   getMemberPaymentStatuses,
   getMembers,
   MemberDetail,
+  LearningReflection,
   MemberListEntry,
   MembersResponse,
   PaymentStatus,
@@ -19,6 +21,7 @@ import {
   setUserActive,
   updateMember,
   updateMemberFeedback,
+  saveLearningReflectionResponse,
   updateUser,
   updateStudentRequirement
 } from "../api";
@@ -766,6 +769,17 @@ function MemberDetailPanel({
   const [status, setStatus] = useState("");
   const [editingFeedbackId, setEditingFeedbackId] = useState<string | null>(null);
   const [editingFeedbackText, setEditingFeedbackText] = useState("");
+  const [reflections, setReflections] = useState<LearningReflection[]>([]);
+  const [reflectionResponses, setReflectionResponses] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    getMemberLearningReflections(member.id)
+      .then((result) => {
+        setReflections(result.reflections);
+        setReflectionResponses(Object.fromEntries(result.reflections.map((entry) => [entry.id, entry.facilitatorResponse ?? ""])));
+      })
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load learning reflections."));
+  }, [member.id]);
 
   async function backfillBands() {
     if (!window.confirm("This will mark all requirements before the member's current band as completed. Continue?")) {
@@ -840,6 +854,24 @@ function MemberDetailPanel({
       setStatus("Requirement updated.");
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update requirement.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function saveReflectionResponse(reflectionId: string) {
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      const responseText = reflectionResponses[reflectionId]?.trim() || null;
+      const result = await saveLearningReflectionResponse(reflectionId, responseText);
+      setReflections((current) => current.map((entry) => entry.id === reflectionId ? result.reflection : entry));
+      setReflectionResponses((current) => ({ ...current, [reflectionId]: result.reflection.facilitatorResponse ?? "" }));
+      setStatus(responseText ? "Staff response saved." : "Staff response removed.");
+    } catch (responseError) {
+      setError(responseError instanceof Error ? responseError.message : "Unable to save the staff response.");
     } finally {
       setIsSubmitting(false);
     }
@@ -937,6 +969,35 @@ function MemberDetailPanel({
                 ))}
               </ul>
             ) : <p>No meeting feedback yet.</p>}
+          </DataPanel>
+          <DataPanel title="Learning Reflections">
+            {reflections.length ? (
+              <div className="learning-reflection-list is-staff-view">
+                {reflections.map((reflection) => {
+                  const responseText = reflectionResponses[reflection.id] ?? "";
+
+                  return (
+                    <article key={reflection.id}>
+                      <div className="reflection-heading">
+                        <strong>{formatDate(reflection.createdAt)}</strong>
+                        <span>{reflection.meeting ? `${reflection.meeting.title} - ${formatDate(reflection.meeting.meetingDate)}` : "No session selected"}</span>
+                      </div>
+                      <dl>
+                        <div><dt>What I learned</dt><dd>{reflection.whatLearned}</dd></div>
+                        <div><dt>What I did well</dt><dd>{reflection.whatDidWell}</dd></div>
+                        <div><dt>What I want to improve</dt><dd>{reflection.whatToImprove}</dd></div>
+                      </dl>
+                      {reflection.thinksBandRequirementCompleted ? <p className="reflection-self-check">Member self-check: thinks they completed {reflection.bandRequirement ? `${reflection.bandRequirement.bandLevel} - ${reflection.bandRequirement.name}` : "a band requirement"}. This is not staff sign-off.</p> : null}
+                      <label>
+                        <span className="reflection-label"><span>Short staff response (optional)</span><small>{responseText.length}/300</small></span>
+                        <textarea rows={3} maxLength={300} value={responseText} onChange={(event) => setReflectionResponses((current) => ({ ...current, [reflection.id]: event.currentTarget.value }))} />
+                      </label>
+                      <button type="button" onClick={() => saveReflectionResponse(reflection.id)} disabled={isSubmitting}>Save Response</button>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : <p>No learning reflections yet.</p>}
           </DataPanel>
         </div>
       </div>

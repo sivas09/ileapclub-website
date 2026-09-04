@@ -41,6 +41,7 @@ model User {
   createdNotices Notice[] @relation("NoticeCreatedBy")
   createdMemberFeedback MemberFeedback[] @relation("MemberFeedbackCreatedBy")
   updatedMonthlyMemberPayments MonthlyMemberPayment[] @relation("MonthlyMemberPaymentUpdatedBy")
+  learningReflectionResponses MemberLearningReflection[] @relation("LearningReflectionRespondedBy")
   centerDirectorAssignments CenterDirectorAssignment[] @relation("CenterDirectorUser")
   assignedCenterDirectors CenterDirectorAssignment[] @relation("CenterDirectorAssignedBy")
 }
@@ -116,6 +117,7 @@ model Student {
   memberFeedback MemberFeedback[]
   requirementProgress StudentRequirementProgress[]
   monthlyPayments MonthlyMemberPayment[]
+  learningReflections MemberLearningReflection[]
 }
 
 model StudentClubMembership {
@@ -207,6 +209,7 @@ model Meeting {
   attendance MeetingAttendance[]
   roleScores MeetingRoleScore[]
   studentFeedbacks StudentMeetingFeedback[]
+  learningReflections MemberLearningReflection[]
 }
 
 model MeetingRoleSlot {
@@ -339,10 +342,37 @@ model BandRequirement {
 
   progress StudentRequirementProgress[]
   resourceLinks ResourceLink[]
+  learningReflections MemberLearningReflection[]
 
   @@unique([programLevel, bandLevel, name])
   @@index([programLevel])
   @@index([bandLevel])
+}
+
+model MemberLearningReflection {
+  id                             String   @id @default(cuid())
+  studentId                      String
+  meetingId                      String?
+  whatLearned                    String   @db.VarChar(200)
+  whatDidWell                    String   @db.VarChar(200)
+  whatToImprove                  String   @db.VarChar(200)
+  bandRequirementId              String?
+  thinksBandRequirementCompleted Boolean  @default(false)
+  facilitatorResponse            String?  @db.VarChar(300)
+  respondedByUserId              String?
+  respondedAt                    DateTime?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  student         Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  meeting         Meeting?         @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  bandRequirement BandRequirement? @relation(fields: [bandRequirementId], references: [id], onDelete: SetNull)
+  respondedBy     User?            @relation("LearningReflectionRespondedBy", fields: [respondedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, createdAt])
+  @@index([meetingId])
+  @@index([bandRequirementId])
+  @@index([respondedByUserId])
 }
 
 model ResourceLink {

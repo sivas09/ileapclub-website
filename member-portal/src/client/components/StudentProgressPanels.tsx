@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
+  createLearningReflection,
+  deleteLearningReflection,
   getMemberDetail,
   getMembers,
   getResourceLinks,
+  getOwnLearningReflections,
   getStudentProgress,
+  LearningReflection,
   MemberDetail,
   MemberListEntry,
   OwnMemberPaymentStatus,
   PortalUser,
   ResourceLink,
-  StudentProgress
+  StudentProgress,
+  updateLearningReflection
 } from "../api";
 import {
   DataPanel,
@@ -252,6 +257,8 @@ export function StudentProgressDashboard() {
             <span>{progress.summary.centreName} - {formatBandLadder(progress.summary.programLevel)}</span>
           </div>
 
+          <LearningReflectionPanel progress={progress} />
+
           <DataPanel title="My Feedback">
             {feedbackRows.length ? (
               <div className="student-feedback-table-wrap">
@@ -360,5 +367,162 @@ export function StudentProgressDashboard() {
       ) : null}
       <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
+  );
+}
+
+const emptyReflectionForm = {
+  meetingId: "",
+  whatLearned: "",
+  whatDidWell: "",
+  whatToImprove: "",
+  bandRequirementId: "",
+  thinksBandRequirementCompleted: false
+};
+
+function LearningReflectionPanel({ progress }: { progress: StudentProgress }) {
+  const [reflections, setReflections] = useState<LearningReflection[]>([]);
+  const [form, setForm] = useState(emptyReflectionForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    getOwnLearningReflections()
+      .then((result) => setReflections(result.reflections))
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load reflections."));
+  }, []);
+
+  const meetings = [
+    ...progress.student.attendance.map((entry) => entry.meeting),
+    ...progress.student.roleSlots.map((entry) => entry.meeting)
+  ].filter((meeting, index, rows) => rows.findIndex((entry) => entry.id === meeting.id) === index)
+    .sort((left, right) => new Date(right.meetingDate).getTime() - new Date(left.meetingDate).getTime());
+
+  async function submitReflection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+    setIsSaving(true);
+
+    const payload = {
+      meetingId: form.meetingId || null,
+      whatLearned: form.whatLearned.trim(),
+      whatDidWell: form.whatDidWell.trim(),
+      whatToImprove: form.whatToImprove.trim(),
+      bandRequirementId: form.thinksBandRequirementCompleted && form.bandRequirementId ? form.bandRequirementId : null,
+      thinksBandRequirementCompleted: form.thinksBandRequirementCompleted
+    };
+
+    try {
+      const result = editingId
+        ? await updateLearningReflection(editingId, payload)
+        : await createLearningReflection(payload);
+      setReflections((current) => editingId
+        ? current.map((entry) => entry.id === editingId ? result.reflection : entry)
+        : [result.reflection, ...current]);
+      setForm(emptyReflectionForm);
+      setEditingId(null);
+      setStatus(editingId ? "Reflection updated." : "Reflection saved.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save reflection.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function editReflection(reflection: LearningReflection) {
+    setEditingId(reflection.id);
+    setForm({
+      meetingId: reflection.meeting?.id ?? "",
+      whatLearned: reflection.whatLearned,
+      whatDidWell: reflection.whatDidWell,
+      whatToImprove: reflection.whatToImprove,
+      bandRequirementId: reflection.bandRequirement?.id ?? "",
+      thinksBandRequirementCompleted: reflection.thinksBandRequirementCompleted
+    });
+    setError("");
+    setStatus("");
+  }
+
+  async function removeReflection(reflectionId: string) {
+    if (!window.confirm("Delete this reflection?")) return;
+    setError("");
+    setStatus("");
+    try {
+      await deleteLearningReflection(reflectionId);
+      setReflections((current) => current.filter((entry) => entry.id !== reflectionId));
+      setStatus("Reflection deleted.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete reflection.");
+    }
+  }
+
+  return (
+    <DataPanel title="My Learning Reflection">
+      <p className="field-note">Capture a short session reflection. Your self-check does not officially complete a band requirement; staff approval is still required.</p>
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      <form className="learning-reflection-form" onSubmit={submitReflection}>
+        <label>
+          Session (optional)
+          <select value={form.meetingId} onChange={(event) => setForm((current) => ({ ...current, meetingId: event.currentTarget.value }))}>
+            <option value="">No session selected</option>
+            {meetings.map((meeting) => <option key={meeting.id} value={meeting.id}>{formatDate(meeting.meetingDate)} - {meeting.title}</option>)}
+          </select>
+        </label>
+        <ReflectionTextField label="What I learned" value={form.whatLearned} onChange={(value) => setForm((current) => ({ ...current, whatLearned: value }))} />
+        <ReflectionTextField label="What I did well" value={form.whatDidWell} onChange={(value) => setForm((current) => ({ ...current, whatDidWell: value }))} />
+        <ReflectionTextField label="What I want to improve" value={form.whatToImprove} onChange={(value) => setForm((current) => ({ ...current, whatToImprove: value }))} />
+        <label className="reflection-checkbox">
+          <input type="checkbox" checked={form.thinksBandRequirementCompleted} onChange={(event) => setForm((current) => ({ ...current, thinksBandRequirementCompleted: event.currentTarget.checked, bandRequirementId: event.currentTarget.checked ? current.bandRequirementId : "" }))} />
+          I think I completed a band requirement today.
+        </label>
+        {form.thinksBandRequirementCompleted ? (
+          <label>
+            Related requirement (optional)
+            <select value={form.bandRequirementId} onChange={(event) => setForm((current) => ({ ...current, bandRequirementId: event.currentTarget.value }))}>
+              <option value="">No requirement selected</option>
+              {progress.requirements.map((entry) => <option key={entry.requirement.id} value={entry.requirement.id}>{entry.requirement.bandLevel} - {entry.requirement.name}</option>)}
+            </select>
+          </label>
+        ) : null}
+        <div className="member-row-actions">
+          <button type="submit" disabled={isSaving || !form.whatLearned.trim() || !form.whatDidWell.trim() || !form.whatToImprove.trim()}>{editingId ? "Update Reflection" : "Save Reflection"}</button>
+          {editingId ? <button type="button" className="text-action" onClick={() => { setEditingId(null); setForm(emptyReflectionForm); }} disabled={isSaving}>Cancel</button> : null}
+        </div>
+      </form>
+
+      <div className="learning-reflection-list">
+        {reflections.length ? reflections.map((reflection) => (
+          <article key={reflection.id}>
+            <div className="reflection-heading">
+              <strong>{formatDate(reflection.createdAt)}</strong>
+              <span>{reflection.meeting ? `${reflection.meeting.title} - ${formatDate(reflection.meeting.meetingDate)}` : "No session selected"}</span>
+            </div>
+            <dl>
+              <div><dt>What I learned</dt><dd>{reflection.whatLearned}</dd></div>
+              <div><dt>What I did well</dt><dd>{reflection.whatDidWell}</dd></div>
+              <div><dt>What I want to improve</dt><dd>{reflection.whatToImprove}</dd></div>
+            </dl>
+            {reflection.thinksBandRequirementCompleted ? <p className="reflection-self-check">Self-check: I think I completed {reflection.bandRequirement ? `${reflection.bandRequirement.bandLevel} - ${reflection.bandRequirement.name}` : "a band requirement"}. Staff sign-off is still required.</p> : null}
+            {reflection.facilitatorResponse ? <p className="reflection-response"><strong>Staff response{reflection.respondedBy ? ` from ${reflection.respondedBy}` : ""}:</strong> {reflection.facilitatorResponse}</p> : null}
+            <div className="member-row-actions">
+              <button type="button" className="text-action" onClick={() => editReflection(reflection)}>Edit</button>
+              {reflection.canDelete ? <button type="button" className="danger-action" onClick={() => removeReflection(reflection.id)}>Delete</button> : null}
+            </div>
+          </article>
+        )) : <p>No reflections yet.</p>}
+      </div>
+    </DataPanel>
+  );
+}
+
+function ReflectionTextField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label>
+      <span className="reflection-label"><span>{label}</span><small>{value.length}/200</small></span>
+      <textarea rows={3} required maxLength={200} value={value} onChange={(event) => onChange(event.currentTarget.value)} />
+    </label>
   );
 }

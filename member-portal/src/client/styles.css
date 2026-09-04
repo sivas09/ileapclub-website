@@ -2117,6 +2117,121 @@ button {
   color: #64748b;
 }
 
+.learning-reflection-form {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 24px;
+}
+
+.learning-reflection-form > label,
+.learning-reflection-list article > label {
+  display: grid;
+  gap: 7px;
+  color: #233956;
+  font-weight: 800;
+}
+
+.learning-reflection-form textarea,
+.learning-reflection-form select,
+.learning-reflection-list textarea {
+  width: 100%;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #10223f;
+  background: #ffffff;
+}
+
+.learning-reflection-form textarea,
+.learning-reflection-list textarea {
+  resize: vertical;
+}
+
+.reflection-label,
+.reflection-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reflection-label small,
+.reflection-heading span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.reflection-checkbox {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px !important;
+}
+
+.reflection-checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.learning-reflection-list {
+  display: grid;
+  gap: 14px;
+}
+
+.learning-reflection-list article {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.learning-reflection-list dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.learning-reflection-list dl div {
+  display: grid;
+  gap: 3px;
+}
+
+.learning-reflection-list dt {
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.learning-reflection-list dd {
+  margin: 0;
+  color: #10223f;
+  line-height: 1.45;
+}
+
+.reflection-self-check,
+.reflection-response {
+  margin: 0;
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  color: #8a3c08;
+  line-height: 1.4;
+}
+
+.reflection-response {
+  background: #eff8ff;
+  color: #164e76;
+}
+
+.learning-reflection-list.is-staff-view article > button {
+  justify-self: start;
+}
+
 .pagination-row {
   display: flex;
   align-items: center;
