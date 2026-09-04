@@ -8,6 +8,7 @@ export type AuthUser = {
   id: string;
   email: string;
   role: Role;
+  sessionVersion?: number;
 };
 
 declare global {
@@ -19,7 +20,7 @@ declare global {
 }
 
 export function signToken(user: AuthUser) {
-  return jwt.sign(user, config.JWT_SECRET, { expiresIn: "8h" });
+  return jwt.sign({ ...user, sessionVersion: user.sessionVersion ?? 0 }, config.JWT_SECRET, { expiresIn: "8h" });
 }
 
 export async function requireAuth(request: Request, response: Response, next: NextFunction) {
@@ -39,7 +40,8 @@ export async function requireAuth(request: Request, response: Response, next: Ne
         id: true,
         email: true,
         role: true,
-        isActive: true
+        isActive: true,
+        sessionVersion: true
       }
     });
 
@@ -48,10 +50,16 @@ export async function requireAuth(request: Request, response: Response, next: Ne
       return;
     }
 
+    if ((tokenUser.sessionVersion ?? 0) !== (user.sessionVersion ?? 0)) {
+      response.status(401).json({ message: "Session expired. Please sign in again." });
+      return;
+    }
+
     request.user = {
       id: user.id,
       email: user.email,
-      role: user.role
+      role: user.role,
+      sessionVersion: user.sessionVersion ?? 0
     };
     next();
   } catch (error) {

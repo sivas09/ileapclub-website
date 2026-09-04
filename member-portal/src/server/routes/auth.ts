@@ -55,7 +55,8 @@ authRouter.post("/login", loginRateLimiter, asyncRoute(async (request, response)
     where: { email: parsed.data.email.toLowerCase() },
     select: {
       ...memberUserSelect,
-      passwordHash: true
+      passwordHash: true,
+      sessionVersion: true
     }
   });
 
@@ -79,7 +80,8 @@ authRouter.post("/login", loginRateLimiter, asyncRoute(async (request, response)
   const sessionUser = {
     id: user.id,
     email: user.email,
-    role: user.role
+    role: user.role,
+    sessionVersion: user.sessionVersion
   };
 
   response.json({

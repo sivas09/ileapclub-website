@@ -11,6 +11,7 @@ import { CenterDirectorScopeView } from "../src/client/components/CenterDirector
 import {
   claimableMeetingRoleSlots,
   canManageUserFromSetup,
+  canResetUserPasswordFromSetup,
   dateInputValue,
   formatDate,
   formatRole,
@@ -231,6 +232,14 @@ assert.equal(canManageUserFromSetup(directorViewer, { id: "student-1", role: "ST
 assert.equal(canManageUserFromSetup(directorViewer, { id: "admin-1", role: "ADMIN" }), false, "Center Director cannot see Admin account controls.");
 assert.equal(canManageUserFromSetup(directorViewer, { id: "director-2", role: "CENTER_DIRECTOR" }), false, "Center Director cannot see Center Director account controls.");
 assert.equal(canManageUserFromSetup(directorViewer, directorViewer), false, "Center Director cannot manage their own account controls.");
+assert.equal(canResetUserPasswordFromSetup({ role: "ADMIN" }, { role: "STUDENT" }), true, "Admin sees password reset for members.");
+assert.equal(canResetUserPasswordFromSetup({ role: "ADMIN" }, { role: "FACILITATOR" }), true, "Admin sees password reset for facilitators.");
+assert.equal(canResetUserPasswordFromSetup({ role: "ADMIN" }, { role: "CENTER_DIRECTOR" }), true, "Admin sees password reset for center directors.");
+assert.equal(canResetUserPasswordFromSetup({ role: "ADMIN" }, { role: "ADMIN" }), false, "Admin-to-admin password reset stays hidden.");
+assert.equal(canResetUserPasswordFromSetup({ role: "CENTER_DIRECTOR" }, { role: "STUDENT" }), true, "Center Director sees password reset for scoped members.");
+assert.equal(canResetUserPasswordFromSetup({ role: "CENTER_DIRECTOR" }, { role: "FACILITATOR" }), true, "Center Director sees password reset for scoped facilitators.");
+assert.equal(canResetUserPasswordFromSetup({ role: "CENTER_DIRECTOR" }, { role: "CENTER_DIRECTOR" }), false, "Center Director does not see reset for center directors.");
+assert.equal(canResetUserPasswordFromSetup({ role: "FACILITATOR" }, { role: "STUDENT" }), false, "Facilitator never sees password reset controls.");
 
 const adminSetupMarkup = renderToStaticMarkup(
   <AdminWorkspace currentUser={{ id: "admin-1", email: "admin@example.com", firstName: "Admin", lastName: "User", role: "ADMIN" }} />

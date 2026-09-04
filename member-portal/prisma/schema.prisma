@@ -28,6 +28,7 @@ model User {
   lastName     String
   role         Role
   isActive     Boolean  @default(true)
+  sessionVersion Int    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -44,6 +45,16 @@ model User {
   learningReflectionResponses MemberLearningReflection[] @relation("LearningReflectionRespondedBy")
   centerDirectorAssignments CenterDirectorAssignment[] @relation("CenterDirectorUser")
   assignedCenterDirectors CenterDirectorAssignment[] @relation("CenterDirectorAssignedBy")
+}
+
+model PasswordResetAudit {
+  id            String   @id @default(cuid())
+  targetUserId  String
+  resetByUserId String
+  resetAt       DateTime @default(now())
+
+  @@index([targetUserId, resetAt])
+  @@index([resetByUserId, resetAt])
 }
 
 model Centre {

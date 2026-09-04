@@ -17,6 +17,7 @@ import {
   PortalUser,
   Role,
   resetMemberPaymentStatuses,
+  resetUserPassword,
   setMemberPaymentStatus,
   setUserActive,
   updateMember,
@@ -43,6 +44,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
   const [data, setData] = useState<MembersResponse | null>(null);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
   const [editingMember, setEditingMember] = useState<MemberDetail | null>(null);
+  const [passwordResetMember, setPasswordResetMember] = useState<MemberDetail | null>(null);
   const [feedbackTarget, setFeedbackTarget] = useState<MemberListEntry | null>(null);
   const [reactivationTarget, setReactivationTarget] = useState<MemberListEntry | null>(null);
   const [reactivationClubIds, setReactivationClubIds] = useState<string[]>([]);
@@ -228,12 +230,43 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     try {
       const result = await getMemberDetail(studentId);
       setEditingMember(result.member);
+      setPasswordResetMember(null);
       setIsAddFormOpen(false);
       window.setTimeout(() => {
         document.getElementById("member-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
     } catch (editError) {
       setError(editError instanceof Error ? editError.message : "Unable to load member for editing.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!passwordResetMember?.userId) return;
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const newPassword = String(formData.get("newPassword") || "");
+    const confirmPassword = String(formData.get("confirmPassword") || "");
+    setError("");
+    setStatus("");
+
+    if (newPassword !== confirmPassword) {
+      setError("Temporary passwords do not match.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await resetUserPassword(passwordResetMember.userId, newPassword);
+      form.reset();
+      setPasswordResetMember(null);
+      setStatus("Password reset successfully.");
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Unable to reset password.");
     } finally {
       setIsSubmitting(false);
     }
@@ -389,11 +422,36 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
           viewerRole={user.role}
           isSubmitting={isSubmitting}
           onSubmit={handleMemberFormSubmit}
+          onResetPassword={isOperationalManagerRole(user.role) && editingMember ? () => {
+            setPasswordResetMember(editingMember);
+            setEditingMember(null);
+            window.setTimeout(() => document.getElementById("member-password-reset-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+          } : undefined}
           onCancel={() => {
             setIsAddFormOpen(false);
             setEditingMember(null);
           }}
         />
+      ) : null}
+
+      {passwordResetMember ? (
+        <form id="member-password-reset-form" className="admin-form wide" onSubmit={handlePasswordReset}>
+          <div className="admin-heading">
+            <div>
+              <p className="eyebrow">Authorized password reset</p>
+              <h3>Reset Password for {passwordResetMember.displayName}</h3>
+            </div>
+          </div>
+          <p className="field-note warning-text">This will replace the user’s current password. Share the temporary password securely and ask the user to change it after login.</p>
+          <div className="form-two-column">
+            <label>New temporary password<input name="newPassword" type="password" autoComplete="new-password" minLength={8} maxLength={72} required /></label>
+            <label>Confirm temporary password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} maxLength={72} required /></label>
+          </div>
+          <div className="edit-user-actions">
+            <button type="submit" disabled={isSubmitting}>Save</button>
+            <button type="button" className="text-action" onClick={() => setPasswordResetMember(null)} disabled={isSubmitting}>Cancel</button>
+          </div>
+        </form>
       ) : null}
 
       {feedbackTarget ? (
@@ -655,6 +713,7 @@ function MemberForm({
   viewerRole,
   isSubmitting,
   onSubmit,
+  onResetPassword,
   onCancel
 }: {
   member: MemberDetail | null;
@@ -662,6 +721,7 @@ function MemberForm({
   viewerRole: Role;
   isSubmitting: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onResetPassword?: () => void;
   onCancel: () => void;
 }) {
   const nameParts = splitDisplayName(member);
@@ -745,6 +805,7 @@ function MemberForm({
       {isFacilitatorEdit ? <p className="field-note">You can update program and band levels here. Use View Progress to manage band sign-off.</p> : null}
       <div className="edit-user-actions">
         <button type="submit" disabled={isSubmitting || ((!member || showClubAssignment) && !clubs.length)}>{member ? "Save Member" : "Add Member"}</button>
+        {member && onResetPassword ? <button type="button" className="text-action" onClick={onResetPassword} disabled={isSubmitting}>Reset Password</button> : null}
         <button type="button" className="text-action" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
       </div>
     </form>

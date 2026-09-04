@@ -23,6 +23,7 @@ import {
 import {
   bandLevelOptions,
   canManageUserFromSetup,
+  canResetUserPasswordFromSetup,
   DataPanel,
   formatCleanupSummary,
   formatProgramLevel,
@@ -363,7 +364,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
       await resetUserPassword(passwordResetUser.id, newPassword);
       form.reset();
       setPasswordResetUser(null);
-      setStatus(`Password reset for ${passwordResetUser.firstName} ${passwordResetUser.lastName}.`);
+      setStatus("Password reset successfully.");
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : "Unable to reset password.");
     } finally {
@@ -466,6 +467,9 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         </div>
         <div className="edit-user-actions">
           <button type="submit" disabled={isSubmitting}>Save</button>
+          {canResetUserPasswordFromSetup(currentUser, portalUser) ? (
+            <button type="button" className="text-action" onClick={() => startResettingPassword(portalUser)} disabled={isSubmitting}>Reset Password</button>
+          ) : null}
           <button type="button" className="text-action" onClick={() => setEditingUser(null)} disabled={isSubmitting}>Cancel</button>
         </div>
       </form>
@@ -477,13 +481,14 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
       <form id={`reset-password-${portalUser.id}`} key={portalUser.id} className="edit-user-panel" onSubmit={handleResetPasswordSubmit}>
         <div className="admin-heading">
           <div>
-            <p className="eyebrow">Admin reset</p>
+            <p className="eyebrow">Authorized password reset</p>
             <h3>Reset Password for {portalUser.firstName} {portalUser.lastName}</h3>
           </div>
         </div>
+        <p className="field-note warning-text">This will replace the user’s current password. Share the temporary password securely and ask the user to change it after login.</p>
         <div className="form-two-column">
-          <label>New Password<input name="newPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
-          <label>Confirm New Password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} required /></label>
+          <label>New temporary password<input name="newPassword" type="password" autoComplete="new-password" minLength={8} maxLength={72} required /></label>
+          <label>Confirm temporary password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={8} maxLength={72} required /></label>
         </div>
         <div className="edit-user-actions">
           <button type="submit" disabled={isSubmitting}>Reset Password</button>
@@ -883,14 +888,6 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                         disabled={isSubmitting || portalUser.id === currentUser.id}
                       >
                         {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-action"
-                        onClick={() => startResettingPassword(portalUser)}
-                        disabled={isSubmitting}
-                      >
-                        Reset Password
                       </button>
                       {isDemoUser(portalUser, currentUser.id) ? (
                         <button

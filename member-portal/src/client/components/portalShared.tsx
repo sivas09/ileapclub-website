@@ -485,6 +485,12 @@ export function canManageUserFromSetup(viewer: { id: string; role: Role }, targe
       && (target.role === "STUDENT" || target.role === "FACILITATOR"));
 }
 
+export function canResetUserPasswordFromSetup(viewer: { role: Role }, target: { role: Role }) {
+  return viewer.role === "ADMIN"
+    ? target.role !== "ADMIN"
+    : viewer.role === "CENTER_DIRECTOR" && (target.role === "STUDENT" || target.role === "FACILITATOR");
+}
+
 export function isStudentInClub(student: MeetingsOverview["students"][number], clubId: string) {
   return Boolean(student.clubMemberships?.some((membership) => membership.clubId === clubId && membership.status === "ACTIVE"));
 }

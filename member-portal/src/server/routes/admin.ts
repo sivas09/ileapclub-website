@@ -61,8 +61,8 @@ const facilitatorAssignmentSchema = z.object({
 });
 
 const passwordResetSchema = z.object({
-  newPassword: z.string().min(8)
-});
+  newPassword: z.string().min(8).max(72).refine((password) => Buffer.byteLength(password, "utf8") <= 72)
+}).strict();
 
 const reactivateUserSchema = z.object({
   isActive: z.literal(true),
@@ -94,6 +94,15 @@ adminRouter.use(requireAuth, requireRole(operationalManagerRoles));
 
 export function canAdminResetPassword(role: Role) {
   return canManageAdminAccounts(role);
+}
+
+export function canResetPasswordForRole(actorRole: Role, targetRole: Role) {
+  if (actorRole === Role.ADMIN) {
+    return targetRole === Role.STUDENT || targetRole === Role.FACILITATOR || targetRole === Role.CENTER_DIRECTOR;
+  }
+
+  return actorRole === Role.CENTER_DIRECTOR
+    && (targetRole === Role.STUDENT || targetRole === Role.FACILITATOR);
 }
 
 function asyncRoute(handler: (request: Request, response: Response, next: NextFunction) => Promise<void>) {
@@ -790,13 +799,16 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
   const parsed = passwordResetSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Enter a new password of at least 8 characters." });
+    response.status(400).json({ message: "Enter a temporary password between 8 and 72 characters." });
     return;
   }
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: memberUserSelect
+    select: {
+      ...memberUserSelect,
+      passwordHash: true
+    }
   });
 
   if (!user || !editableRoles.has(user.role)) {
@@ -804,7 +816,7 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
     return;
   }
 
-  if (!canManageAccountAccess(request.user!, user.role)) {
+  if (!canResetPasswordForRole(request.user!.role, user.role)) {
     response.status(403).json({ message: "You cannot reset this account's password." });
     return;
   }
@@ -814,11 +826,30 @@ adminRouter.patch("/users/:userId/password", asyncRoute(async (request, response
     return;
   }
 
+  if (await bcrypt.compare(parsed.data.newPassword, user.passwordHash)) {
+    response.status(400).json({ message: "Temporary password must be different from the user's current password." });
+    return;
+  }
+
   const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
-  const updatedUser = await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordHash },
-    select: memberUserSelect
+  const updatedUser = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        sessionVersion: { increment: 1 }
+      },
+      select: memberUserSelect
+    });
+
+    await tx.passwordResetAudit.create({
+      data: {
+        targetUserId: user.id,
+        resetByUserId: request.user!.id
+      }
+    });
+
+    return updated;
   });
 
   response.json({ user: safeUserDto(updatedUser) });
