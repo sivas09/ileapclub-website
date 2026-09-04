@@ -568,7 +568,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                       <div className="member-row-actions">
                         <button type="button" onClick={() => openDetail(member.id)} disabled={isSubmitting}>View Details</button>
                         <button type="button" onClick={() => startEditingMember(member.id)} disabled={isSubmitting}>Edit Member</button>
-                        <button type="button" onClick={() => openDetail(member.id, "member-progress")} disabled={isSubmitting}>View Progress</button>
+                        <button type="button" onClick={() => openDetail(member.id, "member-band-progress")} disabled={isSubmitting}>Update Progress</button>
                         <button type="button" onClick={() => openDetail(member.id, "member-feedback")} disabled={isSubmitting}>View Feedback</button>
                         <button
                           type="button"
@@ -802,7 +802,7 @@ function MemberForm({
           </label>
         ) : null}
       </div>
-      {isFacilitatorEdit ? <p className="field-note">You can update program and band levels here. Use View Progress to manage band sign-off.</p> : null}
+      {isFacilitatorEdit ? <p className="field-note">You can update program and band levels here. Use Update Progress to manage band sign-off.</p> : null}
       <div className="edit-user-actions">
         <button type="submit" disabled={isSubmitting || ((!member || showClubAssignment) && !clubs.length)}>{member ? "Save Member" : "Add Member"}</button>
         {member && onResetPassword ? <button type="button" className="text-action" onClick={onResetPassword} disabled={isSubmitting}>Reset Password</button> : null}
@@ -1062,30 +1062,32 @@ function MemberDetailPanel({
         </div>
       </div>
 
-      {member.requirements?.length ? (
+      <div className="member-detail-anchor" id="member-band-progress">
         <DataPanel title="Band Requirements">
-          <ul className="requirement-list">
-            {member.requirements.map((entry) => (
-              <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
-                <div>
-                  <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
-                  <span>{entry.requirement.description}</span>
-                </div>
-                {canManage ? (
-                  <button
-                    type="button"
-                    className="text-action"
-                    onClick={() => updateRequirement(entry.requirement.id, entry.isCompleted ? 0 : entry.requirement.targetCount, !entry.isCompleted)}
-                    disabled={isSubmitting}
-                  >
-                    {entry.isCompleted ? "Undo Completion" : "Mark Complete"}
-                  </button>
-                ) : <em>{entry.currentCount}/{entry.requirement.targetCount}</em>}
-              </li>
-            ))}
-          </ul>
+          {member.requirements?.length ? (
+            <ul className="requirement-list">
+              {member.requirements.map((entry) => (
+                <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
+                  <div>
+                    <strong>{entry.requirement.bandLevel}: {entry.requirement.requirementType} - {entry.requirement.name}</strong>
+                    <span>{entry.requirement.description}</span>
+                  </div>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      className="text-action"
+                      onClick={() => updateRequirement(entry.requirement.id, entry.isCompleted ? 0 : entry.requirement.targetCount, !entry.isCompleted)}
+                      disabled={isSubmitting}
+                    >
+                      {entry.isCompleted ? "Undo Completion" : "Mark Complete"}
+                    </button>
+                  ) : <em>{entry.currentCount}/{entry.requirement.targetCount}</em>}
+                </li>
+              ))}
+            </ul>
+          ) : <p>No band requirements are available for this member.</p>}
         </DataPanel>
-      ) : null}
+      </div>
 
       <div className="student-progress-grid">
         <DataPanel title="Attendance">
