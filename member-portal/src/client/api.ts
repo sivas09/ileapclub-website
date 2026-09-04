@@ -101,9 +101,27 @@ export type MeetingAttendance = {
   id: string;
   meetingId: string;
   studentId: string;
-  status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+  status: AttendanceStatus;
   notes?: string | null;
+  markedAt?: string;
   student: Student;
+};
+
+export type AttendanceStatus = "PRESENT" | "ABSENT";
+
+export type MeetingAttendanceRoster = {
+  meeting: {
+    id: string;
+    title: string;
+    meetingDate: string;
+    clubName: string;
+  };
+  roster: Array<{
+    studentId: string;
+    memberName: string;
+    status: AttendanceStatus | null;
+    markedAt: string | null;
+  }>;
 };
 
 export type MeetingRoleScore = {
@@ -889,12 +907,25 @@ export async function toggleMeetingLock(meetingId: string) {
 
 export async function markMeetingAttendance(meetingId: string, payload: {
   studentId: string;
-  status: MeetingAttendance["status"];
-  notes?: string;
+  status: AttendanceStatus;
 }) {
-  return request<{ meeting: Meeting }>(`/api/meetings/${meetingId}/attendance`, {
+  return request<{ message: string }>(`/api/meetings/${meetingId}/attendance`, {
     method: "PUT",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function getMeetingAttendance(meetingId: string) {
+  return request<MeetingAttendanceRoster>(`/api/meetings/${meetingId}/attendance`);
+}
+
+export async function saveMeetingAttendance(meetingId: string, attendance: Array<{
+  studentId: string;
+  status: AttendanceStatus;
+}>) {
+  return request<{ message: string }>(`/api/meetings/${meetingId}/attendance`, {
+    method: "PUT",
+    body: JSON.stringify({ attendance })
   });
 }
 

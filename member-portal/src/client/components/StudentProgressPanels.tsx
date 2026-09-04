@@ -355,7 +355,7 @@ export function StudentProgressDashboard() {
                 <ul className="record-list">
                   {progress.student.attendance.slice(0, 8).map((attendance) => (
                     <li key={attendance.id}>
-                      <strong>{attendance.status}</strong>
+                      <strong>{attendanceStatusLabel(attendance.status)}</strong>
                       <span>{attendance.meeting.title} - {formatDate(attendance.meeting.meetingDate)}</span>
                     </li>
                   ))}
@@ -368,6 +368,12 @@ export function StudentProgressDashboard() {
       <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
     </section>
   );
+}
+
+export function attendanceStatusLabel(status: string) {
+  if (status === "PRESENT") return "Present";
+  if (status === "ABSENT") return "Absent";
+  return "Not Marked";
 }
 
 function createEmptyReflectionForm() {

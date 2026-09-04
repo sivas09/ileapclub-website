@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type LearningReflection, type Meeting, type ResourceLink } from "../src/client/api";
-import { MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
+import { AttendanceRosterForm, MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
-import { LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
+import { attendanceStatusLabel, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import {
@@ -54,6 +54,28 @@ assert.match(meetingViewMarkup, /<th>Assigned Member<\/th>/, "Meeting View keeps
 assert.doesNotMatch(meetingViewMarkup, /<th>Score<\/th>/, "Meeting View does not display the score column.");
 assert.doesNotMatch(meetingViewMarkup, /<th>Feedback<\/th>/, "Meeting View does not display the feedback column.");
 assert.doesNotMatch(meetingViewMarkup, /88\/100|Strong speech/, "Meeting View does not expose score or feedback values.");
+
+const attendanceMarkup = renderToStaticMarkup(
+  <AttendanceRosterForm
+    roster={[
+      { studentId: "student-1", memberName: "Alex Student", status: "PRESENT", markedAt: "2026-09-04T15:00:00.000Z" },
+      { studentId: "student-2", memberName: "Beth Student", status: null, markedAt: null }
+    ]}
+    statuses={{ "student-1": "PRESENT", "student-2": "" }}
+    isSubmitting={false}
+    onStatusChange={() => undefined}
+    onSubmit={() => undefined}
+  />
+);
+assert.match(attendanceMarkup, /<th>Member Name<\/th>/, "Attendance roster renders the member name column.");
+assert.match(attendanceMarkup, /<th>Attendance Status<\/th>/, "Attendance roster renders the status column.");
+assert.match(attendanceMarkup, />Present<\/option>/, "Attendance offers Present.");
+assert.match(attendanceMarkup, />Absent<\/option>/, "Attendance offers Absent.");
+assert.match(attendanceMarkup, />Not Marked<\/option>/, "Attendance displays a blank Not Marked option.");
+assert.match(attendanceMarkup, />Save Attendance<\/button>/, "Attendance renders its save action.");
+assert.doesNotMatch(attendanceMarkup, />Late<\/option>|>Excused<\/option>/, "Attendance does not offer Late or Excused.");
+assert.equal(attendanceStatusLabel("PRESENT"), "Present", "Student attendance history uses the visible Present label.");
+assert.equal(attendanceStatusLabel("ABSENT"), "Absent", "Student attendance history uses the visible Absent label.");
 
 const memberProgressMarkup = renderToStaticMarkup(<StudentProgressDashboard />);
 assert.match(memberProgressMarkup, /Member Progress Dashboard/, "Member progress uses member-facing terminology.");

@@ -2,6 +2,7 @@ import { FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "reac
 import {
   addMeetingRoleSlot,
   assignMeetingSlot,
+  AttendanceStatus,
   backfillPreviousBandRequirements,
   BandRequirement,
   claimMeetingSlot,
@@ -14,11 +15,13 @@ import {
   downloadAgenda,
   editMeetingRoleSlot,
   fetchStudentProgressForManager,
+  getMeetingAttendance,
   getBandRequirements,
   getMeetingsOverview,
   getResourceLinks,
   getRoleDefinitions,
   Meeting,
+  MeetingAttendanceRoster,
   MeetingsOverview,
   PortalUser,
   releaseMeetingSlot,
@@ -26,6 +29,7 @@ import {
   ResourceLink,
   RoleDefinition,
   saveStudentMeetingFeedback,
+  saveMeetingAttendance,
   StudentProgress,
   toggleMeetingLock,
   updateBandRequirement,
@@ -55,7 +59,7 @@ import {
   roleDefinitionsForSlot,
   roleSlotName
 } from "./portalShared";
-type MeetingMode = "view" | "book" | "manage" | "score" | "edit";
+type MeetingMode = "view" | "book" | "manage" | "attendance" | "score" | "edit";
 
 const meetingTemplates = [
   "Junior Regular Meeting",
@@ -291,6 +295,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
             <button type="button" className={meetingMode === "book" ? "is-active" : ""} onClick={() => setMeetingMode("book")}>Book Roles</button>
             {canManageMeetings ? <button type="button" className={meetingMode === "edit" ? "is-active" : ""} onClick={() => setMeetingMode("edit")}>Edit Meeting</button> : null}
             {canManageMeetings ? <button type="button" className={meetingMode === "manage" ? "is-active" : ""} onClick={() => setMeetingMode("manage")}>Manage Roles</button> : null}
+            {canManageMeetings ? <button type="button" className={meetingMode === "attendance" ? "is-active" : ""} onClick={() => setMeetingMode("attendance")}>Attendance</button> : null}
             {canManageMeetings ? <button type="button" className={meetingMode === "score" ? "is-active" : ""} onClick={() => setMeetingMode("score")}>Score Feedback</button> : null}
           </div>
 
@@ -329,6 +334,9 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
               onRemoveSlot={(slotId) => updateMeeting(() => removeMeetingRoleSlot(selectedMeeting.id, slotId), "Role slot removed.")}
               onToggleLock={() => updateMeeting(() => toggleMeetingLock(selectedMeeting.id), selectedMeeting.isRoleLocked ? "Roles reopened." : "Roles locked.")}
             />
+          ) : null}
+          {canManageMeetings && meetingMode === "attendance" ? (
+            <MeetingAttendancePanel key={selectedMeeting.id} meeting={selectedMeeting} />
           ) : null}
           {canManageMeetings && meetingMode === "score" ? (
             <ScoreFeedback
@@ -628,6 +636,7 @@ function MeetingList({
                           <div className="meeting-actions-menu-panel">
                             <button type="button" onClick={() => onSelect(meeting, "edit")}>Edit Meeting</button>
                             <button type="button" onClick={() => onSelect(meeting, "manage")}>Manage Roles</button>
+                            <button type="button" onClick={() => onSelect(meeting, "attendance")}>Attendance</button>
                             <button type="button" onClick={() => onSelect(meeting, "score")}>Score Feedback</button>
                             <button type="button" className="danger-action" onClick={() => onDeleteRequest(meeting)} disabled={isSubmitting}>Delete Meeting</button>
                           </div>
@@ -735,6 +744,151 @@ function MeetingView({
       <MeetingSummary meeting={meeting} />
       <RoleAssignmentTable meeting={meeting} resources={resources} onSelectResource={onSelectResource} />
     </section>
+  );
+}
+
+function MeetingAttendancePanel({ meeting }: { meeting: Meeting }) {
+  const [roster, setRoster] = useState<MeetingAttendanceRoster["roster"]>([]);
+  const [statuses, setStatuses] = useState<Record<string, AttendanceStatus | "">>({});
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function loadRoster() {
+    const result = await getMeetingAttendance(meeting.id);
+    setRoster(result.roster);
+    setStatuses(Object.fromEntries(result.roster.map((entry) => [entry.studentId, entry.status ?? ""])));
+  }
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    getMeetingAttendance(meeting.id)
+      .then((result) => {
+        if (!isCurrent) return;
+        setRoster(result.roster);
+        setStatuses(Object.fromEntries(result.roster.map((entry) => [entry.studentId, entry.status ?? ""])));
+      })
+      .catch((loadError) => {
+        if (isCurrent) setError(loadError instanceof Error ? loadError.message : "Unable to load attendance.");
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [meeting.id]);
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const attendance = roster.flatMap((entry) => {
+      const selectedStatus = statuses[entry.studentId];
+      return selectedStatus ? [{ studentId: entry.studentId, status: selectedStatus }] : [];
+    });
+
+    if (!attendance.length) {
+      setStatus("");
+      setError("Choose Present or Absent for at least one member.");
+      return;
+    }
+
+    setStatus("");
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      await saveMeetingAttendance(meeting.id, attendance);
+      await loadRoster();
+      setStatus("Attendance saved successfully.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save attendance.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="meeting-mode-section attendance-panel" aria-label="Meeting attendance">
+      <div>
+        <p className="eyebrow">Meeting Attendance</p>
+        <h3>Attendance</h3>
+        <p className="field-note">Mark active members in {meeting.club.name} as Present or Absent.</p>
+      </div>
+      {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
+      {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
+      {isLoading ? <p className="loading-state">Loading attendance roster...</p> : null}
+      {!isLoading ? (
+        <AttendanceRosterForm
+          roster={roster}
+          statuses={statuses}
+          isSubmitting={isSubmitting}
+          onStatusChange={(studentId, attendanceStatus) => setStatuses((current) => ({
+            ...current,
+            [studentId]: attendanceStatus
+          }))}
+          onSubmit={handleSave}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+export function AttendanceRosterForm({
+  roster,
+  statuses,
+  isSubmitting,
+  onStatusChange,
+  onSubmit
+}: {
+  roster: MeetingAttendanceRoster["roster"];
+  statuses: Record<string, AttendanceStatus | "">;
+  isSubmitting: boolean;
+  onStatusChange: (studentId: string, status: AttendanceStatus | "") => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  if (!roster.length) {
+    return <p className="loading-state">No active members are assigned to this club.</p>;
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <div className="attendance-table-wrap">
+        <table className="attendance-table">
+          <thead>
+            <tr>
+              <th>Member Name</th>
+              <th>Attendance Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roster.map((entry) => (
+              <tr key={entry.studentId}>
+                <td><strong>{entry.memberName}</strong></td>
+                <td>
+                  <select
+                    aria-label={`Attendance status for ${entry.memberName}`}
+                    value={statuses[entry.studentId] ?? ""}
+                    onChange={(event) => onStatusChange(entry.studentId, event.target.value as AttendanceStatus | "")}
+                  >
+                    <option value="">Not Marked</option>
+                    <option value="PRESENT">Present</option>
+                    <option value="ABSENT">Absent</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="attendance-actions">
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Saving..." : "Save Attendance"}
+        </button>
+      </div>
+    </form>
   );
 }
 

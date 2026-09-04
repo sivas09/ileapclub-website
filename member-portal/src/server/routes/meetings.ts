@@ -48,11 +48,31 @@ const roleSlotSchema = z.object({
   sortOrder: z.coerce.number().int().min(1).optional()
 });
 
-const attendanceSchema = z.object({
+const attendanceEntrySchema = z.object({
   studentId: z.string().min(1),
-  status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]),
-  notes: z.string().trim().optional()
-});
+  status: z.enum(["PRESENT", "ABSENT"])
+}).strict();
+
+const attendanceSchema = z.union([
+  attendanceEntrySchema,
+  z.object({
+    attendance: z.array(attendanceEntrySchema).min(1).superRefine((entries, context) => {
+      const studentIds = new Set<string>();
+
+      entries.forEach((entry, index) => {
+        if (studentIds.has(entry.studentId)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Each member can only appear once.",
+            path: [index, "studentId"]
+          });
+        }
+
+        studentIds.add(entry.studentId);
+      });
+    })
+  }).strict()
+]);
 
 const scoreSchema = z.object({
   score: z.coerce.number().int().min(0).max(100),
@@ -1014,6 +1034,53 @@ meetingsRouter.patch("/:meetingId/lock", asyncRoute(async (request, response) =>
   response.json({ meeting: updatedMeeting });
 }));
 
+meetingsRouter.get("/:meetingId/attendance", asyncRoute(async (request, response) => {
+  const user = request.user!;
+  const isStaff = canManageOperationalData(user) || user.role === Role.FACILITATOR;
+
+  if (!isStaff && user.role !== Role.STUDENT) {
+    response.status(403).json({ message: "You cannot view attendance for this meeting." });
+    return;
+  }
+
+  const meetingId = String(request.params.meetingId);
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    select: {
+      id: true,
+      title: true,
+      meetingDate: true,
+      clubId: true,
+      club: { select: { name: true } }
+    }
+  });
+
+  if (!meeting) {
+    response.status(404).json({ message: "Meeting not found." });
+    return;
+  }
+
+  const canView = isStaff
+    ? await canManageClubId(user.id, user.role, meeting.clubId)
+    : await canViewMeeting(user.id, user.role, meeting.clubId);
+
+  if (!canView) {
+    response.status(403).json({ message: "You cannot view attendance for this meeting." });
+    return;
+  }
+
+  const roster = await getAttendanceRoster(meeting.id, meeting.clubId, user.role === Role.STUDENT ? user.id : undefined);
+  response.json({
+    meeting: {
+      id: meeting.id,
+      title: meeting.title,
+      meetingDate: meeting.meetingDate,
+      clubName: meeting.club.name
+    },
+    roster
+  });
+}));
+
 meetingsRouter.put("/:meetingId/attendance", asyncRoute(async (request, response) => {
   const user = request.user!;
 
@@ -1044,37 +1111,38 @@ meetingsRouter.put("/:meetingId/attendance", asyncRoute(async (request, response
     return;
   }
 
-  const student = await prisma.student.findUnique({ where: { id: parsed.data.studentId } });
+  const attendance = "attendance" in parsed.data ? parsed.data.attendance : [parsed.data];
 
-  if (!student || !(await isStudentInClub(student.id, meeting.clubId))) {
-    response.status(400).json({ message: "Choose a member assigned to this club." });
-    return;
+  for (const entry of attendance) {
+    if (!(await isStudentInClub(entry.studentId, meeting.clubId))) {
+      response.status(400).json({ message: "Choose only active members assigned to this club." });
+      return;
+    }
   }
 
-  await prisma.meetingAttendance.upsert({
+  const markedAt = new Date();
+  await prisma.$transaction(attendance.map((entry) => prisma.meetingAttendance.upsert({
     where: {
       meetingId_studentId: {
         meetingId,
-        studentId: student.id
+        studentId: entry.studentId
       }
     },
     update: {
-      status: parsed.data.status,
-      notes: parsed.data.notes || null,
+      status: entry.status,
       markedByUserId: user.id,
-      markedAt: new Date()
+      markedAt
     },
     create: {
       meetingId,
-      studentId: student.id,
-      status: parsed.data.status,
-      notes: parsed.data.notes || null,
-      markedByUserId: user.id
+      studentId: entry.studentId,
+      status: entry.status,
+      markedByUserId: user.id,
+      markedAt
     }
-  });
+  })));
 
-  const updatedMeeting = await getMeeting(meetingId);
-  response.json({ meeting: updatedMeeting });
+  response.json({ message: "Attendance saved successfully." });
 }));
 
 meetingsRouter.put("/:meetingId/slots/:slotId/score", asyncRoute(async (request, response) => {
@@ -1419,6 +1487,67 @@ async function canManageClubId(userId: string, role: Role, clubId: string) {
   });
 
   return Boolean(clubAssignment);
+}
+
+async function getAttendanceRoster(meetingId: string, clubId: string, studentUserId?: string) {
+  const memberships = await prisma.studentClubMembership.findMany({
+    where: {
+      clubId,
+      status: "ACTIVE",
+      club: {
+        isActive: true,
+        centre: { isActive: true }
+      },
+      student: {
+        user: {
+          isActive: true,
+          ...(studentUserId ? { id: studentUserId } : {})
+        }
+      }
+    },
+    select: {
+      student: {
+        select: {
+          id: true,
+          user: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          }
+        }
+      }
+    }
+  });
+  const studentIds = memberships.map((membership) => membership.student.id);
+  const records = studentIds.length
+    ? await prisma.meetingAttendance.findMany({
+      where: {
+        meetingId,
+        studentId: { in: studentIds }
+      },
+      select: {
+        studentId: true,
+        status: true,
+        markedAt: true
+      }
+    })
+    : [];
+  const recordsByStudentId = new Map(records.map((record) => [record.studentId, record]));
+
+  return memberships
+    .map(({ student }) => {
+      const record = recordsByStudentId.get(student.id);
+      const status = record?.status === "PRESENT" || record?.status === "ABSENT" ? record.status : null;
+
+      return {
+        studentId: student.id,
+        memberName: `${student.user.firstName} ${student.user.lastName}`.trim(),
+        status,
+        markedAt: record?.markedAt ?? null
+      };
+    })
+    .sort((left, right) => left.memberName.localeCompare(right.memberName));
 }
 
 async function isStudentInClub(studentId: string, clubId: string) {
