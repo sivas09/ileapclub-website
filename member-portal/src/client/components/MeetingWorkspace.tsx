@@ -1549,8 +1549,9 @@ function RequirementManagementPanel({
               Backfill Previous Bands
             </button>
           </form>
-          <ul className="requirement-list manager">
-            {progress.requirements.map((entry) => (
+          {progress.requirements.length ? (
+            <ul className="requirement-list manager">
+              {progress.requirements.map((entry) => (
               <li key={entry.requirement.id} className={entry.isCompleted ? "is-complete" : ""}>
                 <div>
                   <strong>
@@ -1588,12 +1589,17 @@ function RequirementManagementPanel({
                   </button>
                 </div>
               </li>
-            ))}
-          </ul>
+              ))}
+            </ul>
+          ) : <BandProgressEmptyState />}
         </>
       ) : null}
     </section>
   );
+}
+
+export function BandProgressEmptyState() {
+  return <p className="loading-state">No band progress has been recorded yet.</p>;
 }
 
 function BandRequirementDefinitionManager({ onChanged }: { onChanged: () => void }) {

@@ -242,11 +242,11 @@ patchModel("student", {
     : [],
   findUnique: ({ where, include }: any) => {
     if (where.userId === users.student.id || where.id === assignedStudentId) {
-      return studentRecord(assignedStudentId, users.student.id, assignedClubId, include?.user?.select);
+      return studentRecordForInclude(assignedStudentId, users.student.id, assignedClubId, include);
     }
 
     if (where.id === otherStudentId) {
-      return studentRecord(otherStudentId, users.otherStudent.id, otherClubId, include?.user?.select);
+      return studentRecordForInclude(otherStudentId, users.otherStudent.id, otherClubId, include);
     }
 
     return null;
@@ -736,15 +736,30 @@ try {
   await assertStatus("center director can view operational reports", "GET", "/api/reports/facilitator-feedback", Role.CENTER_DIRECTOR, 200);
   assertEqual(state.lastReportWhere?.meeting?.clubId?.in?.join(",") === assignedClubId, true, "center director report query is restricted to assigned-centre clubs");
   const studentProgressResponse = await assertStatus("student self progress excludes confidential fields", "GET", "/api/student/me/progress", Role.STUDENT, 200);
-  const studentProgress = parseStudentProgressResponse(await studentProgressResponse.json());
+  const studentProgressBody = await studentProgressResponse.json();
+  const studentProgress = parseStudentProgressResponse(studentProgressBody);
   assertEqual(studentProgress.student.id, assignedStudentId, "student self progress includes the member id");
   assertEqual(studentProgress.student.user.firstName, "Current", "student self progress includes the safe member name");
   assertEqual("email" in studentProgress.student.user, false, "student self progress does not expose the member email");
   assertEqual(studentProgress.summary.clubName, "Assigned Club", "student self progress includes the active club");
   assertEqual(studentProgress.summary.programLevel, "JUNIOR", "student self progress includes the program level");
   assertEqual(studentProgress.summary.bandLevel, "White", "student self progress includes the current band");
-  await assertStatus("admin student progress excludes confidential fields", "GET", `/api/student/${assignedStudentId}/progress`, Role.ADMIN, 200);
-  await assertStatus("center director can view student progress", "GET", `/api/student/${assignedStudentId}/progress`, Role.CENTER_DIRECTOR, 200);
+  assertNoPaymentResponseFields(studentProgressBody, "student self progress");
+  for (const [role, label] of [
+    [Role.ADMIN, "admin"],
+    [Role.CENTER_DIRECTOR, "center director"],
+    [Role.FACILITATOR, "facilitator"]
+  ] as const) {
+    const response = await assertStatus(`${label} selected member progress validates`, "GET", `/api/student/${assignedStudentId}/progress`, role, 200);
+    const responseBody = await response.json();
+    const managedProgress = parseStudentProgressResponse(responseBody);
+    assertEqual(managedProgress.student.id, assignedStudentId, `${label} receives the selected member progress`);
+    assertEqual(Array.isArray(managedProgress.student.attendance), true, `${label} progress includes the attendance array contract`);
+    assertEqual(Array.isArray(managedProgress.student.roleSlots), true, `${label} progress includes the role slots array contract`);
+    assertEqual(Array.isArray(managedProgress.student.roleScores), true, `${label} progress includes the role scores array contract`);
+    assertEqual("email" in managedProgress.student.user, false, `${label} progress excludes member email`);
+    assertNoPaymentResponseFields(responseBody, `${label} selected member progress`);
+  }
 
   await assertStatus("admin can update student band progress", "PUT", `/api/student/${otherStudentId}/requirements/requirement-1`, Role.ADMIN, 200, progressPayload());
   await assertStatus("center director can update assigned student band progress", "PUT", `/api/student/${assignedStudentId}/requirements/requirement-1`, Role.CENTER_DIRECTOR, 200, progressPayload());
@@ -1066,6 +1081,16 @@ function studentRecord(studentId: string, userId: string, clubId: string, userSe
     memberFeedback: [],
     requirementProgress: []
   };
+}
+
+function studentRecordForInclude(studentId: string, userId: string, clubId: string, include?: any) {
+  const record: any = studentRecord(studentId, userId, clubId, include?.user?.select);
+
+  for (const relation of ["attendance", "roleSlots", "roleScores", "meetingFeedbacks", "memberFeedback", "requirementProgress"]) {
+    if (!include?.[relation]) delete record[relation];
+  }
+
+  return record;
 }
 
 function memberListMembership(studentId: string, userId: string, clubId: string, centreId: string) {

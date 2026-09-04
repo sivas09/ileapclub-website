@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireAuth, requireRole } from "../auth.js";
 import { prisma } from "../db.js";
 import { canAccessStudent, canManageOperationalData, getOperationalScope, isAdmin, isCenterDirector } from "../permissions.js";
-import { memberUserSelect, publicUserSelect } from "../services/safeUser.js";
+import { publicUserSelect } from "../services/safeUser.js";
 import { bandLevels, type ProgramLevel, programLevels } from "../../shared/portalConstants.js";
 
 export const studentRouter = Router();
@@ -700,7 +700,7 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: {
-      user: { select: memberUserSelect },
+      user: { select: publicUserSelect },
       clubMemberships: {
         include: {
           club: {
@@ -733,7 +733,7 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
       bandLevel: parsed.data.bandLevel
     },
     include: {
-      user: { select: memberUserSelect },
+      user: { select: publicUserSelect },
       clubMemberships: {
         include: {
           club: {
@@ -747,7 +747,13 @@ studentRouter.patch("/:studentId/profile", asyncRoute(async (request, response) 
   const selectedProgramLevel = getStudentProgramLevel({ ...updatedStudent, clubMemberships: visibleMemberships });
 
   response.json({
-    student: { ...updatedStudent, clubMemberships: visibleMemberships },
+    student: {
+      ...updatedStudent,
+      clubMemberships: visibleMemberships,
+      attendance: [],
+      roleSlots: [],
+      roleScores: []
+    },
     feedback: [],
     memberFeedback: [],
     requirements: await buildRequirementProgress(updatedStudent.id, selectedProgramLevel),
@@ -778,7 +784,7 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   const student = await prisma.student.findUnique({
     where: { id: studentId },
     include: {
-      user: { select: memberUserSelect },
+      user: { select: publicUserSelect },
       clubMemberships: {
         include: {
           club: {
@@ -808,7 +814,13 @@ studentRouter.get("/:studentId/progress", asyncRoute(async (request, response) =
   const selectedProgramLevel = getStudentProgramLevel({ ...student, clubMemberships: visibleMemberships });
 
   response.json({
-    student: { ...student, clubMemberships: visibleMemberships },
+    student: {
+      ...student,
+      clubMemberships: visibleMemberships,
+      attendance: [],
+      roleSlots: [],
+      roleScores: []
+    },
     feedback: [],
     memberFeedback: [],
     requirements: await buildRequirementProgress(student.id, selectedProgramLevel),

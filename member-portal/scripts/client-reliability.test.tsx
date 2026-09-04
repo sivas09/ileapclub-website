@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type LearningReflection, type Meeting, type ResourceLink } from "../src/client/api";
-import { AttendanceRosterForm, MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
+import { AttendanceRosterForm, BandProgressEmptyState, MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
 import { attendanceStatusLabel, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
@@ -76,6 +76,9 @@ assert.match(attendanceMarkup, />Save Attendance<\/button>/, "Attendance renders
 assert.doesNotMatch(attendanceMarkup, />Late<\/option>|>Excused<\/option>/, "Attendance does not offer Late or Excused.");
 assert.equal(attendanceStatusLabel("PRESENT"), "Present", "Student attendance history uses the visible Present label.");
 assert.equal(attendanceStatusLabel("ABSENT"), "Absent", "Student attendance history uses the visible Absent label.");
+const emptyBandProgressMarkup = renderToStaticMarkup(<BandProgressEmptyState />);
+assert.match(emptyBandProgressMarkup, /No band progress has been recorded yet\./, "Empty band progress renders a friendly state.");
+assert.doesNotMatch(emptyBandProgressMarkup, /invalid response/i, "Empty band progress never renders a validator error.");
 
 const memberProgressMarkup = renderToStaticMarkup(<StudentProgressDashboard />);
 assert.match(memberProgressMarkup, /Member Progress Dashboard/, "Member progress uses member-facing terminology.");
