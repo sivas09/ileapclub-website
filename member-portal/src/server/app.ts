@@ -16,6 +16,7 @@ import { reportsRouter } from "./routes/reports.js";
 import { reflectionsRouter } from "./routes/reflections.js";
 import { resourcesRouter } from "./routes/resources.js";
 import { studentRouter } from "./routes/student.js";
+import { teachingModulesRouter } from "./routes/teachingModules.js";
 
 type AppOptions = {
   readinessCheck?: ReadinessCheck;
@@ -83,6 +84,7 @@ export function createApp({
   app.use("/api/reflections", reflectionsRouter);
   app.use("/api/resources", resourcesRouter);
   app.use("/api/student", studentRouter);
+  app.use("/api/teaching-modules", teachingModulesRouter);
 
   app.use(express.static(clientDistPath));
 

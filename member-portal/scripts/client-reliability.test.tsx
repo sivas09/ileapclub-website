@@ -278,17 +278,17 @@ assert.match(rootFallback, /Reload Portal/, "The portal fallback offers a reload
 
 assert.deepEqual(
   overviewLinksForRole("ADMIN").map((item) => item.label),
-  ["Setup", "Members", "Meetings", "Documents", "Feedback", "Band Progress"],
+  ["Setup", "Members", "Meetings", "Teaching Modules", "Documents", "Feedback", "Band Progress"],
   "Admin Overview exposes the requested management sections."
 );
 assert.deepEqual(
   portalNavigationItems.CENTER_DIRECTOR.map((item) => item.label),
-  ["Overview", "Setup", "Members", "Notices", "Documents", "Meetings", "Feedback", "Band Progress"],
+  ["Overview", "Setup", "Members", "Notices", "Documents", "Meetings", "Teaching Modules", "Feedback", "Band Progress"],
   "Center Director receives the operational navigation set."
 );
 assert.deepEqual(
   overviewLinksForRole("CENTER_DIRECTOR").map((item) => item.label),
-  ["Setup", "Members", "Meetings", "Documents", "Feedback", "Band Progress"],
+  ["Setup", "Members", "Meetings", "Teaching Modules", "Documents", "Feedback", "Band Progress"],
   "Center Director Overview exposes operational management sections."
 );
 assert.equal(formatRole("CENTER_DIRECTOR"), "Center Director", "Center Director uses the visible role label.");
@@ -328,7 +328,7 @@ assert.doesNotMatch(directorSetupMarkup, /value="ADMIN"|value="CENTER_DIRECTOR"/
 assert.doesNotMatch(directorSetupMarkup, /Demo\/Test Data Cleanup/, "Center Director does not see true Admin-only cleanup controls.");
 assert.deepEqual(
   overviewLinksForRole("FACILITATOR").map((item) => item.label),
-  ["Members", "Meetings", "Documents", "Feedback", "Band Progress"],
+  ["Members", "Meetings", "Teaching Modules", "Documents", "Feedback", "Band Progress"],
   "Facilitator Overview remains scoped to facilitator sections."
 );
 assert.deepEqual(
@@ -337,8 +337,11 @@ assert.deepEqual(
   "Student Overview exposes only member-facing sections."
 );
 assert.equal(sectionHrefForHash("ADMIN", "#meetings"), "#meetings", "Direct meeting links open the Meetings workspace.");
+assert.equal(sectionHrefForHash("FACILITATOR", "#teaching-modules"), "#teaching-modules", "Facilitators can open the Teaching Modules workspace.");
 assert.equal(sectionHrefForHash("ADMIN", "#resources/resource-1"), "#documents", "Nested manager resource links stay in Documents.");
 assert.equal(sectionHrefForHash("STUDENT", "#admin"), "#overview", "Student navigation rejects unauthorized workspace hashes.");
+assert.equal(sectionHrefForHash("STUDENT", "#teaching-modules"), "#overview", "Student navigation rejects teaching-module workspace hashes.");
+assert.equal(portalNavigationItems.STUDENT.some((item) => item.href === "#teaching-modules"), false, "Student navigation does not show teaching modules.");
 
 const groupedResources = groupResourceLinks([
   resourceFixture("leadership", "iChair Guide", "Role Guide", "iChair"),

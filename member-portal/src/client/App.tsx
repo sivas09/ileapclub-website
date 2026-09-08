@@ -25,6 +25,7 @@ import { MembersWorkspace } from "./components/MembersWorkspace";
 import { NoticesWorkspace } from "./components/NoticesWorkspace";
 import { WorkspaceErrorBoundary } from "./components/PortalErrorBoundary";
 import { StudentClubMembersPanel, StudentHomeSummaryView, StudentProgressDashboard } from "./components/StudentProgressPanels";
+import { TeachingModulesWorkspace } from "./components/TeachingModulesWorkspace";
 import {
   formatRole,
   isOperationalManagerRole,
@@ -303,6 +304,10 @@ function ActiveWorkspace({ activeHref, user }: { activeHref: string; user: Porta
 
   if (activeHref === "#feedback" && user.role !== "STUDENT") {
     return <WorkspaceErrorBoundary workspace="Feedback" anchorId="feedback"><FeedbackReportPanel /></WorkspaceErrorBoundary>;
+  }
+
+  if (activeHref === "#teaching-modules" && user.role !== "STUDENT") {
+    return <WorkspaceErrorBoundary workspace="Current Teaching Modules" anchorId="teaching-modules"><TeachingModulesWorkspace user={user} /></WorkspaceErrorBoundary>;
   }
 
   if (activeHref === "#club-members" && user.role === "STUDENT") {

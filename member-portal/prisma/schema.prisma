@@ -45,6 +45,7 @@ model User {
   learningReflectionResponses MemberLearningReflection[] @relation("LearningReflectionRespondedBy")
   awardedMemberPoints MemberPointTransaction[] @relation("MemberPointAwardedBy")
   updatedMemberProgressNotes MemberProgressNote[] @relation("MemberProgressNoteUpdatedBy")
+  updatedTeachingModules ClubTeachingModule[] @relation("TeachingModuleUpdatedBy")
   centerDirectorAssignments CenterDirectorAssignment[] @relation("CenterDirectorUser")
   assignedCenterDirectors CenterDirectorAssignment[] @relation("CenterDirectorAssignedBy")
 }
@@ -109,6 +110,24 @@ model Club {
   bandDocuments BandDocument[]
   notices      Notice[]
   memberFeedback MemberFeedback[]
+  currentTeachingModule ClubTeachingModule?
+}
+
+model ClubTeachingModule {
+  id              String   @id @default(cuid())
+  clubId          String   @unique
+  title           String
+  moduleCode      String
+  resourceUrl     String
+  description     String?
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  club      Club  @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  updatedBy User? @relation("TeachingModuleUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([updatedByUserId])
 }
 
 model Student {

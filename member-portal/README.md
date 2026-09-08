@@ -10,6 +10,7 @@ Phase 2 foundation for `member.ileapclub.com`.
 - JWT login
 - Role-aware dashboards for Admin, Facilitator, Parent, and Student
 - Admin setup workspace for centres, clubs, users, students, parents, and facilitators
+- Per-club current teaching module assignments with scoped staff access
 
 ## Local Setup
 

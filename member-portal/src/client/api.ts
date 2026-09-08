@@ -36,6 +36,22 @@ export type Club = {
   facilitators?: ClubFacilitator[];
 };
 
+export type CurrentTeachingModule = {
+  id: string;
+  clubId: string;
+  title: string;
+  moduleCode: string;
+  resourceUrl: string;
+  description?: string | null;
+  updatedAt: string;
+  updatedBy: PublicPortalUser | null;
+};
+
+export type TeachingModuleClub = Pick<Club, "id" | "name" | "program" | "isActive"> & {
+  centre: Pick<Centre, "id" | "name" | "isActive">;
+  currentTeachingModule: CurrentTeachingModule | null;
+};
+
 export type Student = {
   id: string;
   grade: string;
@@ -636,6 +652,28 @@ export async function changeMyPassword(payload: {
 
 export async function getAdminOverview() {
   return parseAdminOverviewResponse(await request<unknown>("/api/admin/overview"));
+}
+
+export async function getCurrentTeachingModules() {
+  return request<{ clubs: TeachingModuleClub[] }>("/api/teaching-modules");
+}
+
+export async function saveCurrentTeachingModule(clubId: string, payload: {
+  title: string;
+  moduleCode: string;
+  resourceUrl: string;
+  description?: string;
+}) {
+  return request<{ teachingModule: CurrentTeachingModule }>(`/api/teaching-modules/${clubId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function removeCurrentTeachingModule(clubId: string) {
+  return request<{ removed: boolean }>(`/api/teaching-modules/${clubId}`, {
+    method: "DELETE"
+  });
 }
 
 export async function createCentre(payload: {

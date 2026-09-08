@@ -32,6 +32,7 @@ export const portalNavigationItems: Record<Role, Array<{ href: string; label: st
     { href: "#notices", label: "Notices" },
     { href: "#documents", label: "Documents" },
     { href: "#meetings", label: "Meetings" },
+    { href: "#teaching-modules", label: "Teaching Modules" },
     { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
   ],
@@ -42,6 +43,7 @@ export const portalNavigationItems: Record<Role, Array<{ href: string; label: st
     { href: "#notices", label: "Notices" },
     { href: "#documents", label: "Documents" },
     { href: "#meetings", label: "Meetings" },
+    { href: "#teaching-modules", label: "Teaching Modules" },
     { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
   ],
@@ -51,6 +53,7 @@ export const portalNavigationItems: Record<Role, Array<{ href: string; label: st
     { href: "#notices", label: "Notices" },
     { href: "#documents", label: "Documents" },
     { href: "#meetings", label: "Meetings" },
+    { href: "#teaching-modules", label: "Teaching Modules" },
     { href: "#feedback", label: "Feedback" },
     { href: "#requirements", label: "Band Progress" }
   ],
@@ -78,6 +81,7 @@ const overviewLinks: Record<Role, OverviewLink[]> = {
     { href: "#admin", label: "Setup", description: "Centres, clubs, and portal setup" },
     { href: "#members", label: "Members", description: "Member accounts and club access" },
     { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
+    { href: "#teaching-modules", label: "Teaching Modules", description: "Current module for each club" },
     { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
     { href: "#feedback", label: "Feedback", description: "Scores and facilitator feedback" },
     { href: "#requirements", label: "Band Progress", description: "Requirements and member advancement" }
@@ -86,6 +90,7 @@ const overviewLinks: Record<Role, OverviewLink[]> = {
     { href: "#admin", label: "Setup", description: "Centres, clubs, and operational setup" },
     { href: "#members", label: "Members", description: "Member accounts and club access" },
     { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
+    { href: "#teaching-modules", label: "Teaching Modules", description: "Current module for each club" },
     { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
     { href: "#feedback", label: "Feedback", description: "Scores and facilitator feedback" },
     { href: "#requirements", label: "Band Progress", description: "Requirements and member advancement" }
@@ -93,6 +98,7 @@ const overviewLinks: Record<Role, OverviewLink[]> = {
   FACILITATOR: [
     { href: "#members", label: "Members", description: "Members in your assigned clubs" },
     { href: "#meetings", label: "Meetings", description: "Schedules, agendas, roles, and attendance" },
+    { href: "#teaching-modules", label: "Teaching Modules", description: "Open each club's current module" },
     { href: "#documents", label: "Documents", description: "Band documents and learning resources" },
     { href: "#feedback", label: "Feedback", description: "Scores and member feedback" },
     { href: "#requirements", label: "Band Progress", description: "Requirements and member advancement" }

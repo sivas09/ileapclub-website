@@ -15,6 +15,118 @@
   text-rendering: optimizeLegibility;
 }
 
+.teaching-modules-workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.teaching-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.teaching-module-card {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--portal-border, #d8dee8);
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.teaching-module-card header,
+.teaching-module-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.teaching-module-card h3,
+.teaching-module-card p {
+  margin: 0;
+}
+
+.teaching-module-current,
+.teaching-module-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.teaching-module-current > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.teaching-module-open {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.7rem 1rem;
+  border-radius: 0.65rem;
+  background: var(--portal-blue);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.teaching-module-open:hover,
+.teaching-module-open:focus-visible {
+  text-decoration: underline;
+}
+
+.teaching-module-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #334155;
+  font-weight: 800;
+}
+
+.teaching-module-form input,
+.teaching-module-form textarea {
+  width: 100%;
+  border: 1px solid #cbd7e6;
+  border-radius: 8px;
+  padding: 0.7rem 0.75rem;
+  color: #10223f;
+  background: #fff;
+}
+
+.teaching-module-form input:focus,
+.teaching-module-form textarea:focus {
+  outline: 3px solid rgba(0, 137, 202, 0.2);
+  border-color: var(--portal-sky);
+}
+
+.teaching-module-actions button,
+.teaching-module-form button {
+  min-height: 40px;
+  border: 1px solid var(--portal-blue);
+  border-radius: 8px;
+  padding: 0 0.9rem;
+  color: var(--portal-blue);
+  background: #fff;
+  font-weight: 800;
+}
+
+.teaching-module-form button {
+  color: #fff;
+  background: var(--portal-blue);
+}
+
+.teaching-module-actions button.danger-action {
+  border-color: #fecdd3;
+  color: #9f1239;
+  background: #fff1f2;
+}
+
+.teaching-module-actions button:disabled,
+.teaching-module-form button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -63,12 +63,21 @@ Render runs:
 npm run prisma:migrate:deploy
 ```
 
+For the current Blueprint, this command is the final step of the chained build command:
+
+```text
+npm ci --include=dev -> npm run build -> npm run prisma:migrate:deploy -> npm run start
+```
+
+Each build step is joined with `&&`, so a failed install, build, or migration returns a non-zero status and prevents the updated service from starting. The existing successful service remains live if the new deploy fails. The production migration must therefore be visible as successful in the Render deploy log before the new API instance starts and passes `/api/ready`.
+
 This applies all committed migrations:
 
 - initial users, centres, clubs
 - meetings and role slots
 - attendance and scores
 - band/PTB requirements
+- current teaching module assignments
 
 ## 5. Seeding
 

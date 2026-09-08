@@ -2,7 +2,7 @@
 
 **Audience:** Facilitators and Center Directors
 
-**Last updated:** September 4, 2026
+**Last updated:** September 8, 2026
 
 This guide explains the main day-to-day tasks for supporting iLEAP Members. The options you see depend on your role and assignments.
 
@@ -140,6 +140,19 @@ Payment status is not shown to Facilitators. Contact the Center Director or Admi
 4. If you do not see an add, edit, or upload option, ask an Admin for help.
 
 Members can access resources made available to them. Do not upload private Member information as a general resource.
+
+### Current Teaching Module
+
+Open **Teaching Modules** to see the current module separately for each club in your scope.
+
+- Facilitators can open the **Current Teaching Module** for clubs directly assigned to them. They cannot change the assignment.
+- Center Directors can assign, replace, update, or remove the current module for clubs in their assigned centre or centres.
+- When assigning a module, enter its title, module number or code, and a secure `https://` resource link. The short description is optional.
+- Keep Google Drive access set to **Restricted** and share the file only with the named staff Google accounts that require access. Do not use **Anyone with the link**.
+- Confirm the club and link before saving. Removing an assignment requires confirmation.
+- If a club has no assignment, the portal shows **No current teaching module assigned.**
+
+Members and Parents cannot see teaching-module details or links.
 
 ## 12. Privacy and Security Rules
 
