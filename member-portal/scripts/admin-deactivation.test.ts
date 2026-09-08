@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
+import bcrypt from "bcryptjs";
 import express from "express";
 import { Role } from "@prisma/client";
 import { signToken } from "../src/server/auth.js";
 import { prisma } from "../src/server/db.js";
 import { adminRouter } from "../src/server/routes/admin.js";
+import { authRouter } from "../src/server/routes/auth.js";
 import { meetingsRouter } from "../src/server/routes/meetings.js";
 import { resourcesRouter } from "../src/server/routes/resources.js";
 
@@ -15,6 +17,8 @@ type TestUser = {
   lastName: string;
   role: Role;
   isActive: boolean;
+  passwordHash: string;
+  sessionVersion: number;
   studentProfile?: { id: string } | null;
 };
 
@@ -30,6 +34,8 @@ type Membership = {
 const selectedClubId = "selected-club";
 const historicalClubId = "historical-club";
 const facilitatorClubId = "facilitator-selected-club";
+const testPassword = "test-password-123";
+const testPasswordHash = bcrypt.hashSync(testPassword, 4);
 const users = new Map<string, TestUser>([
   ["admin-user", testUser("admin-user", Role.ADMIN)],
   ["other-admin", testUser("other-admin", Role.ADMIN)],
@@ -37,7 +43,9 @@ const users = new Map<string, TestUser>([
   ["student-no-club", { ...testUser("student-no-club", Role.STUDENT, false), studentProfile: { id: "student-no-club-profile" } }],
   ["student-new-club", { ...testUser("student-new-club", Role.STUDENT, false), studentProfile: { id: "student-new-club-profile" } }],
   ["facilitator-user", testUser("facilitator-user", Role.FACILITATOR)],
-  ["facilitator-caller", testUser("facilitator-caller", Role.FACILITATOR)]
+  ["facilitator-caller", testUser("facilitator-caller", Role.FACILITATOR)],
+  ["director-caller", testUser("director-caller", Role.CENTER_DIRECTOR)],
+  ["student-caller", testUser("student-caller", Role.STUDENT)]
 ]);
 const memberships = new Map<string, Membership>([
   [membershipKey("student-profile", selectedClubId), membership("student-profile", selectedClubId, "ACTIVE")],
@@ -49,18 +57,38 @@ const bandProgressRecords = [{ id: "historical-band-progress", studentId: "stude
 const state = {
   transactionCalls: 0,
   roleSlotUpdates: [] as Array<{ where: unknown; data: unknown }>,
-  historicalMutationCalls: 0
+  historicalMutationCalls: 0,
+  forceNoOtherActiveAdmins: false
 };
 
 patchModel("user", {
-  findUnique: ({ where }: { where: { id: string } }) => {
-    const user = users.get(where.id);
+  findUnique: ({ where }: { where: { id?: string; email?: string } }) => {
+    const user = where.id
+      ? users.get(where.id)
+      : [...users.values()].find((candidate) => candidate.email === where.email);
     return user ? { ...user } : null;
   },
-  update: ({ where, data }: { where: { id: string }; data: { isActive?: boolean } }) => {
+  count: ({ where }: any = {}) => {
+    if (state.forceNoOtherActiveAdmins && where.role === Role.ADMIN && where.isActive === true) {
+      return 0;
+    }
+
+    return [...users.values()].filter((user) => (
+      (!where.role || user.role === where.role)
+      && (where.isActive === undefined || user.isActive === where.isActive)
+      && (!where.id?.not || user.id !== where.id.not)
+    )).length;
+  },
+  update: ({ where, data }: { where: { id: string }; data: { isActive?: boolean; role?: Role; sessionVersion?: { increment: number } } }) => {
     const user = users.get(where.id);
     if (!user) throw new Error("Test user not found.");
-    const updatedUser = { ...user, ...data };
+    const updatedUser = {
+      ...user,
+      ...data,
+      sessionVersion: data.sessionVersion?.increment
+        ? user.sessionVersion + data.sessionVersion.increment
+        : user.sessionVersion
+    } as TestUser;
     users.set(user.id, updatedUser);
     return updatedUser;
   }
@@ -166,6 +194,7 @@ for (const modelName of ["meetingAttendance", "meetingRoleScore", "studentMeetin
 
 const app = express();
 app.use(express.json());
+app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/meetings", meetingsRouter);
 app.use("/api/resources", resourcesRouter);
@@ -178,9 +207,39 @@ const baseUrl = `http://127.0.0.1:${(server.address() as any).port}`;
 
 try {
   await assertDeactivateStatus("admin cannot deactivate self", "admin-user", "admin-user", 400);
-  await assertDeactivateStatus("admin cannot deactivate another admin", "admin-user", "other-admin", 400);
-  await assertReactivateStatus("admin role cannot use member reactivation", "admin-user", "other-admin", [], 400);
-  await assertDeactivateStatus("non-admin cannot deactivate users", "facilitator-caller", "student-user", 403);
+  const issuedAdminToken = signToken(requiredUser("other-admin"));
+  const initialAdminSessionVersion = requiredUser("other-admin").sessionVersion;
+  const adminResponse = await assertDeactivateStatus("admin can deactivate another admin", "admin-user", "other-admin", 200);
+  const adminBody = await adminResponse.json() as { user?: { isActive?: boolean } };
+  assert.equal(adminBody.user?.isActive, false, "the other Admin account should be inactive");
+  assert.equal(requiredUser("other-admin").sessionVersion, initialAdminSessionVersion + 1, "deactivation increments sessionVersion");
+
+  const inactiveTokenResponse = await requestWithToken("GET", "/api/auth/me", issuedAdminToken);
+  assert.equal(inactiveTokenResponse.status, 401, "a previously issued token is rejected immediately after deactivation");
+
+  const inactiveLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: requiredUser("other-admin").email, password: testPassword })
+  });
+  assert.equal(inactiveLoginResponse.status, 403, "an inactive account receives an explicit login rejection");
+  assert.equal((await inactiveLoginResponse.json() as { message: string }).message, "This account is inactive. Contact an administrator for help.");
+
+  await assertReactivateStatus("admin can reactivate another admin", "admin-user", "other-admin", [], 200);
+  assert.equal(requiredUser("other-admin").isActive, true, "the Admin account should be active after reactivation");
+  assert.equal((await requestWithToken("GET", "/api/auth/me", issuedAdminToken)).status, 401, "reactivation does not restore a pre-deactivation token");
+  assert.equal((await authenticatedRequest("GET", "/api/auth/me", requiredUser("other-admin"))).status, 200, "a newly issued token works after reactivation");
+
+  state.forceNoOtherActiveAdmins = true;
+  await assertDeactivateStatus("last active admin cannot be deactivated", "admin-user", "other-admin", 409);
+  await assertUpdateStatus("last active admin cannot be demoted", "admin-user", "other-admin", Role.CENTER_DIRECTOR, 409);
+  state.forceNoOtherActiveAdmins = false;
+  assert.equal(requiredUser("other-admin").role, Role.ADMIN, "a blocked demotion keeps the Admin role");
+  assert.equal(requiredUser("other-admin").isActive, true, "a blocked deactivation keeps the Admin active");
+
+  await assertDeactivateStatus("Facilitator cannot deactivate an Admin", "facilitator-caller", "other-admin", 403);
+  await assertDeactivateStatus("Center Director cannot deactivate an Admin", "director-caller", "other-admin", 403);
+  await assertDeactivateStatus("Student cannot deactivate an Admin", "student-caller", "other-admin", 403);
   await assertReactivateStatus("non-admin cannot reactivate users", "facilitator-caller", "student-no-club", [], 403);
   await assertLegacyActiveStatus("legacy active route cannot bypass safe deactivation", "student-user", false, 400);
 
@@ -247,6 +306,23 @@ function assertReactivateStatus(label: string, callerId: string, targetId: strin
   });
 }
 
+function assertUpdateStatus(label: string, callerId: string, targetId: string, role: Role, expectedStatus: number) {
+  const target = requiredUser(targetId);
+  return authenticatedRequest("PATCH", `/api/admin/users/${targetId}`, requiredUser(callerId), {
+    email: target.email,
+    firstName: target.firstName,
+    lastName: target.lastName,
+    role,
+    isActive: target.isActive,
+    clubIds: [],
+    facilitatorClubIds: [],
+    centreIds: []
+  }).then((response) => {
+    assert.equal(response.status, expectedStatus, label);
+    return response;
+  });
+}
+
 function assertLegacyActiveStatus(label: string, targetId: string, isActive: boolean, expectedStatus: number) {
   return authenticatedRequest("PATCH", `/api/admin/users/${targetId}/active`, requiredUser("admin-user"), { isActive }).then((response) => {
     assert.equal(response.status, expectedStatus, label);
@@ -255,9 +331,13 @@ function assertLegacyActiveStatus(label: string, targetId: string, isActive: boo
 }
 
 function authenticatedRequest(method: string, path: string, user: TestUser, body?: unknown) {
+  return requestWithToken(method, path, signToken(user), body);
+}
+
+function requestWithToken(method: string, path: string, token: string, body?: unknown) {
   return fetch(`${baseUrl}${path}`, {
     method,
-    headers: { authorization: `Bearer ${signToken(user)}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
 }
@@ -269,7 +349,17 @@ function requiredUser(userId: string) {
 }
 
 function testUser(id: string, role: Role, isActive = true): TestUser {
-  return { id, email: `${id}@example.com`, firstName: "Test", lastName: "User", role, isActive, studentProfile: null };
+  return {
+    id,
+    email: `${id}@example.com`,
+    firstName: "Test",
+    lastName: "User",
+    role,
+    isActive,
+    passwordHash: testPasswordHash,
+    sessionVersion: 0,
+    studentProfile: null
+  };
 }
 
 function membership(studentId: string, clubId: string, status: string): Membership {

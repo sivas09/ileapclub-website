@@ -96,6 +96,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   const activeCentres = overview?.centres.filter((centre) => centre.isActive) ?? [];
   const activeClubs = clubs.filter((club) => club.isActive && club.centre?.isActive !== false);
   const activeFacilitators = overview?.users.filter((portalUser) => portalUser.role === "FACILITATOR" && portalUser.isActive) ?? [];
+  const activeAdminCount = overview?.users.filter((portalUser) => portalUser.role === "ADMIN" && portalUser.isActive).length ?? 0;
 
   function facilitatorClubIdsForUser(userId: string) {
     return clubs
@@ -158,15 +159,21 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     }
   }
 
-  async function updateUserStatus(userId: string, isActive: boolean) {
+  async function updateUserStatus(portalUser: AdminUser, isActive: boolean) {
+    if (!isActive && !window.confirm(
+      `Deactivate ${portalUser.firstName} ${portalUser.lastName}? They will be signed out immediately and unable to sign in until reactivated.`
+    )) {
+      return;
+    }
+
     setError("");
     setStatus("");
     setIsSubmitting(true);
 
     try {
-      await setUserActive(userId, isActive);
+      await setUserActive(portalUser.id, isActive);
       await refreshOverview();
-      setStatus(isActive ? "User reactivated." : "User deactivated.");
+      setStatus(isActive ? "User reactivated." : `${portalUser.firstName} ${portalUser.lastName} was deactivated and signed out.`);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update user.");
     } finally {
@@ -200,7 +207,9 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     try {
       await setUserActive(reactivatingUser.id, true, reactivationClubIds);
       await refreshOverview();
-      setStatus(reactivationClubIds.length
+      setStatus(reactivatingUser.role === "ADMIN" || reactivatingUser.role === "CENTER_DIRECTOR"
+        ? "User reactivated."
+        : reactivationClubIds.length
         ? "User reactivated with selected club access."
         : "User reactivated without active club access.");
       setReactivatingUser(null);
@@ -500,6 +509,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
 
   function renderReactivationForm(portalUser: AdminUser) {
     const assignmentLabel = portalUser.role === "FACILITATOR" ? "Assigned Clubs" : "Member Clubs";
+    const restoresClubAccess = portalUser.role === "STUDENT" || portalUser.role === "FACILITATOR";
 
     return (
       <form id={`reactivate-user-${portalUser.id}`} className="edit-user-panel" onSubmit={handleReactivationSubmit}>
@@ -509,7 +519,7 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
             <h3>{portalUser.firstName} {portalUser.lastName}</h3>
           </div>
         </div>
-        <label>
+        {restoresClubAccess ? <label>
           {assignmentLabel}
           <select
             multiple
@@ -522,8 +532,10 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               <option key={club.id} value={club.id}>{club.name}</option>
             ))}
           </select>
-        </label>
-        {!reactivationClubIds.length ? (
+        </label> : (
+          <p className="field-note">This will restore access for the {formatRole(portalUser.role)} account. Previously issued sessions will remain invalid.</p>
+        )}
+        {restoresClubAccess && !reactivationClubIds.length ? (
           <p className="field-note warning-text">This account will reactivate, but the member/facilitator will not have active club access.</p>
         ) : null}
         <div className="edit-user-actions">
@@ -859,6 +871,15 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
               <ul className="record-list">
                 {overview.users.map((portalUser) => {
                   const canManageUser = canManageUserFromSetup(currentUser, portalUser);
+                  const isProtectedDeactivation = portalUser.isActive && (
+                    portalUser.id === currentUser.id
+                    || (portalUser.role === "ADMIN" && activeAdminCount <= 1)
+                  );
+                  const deactivationTitle = portalUser.id === currentUser.id
+                    ? "You cannot deactivate your own signed-in account."
+                    : portalUser.role === "ADMIN" && activeAdminCount <= 1
+                      ? "The last active Admin cannot be deactivated."
+                      : undefined;
 
                   return (
                   <li key={portalUser.id} className={editingUser?.id === portalUser.id ? "is-editing-user" : undefined}>
@@ -883,9 +904,10 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
                         type="button"
                         className="text-action"
                         onClick={() => portalUser.isActive
-                          ? updateUserStatus(portalUser.id, false)
+                          ? updateUserStatus(portalUser, false)
                           : startReactivatingUser(portalUser)}
-                        disabled={isSubmitting || portalUser.id === currentUser.id}
+                        disabled={isSubmitting || isProtectedDeactivation}
+                        title={deactivationTitle}
                       >
                         {portalUser.isActive ? "Deactivate User" : "Reactivate User"}
                       </button>

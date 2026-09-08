@@ -87,6 +87,7 @@ const validBandLevels = new Set([
 ]);
 
 const editableRoles = new Set<Role>([Role.ADMIN, Role.CENTER_DIRECTOR, Role.FACILITATOR, Role.STUDENT]);
+const serializableTransactionAttempts = 3;
 
 export const adminRouter = Router();
 
@@ -629,7 +630,11 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
   }
 
   try {
-    const user = await prisma.$transaction(async (tx) => {
+    const updateUserInTransaction = async (tx: Prisma.TransactionClient) => {
+      if (existingUser.role === Role.ADMIN && existingUser.isActive && data.role !== Role.ADMIN) {
+        await requireAnotherActiveAdmin(tx, existingUser.id);
+      }
+
       const updatedUser = await tx.user.update({
         where: { id: userId },
         data: {
@@ -698,7 +703,10 @@ adminRouter.patch("/users/:userId", asyncRoute(async (request, response) => {
       }
 
       return updatedUser;
-    });
+    };
+    const user = existingUser.role === Role.ADMIN && existingUser.isActive && data.role !== Role.ADMIN
+      ? await runSerializableTransaction(updateUserInTransaction)
+      : await prisma.$transaction(updateUserInTransaction);
 
     response.json({
       user: safeUserDto(user)
@@ -754,7 +762,7 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
       }
     }
 
-    if (user.role !== Role.STUDENT && user.role !== Role.FACILITATOR && user.role !== Role.CENTER_DIRECTOR) {
+    if (user.role !== Role.ADMIN && user.role !== Role.STUDENT && user.role !== Role.FACILITATOR && user.role !== Role.CENTER_DIRECTOR) {
       throw new AdminActionError(400, "This account type cannot be reactivated here.");
     }
 
@@ -773,7 +781,7 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
     } else if (user.role === Role.FACILITATOR) {
       await syncFacilitatorClubAccess(tx, user.id, clubIds);
     } else if (clubIds.length) {
-      throw new AdminActionError(400, "Center Director accounts cannot be assigned to clubs.");
+      throw new AdminActionError(400, "Admin and Center Director accounts cannot be assigned to clubs.");
     }
 
     const updatedUser = await tx.user.update({
@@ -785,7 +793,7 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
     return {
       user: safeUserDto(updatedUser),
       activeClubIds: clubIds,
-      warning: user.role !== Role.CENTER_DIRECTOR && !clubIds.length
+      warning: (user.role === Role.STUDENT || user.role === Role.FACILITATOR) && !clubIds.length
         ? "This account will reactivate, but the member/facilitator will not have active club access."
         : null
     };
@@ -886,17 +894,21 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
     return;
   }
 
-  if (user.role === Role.ADMIN) {
-    response.status(400).json({ message: "Admin users cannot be deactivated." });
+  if (!user.isActive) {
+    response.status(400).json({ message: "This account is already inactive." });
     return;
   }
 
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await runSerializableTransaction(async (tx) => {
     let deactivatedMemberships = 0;
     let clearedUpcomingRoleSlots = 0;
+
+    if (user.role === Role.ADMIN) {
+      await requireAnotherActiveAdmin(tx, user.id);
+    }
 
     if (user.role === Role.STUDENT && user.studentProfile) {
       const memberships = await tx.studentClubMembership.updateMany({
@@ -937,7 +949,10 @@ adminRouter.patch("/users/:userId/deactivate", asyncRoute(async (request, respon
 
     const updatedUser = await tx.user.update({
       where: { id: user.id },
-      data: { isActive: false },
+      data: {
+        isActive: false,
+        sessionVersion: { increment: 1 }
+      },
       select: memberUserSelect
     });
 
@@ -1317,6 +1332,38 @@ function isSampleUser(user: { email: string; firstName: string; lastName: string
   const marker = `${user.email} ${user.firstName} ${user.lastName}`.toLowerCase();
 
   return marker.includes("example.com") || marker.includes("sample");
+}
+
+async function requireAnotherActiveAdmin(tx: Prisma.TransactionClient, targetUserId: string) {
+  const otherActiveAdminCount = await tx.user.count({
+    where: {
+      id: { not: targetUserId },
+      role: Role.ADMIN,
+      isActive: true
+    }
+  });
+
+  if (otherActiveAdminCount < 1) {
+    throw new AdminActionError(409, "The last active Admin cannot be deactivated or demoted.");
+  }
+}
+
+async function runSerializableTransaction<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>) {
+  for (let attempt = 1; attempt <= serializableTransactionAttempts; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      });
+    } catch (error) {
+      const prismaError = error as { code?: string };
+
+      if (prismaError.code !== "P2034" || attempt === serializableTransactionAttempts) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("Unable to complete the Admin account change.");
 }
 
 class AdminActionError extends Error {

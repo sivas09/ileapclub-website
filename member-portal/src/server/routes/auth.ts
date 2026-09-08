@@ -60,13 +60,8 @@ authRouter.post("/login", loginRateLimiter, asyncRoute(async (request, response)
     }
   });
 
-  if (!user || !user.isActive) {
+  if (!user) {
     response.status(401).json({ message: "Invalid email or password." });
-    return;
-  }
-
-  if (user.role === Role.PARENT) {
-    response.status(403).json({ message: "Parent accounts are not enabled for this portal." });
     return;
   }
 
@@ -74,6 +69,16 @@ authRouter.post("/login", loginRateLimiter, asyncRoute(async (request, response)
 
   if (!isValidPassword) {
     response.status(401).json({ message: "Invalid email or password." });
+    return;
+  }
+
+  if (!user.isActive) {
+    response.status(403).json({ message: "This account is inactive. Contact an administrator for help." });
+    return;
+  }
+
+  if (user.role === Role.PARENT) {
+    response.status(403).json({ message: "Parent accounts are not enabled for this portal." });
     return;
   }
 
