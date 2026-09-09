@@ -27,7 +27,8 @@ const users = {
   otherStudent: testUser("other-student-user", Role.STUDENT)
 };
 const meetings = [
-  { id: "assigned-meeting", clubId: assignedClubId, title: "Assigned Meeting", meetingDate: new Date("2026-09-04T00:00:00.000Z"), club: { name: "Assigned Club" } },
+  { id: "assigned-meeting", clubId: assignedClubId, title: "iLEAP Club Meeting Session#1", meetingDate: new Date("2026-09-04T00:00:00.000Z"), club: { name: "Assigned Club" } },
+  { id: "assigned-meeting-2", clubId: assignedClubId, title: "iLEAP Club Meeting Session#2", meetingDate: new Date("2026-09-11T00:00:00.000Z"), club: { name: "Assigned Club" } },
   { id: "outside-meeting", clubId: outsideClubId, title: "Outside Meeting", meetingDate: new Date("2026-09-05T00:00:00.000Z"), club: { name: "Outside Club" } }
 ];
 const students = [
@@ -124,9 +125,30 @@ try {
   assert.equal(attendanceRecords.get(attendanceKey("assigned-meeting", "student-1"))?.status, "PRESENT", "Admin can mark a member Present.");
   assert.equal(attendanceRecords.get(attendanceKey("assigned-meeting", "student-2"))?.status, "ABSENT", "Admin can mark a member Absent.");
 
+  await save(users.admin, "assigned-meeting-2", [
+    { studentId: "student-1", status: "ABSENT" },
+    { studentId: "student-2", status: "PRESENT" }
+  ], 200);
+  assert.equal(attendanceRecords.size, 4, "Two meetings create separate attendance records for the same members.");
+  assert.equal(attendanceRecords.get(attendanceKey("assigned-meeting", "student-1"))?.status, "PRESENT", "Session #1 retains its own attendance.");
+  assert.equal(attendanceRecords.get(attendanceKey("assigned-meeting-2", "student-1"))?.status, "ABSENT", "Session #2 retains its own attendance.");
+
+  const sessionOneResponse = await request("GET", "/api/meetings/assigned-meeting/attendance", users.admin, 200);
+  const sessionOne = await sessionOneResponse.json() as any;
+  assert.equal(sessionOne.meeting.title, "iLEAP Club Meeting Session#1", "Selecting Session #1 returns Session #1 attendance context.");
+  assert.equal(sessionOne.meeting.meetingDate, "2026-09-04T00:00:00.000Z", "Session #1 returns its own date.");
+  assert.equal(sessionOne.roster.find((entry: any) => entry.studentId === "student-1").status, "PRESENT", "Session #1 loads its own member status.");
+
+  const sessionTwoResponse = await request("GET", "/api/meetings/assigned-meeting-2/attendance", users.admin, 200);
+  const sessionTwo = await sessionTwoResponse.json() as any;
+  assert.equal(sessionTwo.meeting.title, "iLEAP Club Meeting Session#2", "Selecting Session #2 returns Session #2 attendance context.");
+  assert.equal(sessionTwo.meeting.meetingDate, "2026-09-11T00:00:00.000Z", "Session #2 returns its own date.");
+  assert.equal(sessionTwo.roster.find((entry: any) => entry.studentId === "student-1").status, "ABSENT", "Session #2 loads its own member status.");
+
   await save(users.admin, "assigned-meeting", [{ studentId: "student-1", status: "ABSENT" }], 200);
-  assert.equal(attendanceRecords.size, 2, "Saving the same meeting/member updates the unique record instead of creating another.");
+  assert.equal(attendanceRecords.size, 4, "Saving the same meeting/member updates the unique record instead of creating another.");
   assert.equal(attendanceRecords.get(attendanceKey("assigned-meeting", "student-1"))?.status, "ABSENT");
+  assert.equal(attendanceRecords.get(attendanceKey("assigned-meeting-2", "student-1"))?.status, "ABSENT", "Saving Session #1 does not change Session #2.");
   assert.equal(attendanceRecords.get(attendanceKey("assigned-meeting", "student-1"))?.markedByUserId, users.admin.id, "The staff user who marked attendance is recorded.");
 
   await save(users.director, "assigned-meeting", [{ studentId: "student-1", status: "PRESENT" }], 200);

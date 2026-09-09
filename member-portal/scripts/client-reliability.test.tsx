@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type LearningReflection, type Meeting, type MemberPointsProgress, type ResourceLink } from "../src/client/api";
-import { AttendanceRosterForm, BandProgressEmptyState, MeetingEditForm, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
+import { AttendanceRosterForm, BandProgressEmptyState, MeetingAttendancePanel, MeetingEditForm, MeetingSelectionPrompt, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
 import { attendanceStatusLabel, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentPointsProgress, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
@@ -74,6 +74,33 @@ assert.match(attendanceMarkup, />Absent<\/option>/, "Attendance offers Absent.")
 assert.match(attendanceMarkup, />Not Marked<\/option>/, "Attendance displays a blank Not Marked option.");
 assert.match(attendanceMarkup, />Save Attendance<\/button>/, "Attendance renders its save action.");
 assert.doesNotMatch(attendanceMarkup, />Late<\/option>|>Excused<\/option>/, "Attendance does not offer Late or Excused.");
+
+const sessionOneMeeting: Meeting = {
+  ...meeting,
+  id: "meeting-session-1",
+  title: "iLEAP Club Meeting Session#1",
+  meetingDate: "2026-09-12T00:00:00.000Z",
+  startTime: "10:00"
+};
+const sessionTwoMeeting: Meeting = {
+  ...meeting,
+  id: "meeting-session-2",
+  title: "iLEAP Club Meeting Session#2",
+  meetingDate: "2026-09-19T00:00:00.000Z",
+  startTime: "11:30"
+};
+const sessionOneAttendanceMarkup = renderToStaticMarkup(<MeetingAttendancePanel meeting={sessionOneMeeting} />);
+const sessionTwoAttendanceMarkup = renderToStaticMarkup(<MeetingAttendancePanel meeting={sessionTwoMeeting} />);
+assert.match(sessionOneAttendanceMarkup, /Attendance for iLEAP Club Meeting Session#1/, "Selecting Session #1 identifies Session #1 in Attendance.");
+assert.match(sessionOneAttendanceMarkup, /Meeting date<\/dt><dd>Sep 12, 2026/, "Attendance renders the selected meeting date.");
+assert.match(sessionOneAttendanceMarkup, /Meeting time<\/dt><dd>10:00/, "Attendance renders the selected meeting time.");
+assert.match(sessionOneAttendanceMarkup, /Club name<\/dt><dd>Kanata Saturday/, "Attendance renders the selected club name.");
+assert.match(sessionOneAttendanceMarkup, /This attendance applies only to this meeting\./, "Attendance explains its meeting-only scope.");
+assert.doesNotMatch(sessionOneAttendanceMarkup, /Session#2|11:30/, "Session #1 Attendance does not display Session #2 details.");
+assert.match(sessionTwoAttendanceMarkup, /Attendance for iLEAP Club Meeting Session#2/, "Selecting Session #2 identifies Session #2 in Attendance.");
+assert.match(sessionTwoAttendanceMarkup, /Meeting date<\/dt><dd>Sep 19, 2026/, "Session #2 Attendance renders its own date.");
+assert.doesNotMatch(sessionTwoAttendanceMarkup, /Session#1|10:00/, "Session #2 Attendance does not display Session #1 details.");
+assert.match(renderToStaticMarkup(<MeetingSelectionPrompt />), /Select a meeting to mark attendance\./, "Attendance prompts for an explicit meeting selection.");
 assert.equal(attendanceStatusLabel("PRESENT"), "Present", "Student attendance history uses the visible Present label.");
 assert.equal(attendanceStatusLabel("ABSENT"), "Absent", "Student attendance history uses the visible Absent label.");
 const emptyBandProgressMarkup = renderToStaticMarkup(<BandProgressEmptyState />);

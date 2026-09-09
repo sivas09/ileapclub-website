@@ -3084,6 +3084,60 @@ button {
   border-top: 1px solid #dbe4f0;
 }
 
+.attendance-meeting-context {
+  padding: 18px;
+  border: 2px solid #9acbe3;
+  border-radius: 10px;
+  background: #f2faff;
+}
+
+.attendance-meeting-context h3 {
+  margin: 4px 0 6px;
+  color: var(--portal-blue);
+}
+
+.attendance-scope-note {
+  margin: 0;
+  color: #274768;
+  font-weight: 700;
+}
+
+.attendance-meeting-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+  margin: 18px 0 0;
+}
+
+.attendance-meeting-details div {
+  display: grid;
+  gap: 3px;
+}
+
+.attendance-meeting-details dt {
+  color: var(--portal-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.attendance-meeting-details dd {
+  margin: 0;
+  color: var(--portal-ink);
+  font-weight: 800;
+}
+
+.meeting-selection-prompt {
+  color: var(--portal-muted);
+  font-weight: 800;
+  text-align: center;
+}
+
+.meeting-selection-prompt p {
+  margin: 0;
+}
+
 .attendance-panel h4 {
   margin: 0;
   color: #00296b;
@@ -3413,6 +3467,10 @@ button {
 
   .meeting-summary {
     flex-direction: column;
+  }
+
+  .attendance-meeting-details {
+    grid-template-columns: 1fr;
   }
 
   .booking-list li {

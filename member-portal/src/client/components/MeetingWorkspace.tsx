@@ -83,7 +83,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
   const [meetingMode, setMeetingMode] = useState<MeetingMode>("view");
   const [meetingPendingDeletion, setMeetingPendingDeletion] = useState<Meeting | null>(null);
   const canManageMeetings = isOperationalManagerRole(user.role) || user.role === "FACILITATOR";
-  const selectedMeeting = overview?.meetings.find((meeting) => meeting.id === selectedMeetingId) ?? overview?.meetings[0] ?? null;
+  const selectedMeeting = overview?.meetings.find((meeting) => meeting.id === selectedMeetingId) ?? null;
   const selectedMeetingStudents = selectedMeeting && overview
     ? overview.students.filter((student) => isStudentInClub(student, selectedMeeting.clubId))
     : [];
@@ -113,7 +113,7 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
         return currentMeetingId;
       }
 
-      return data.meetings[0]?.id ?? "";
+      return "";
     });
   }
 
@@ -350,6 +350,10 @@ export function MeetingWorkspace({ user }: { user: PortalUser }) {
             />
           ) : null}
         </div>
+      ) : !isLoading ? (
+        canManageMeetings
+          ? <MeetingSelectionPrompt />
+          : <div className="meeting-detail-panel meeting-selection-prompt" role="status"><p>Select a meeting to view details.</p></div>
       ) : null}
 
       {canManageMeetings && overview?.students.length ? (
@@ -636,7 +640,7 @@ function MeetingList({
                           <div className="meeting-actions-menu-panel">
                             <button type="button" onClick={() => onSelect(meeting, "edit")}>Edit Meeting</button>
                             <button type="button" onClick={() => onSelect(meeting, "manage")}>Manage Roles</button>
-                            <button type="button" onClick={() => onSelect(meeting, "attendance")}>Attendance</button>
+                            <button type="button" onClick={() => onSelect(meeting, "attendance")}>Attendance for {meeting.title}</button>
                             <button type="button" onClick={() => onSelect(meeting, "score")}>Score Feedback</button>
                             <button type="button" className="danger-action" onClick={() => onDeleteRequest(meeting)} disabled={isSubmitting}>Delete Meeting</button>
                           </div>
@@ -747,7 +751,7 @@ function MeetingView({
   );
 }
 
-function MeetingAttendancePanel({ meeting }: { meeting: Meeting }) {
+export function MeetingAttendancePanel({ meeting }: { meeting: Meeting }) {
   const [roster, setRoster] = useState<MeetingAttendanceRoster["roster"]>([]);
   const [statuses, setStatuses] = useState<Record<string, AttendanceStatus | "">>({});
   const [status, setStatus] = useState("");
@@ -812,10 +816,16 @@ function MeetingAttendancePanel({ meeting }: { meeting: Meeting }) {
 
   return (
     <section className="meeting-mode-section attendance-panel" aria-label="Meeting attendance">
-      <div>
+      <div className="attendance-meeting-context">
         <p className="eyebrow">Meeting Attendance</p>
-        <h3>Attendance</h3>
-        <p className="field-note">Mark active members in {meeting.club.name} as Present or Absent.</p>
+        <h3>Attendance for {meeting.title}</h3>
+        <p className="attendance-scope-note">This attendance applies only to this meeting.</p>
+        <dl className="attendance-meeting-details">
+          <div><dt>Meeting title</dt><dd>{meeting.title}</dd></div>
+          <div><dt>Meeting date</dt><dd>{formatDate(meeting.meetingDate)}</dd></div>
+          <div><dt>Meeting time</dt><dd>{meeting.startTime || "Not specified"}</dd></div>
+          <div><dt>Club name</dt><dd>{meeting.club.name}</dd></div>
+        </dl>
       </div>
       {status ? <p className="admin-status is-success" role="status">{status}</p> : null}
       {error ? <p className="admin-status is-error" role="alert">{error}</p> : null}
@@ -833,6 +843,14 @@ function MeetingAttendancePanel({ meeting }: { meeting: Meeting }) {
         />
       ) : null}
     </section>
+  );
+}
+
+export function MeetingSelectionPrompt() {
+  return (
+    <div className="meeting-detail-panel meeting-selection-prompt" role="status">
+      <p>Select a meeting to mark attendance.</p>
+    </div>
   );
 }
 
