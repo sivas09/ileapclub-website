@@ -663,7 +663,13 @@ try {
   await assertStatus("center director cannot add out-of-scope documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 403, documentPayload(otherClubId));
   await assertStatus("facilitator can add assigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 201, documentPayload(assignedClubId));
   await assertStatus("facilitator cannot add unassigned-club documents", "POST", "/api/documents", Role.FACILITATOR, 403, documentPayload(otherClubId));
-  await assertStatus("student cannot add documents", "POST", "/api/documents", Role.STUDENT, 403, documentPayload(assignedClubId));
+  const studentDocumentResponse = await assertStatus("student cannot add documents", "POST", "/api/documents", Role.STUDENT, 403, documentPayload(assignedClubId));
+  const studentDocumentDenial = await studentDocumentResponse.json() as { message: string };
+  assertEqual(
+    studentDocumentDenial.message,
+    "Admins, Center Directors, and authorized Facilitators can add documents.",
+    "document permission guidance names every role that can add documents"
+  );
   await assertStatus("facilitator cannot view unassigned-club documents", "GET", `/api/documents?clubId=${otherClubId}`, Role.FACILITATOR, 403);
   await assertStatus("admin can view all document statuses", "GET", "/api/documents", Role.ADMIN, 200);
   assertEqual(state.lastDocumentWhere?.status === undefined, true, "admin document list does not force active status");

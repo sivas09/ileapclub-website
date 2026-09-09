@@ -47,12 +47,29 @@ type DocumentSort = "newest" | "oldest" | "name" | "band";
 export function DocumentsWorkspace({ user }: { user: PortalUser }) {
   const isStudent = user.role === "STUDENT";
 
-  return isStudent ? <StudentResourcesPanel /> : (
+  return (
     <>
-      <ManagerDocumentsPanel user={user} />
-      <ManagerResourceLinksPanel user={user} />
+      <DocumentAddPermissionNotice role={user.role} />
+      {isStudent ? <StudentResourcesPanel /> : (
+        <>
+          <ManagerDocumentsPanel user={user} />
+          <ManagerResourceLinksPanel user={user} />
+        </>
+      )}
     </>
   );
+}
+
+export function DocumentAddPermissionNotice({ role }: { role: PortalUser["role"] }) {
+  const message = role === "ADMIN"
+    ? "You can add documents for members using the form below."
+    : role === "CENTER_DIRECTOR"
+      ? "You can add documents for clubs in your assigned centres using the form below."
+      : role === "FACILITATOR"
+        ? "You can add documents for your assigned clubs using the form below."
+        : "Members can view available documents but cannot add or manage documents.";
+
+  return <p className="admin-status is-info document-permission-message" role="status">{message}</p>;
 }
 
 function ManagerDocumentsPanel({ user }: { user: PortalUser }) {

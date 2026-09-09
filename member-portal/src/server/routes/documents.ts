@@ -130,7 +130,7 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
   const user = request.user!;
 
   if (!canManageOperationalData(user) && user.role !== Role.FACILITATOR) {
-    response.status(403).json({ message: "Only operational managers and facilitators can add documents." });
+    response.status(403).json({ message: "Admins, Center Directors, and authorized Facilitators can add documents." });
     return;
   }
 

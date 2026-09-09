@@ -8,6 +8,7 @@ import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
 import { attendanceStatusLabel, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentPointsProgress, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
+import { DocumentAddPermissionNotice, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
 import {
   claimableMeetingRoleSlots,
   canManageUserFromSetup,
@@ -74,6 +75,19 @@ assert.match(attendanceMarkup, />Absent<\/option>/, "Attendance offers Absent.")
 assert.match(attendanceMarkup, />Not Marked<\/option>/, "Attendance displays a blank Not Marked option.");
 assert.match(attendanceMarkup, />Save Attendance<\/button>/, "Attendance renders its save action.");
 assert.doesNotMatch(attendanceMarkup, />Late<\/option>|>Excused<\/option>/, "Attendance does not offer Late or Excused.");
+
+const adminDocumentNotice = renderToStaticMarkup(<DocumentAddPermissionNotice role="ADMIN" />);
+const directorDocumentNotice = renderToStaticMarkup(<DocumentAddPermissionNotice role="CENTER_DIRECTOR" />);
+const facilitatorDocumentNotice = renderToStaticMarkup(<DocumentAddPermissionNotice role="FACILITATOR" />);
+const studentDocumentNotice = renderToStaticMarkup(<DocumentAddPermissionNotice role="STUDENT" />);
+assert.match(adminDocumentNotice, /You can add documents for members using the form below\./, "Admin sees a positive document-management message.");
+assert.match(directorDocumentNotice, /assigned centres/, "Center Director document guidance describes assigned-centre scope.");
+assert.match(facilitatorDocumentNotice, /assigned clubs/, "Facilitator document guidance describes assigned-club scope.");
+assert.match(studentDocumentNotice, /cannot add or manage documents/, "Member document guidance is explicitly read-only.");
+const studentDocumentsMarkup = renderToStaticMarkup(
+  <DocumentsWorkspace user={{ id: "student-user", email: "student@example.com", firstName: "Alex", lastName: "Student", role: "STUDENT" }} />
+);
+assert.doesNotMatch(studentDocumentsMarkup, /Add New Document|>Add Document<|>Add Resource</, "Members do not see add-document or add-resource controls.");
 
 const sessionOneMeeting: Meeting = {
   ...meeting,

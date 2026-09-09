@@ -499,6 +499,11 @@ button {
   background: #ffe4e6;
 }
 
+.admin-status.is-info {
+  color: #17466e;
+  background: #eaf6fc;
+}
+
 .admin-summary-grid,
 .progress-summary-grid,
 .admin-form-grid,
