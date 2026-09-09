@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   AdminOverview,
   BandDocument,
+  BandRequirement,
   createBandDocument,
   createResourceLink,
   deleteBandDocument,
@@ -75,6 +76,7 @@ export function DocumentAddPermissionNotice({ role }: { role: PortalUser["role"]
 function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
   const [documents, setDocuments] = useState<BandDocument[]>([]);
   const [clubs, setClubs] = useState<AdminOverview["clubs"]>([]);
+  const [requirements, setRequirements] = useState<BandRequirement[]>([]);
   const [filters, setFilters] = useState<DocumentFilters>({
     programLevel: "",
     bandLevel: "",
@@ -91,6 +93,9 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [newDocumentProgram, setNewDocumentProgram] = useState("SENIOR");
+  const [newDocumentBand, setNewDocumentBand] = useState("White");
+  const [newDocumentRequirementId, setNewDocumentRequirementId] = useState("");
   const sessionOptions = useMemo(() => {
     return Array.from(new Set(documents.map((document) => documentSession(document)))).sort((left, right) => left.localeCompare(right));
   }, [documents]);
@@ -107,6 +112,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
     const data = await getBandDocuments(serverFilters);
     setDocuments(data.documents);
     setClubs(data.clubs);
+    setRequirements(data.requirements);
   }
 
   useEffect(() => {
@@ -158,10 +164,14 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
         programLevel: String(formData.get("programLevel") || "SENIOR"),
         bandLevel: String(formData.get("bandLevel") || "White"),
         sessionModule: String(formData.get("sessionModule") || ""),
+        requirementId: String(formData.get("requirementId") || "") || null,
         category: String(formData.get("category") || "Other"),
         clubId: String(formData.get("clubId") || "") || null
       });
       form.reset();
+      setNewDocumentProgram("SENIOR");
+      setNewDocumentBand("White");
+      setNewDocumentRequirementId("");
       await refreshDocuments();
       setIsAddFormOpen(false);
       setStatus("Document added.");
@@ -316,15 +326,31 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
           <label>Description <span>Optional</span><textarea name="description" rows={3} /></label>
           <label>
             Program Level for this resource
-            <select name="programLevel" defaultValue="SENIOR">
+            <select name="programLevel" value={newDocumentProgram} onChange={(event) => {
+              setNewDocumentProgram(event.currentTarget.value);
+              setNewDocumentRequirementId("");
+            }}>
               {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
           <label>
             Band Level for this resource
-            <select name="bandLevel" defaultValue="White">
+            <select name="bandLevel" value={newDocumentBand} onChange={(event) => {
+              setNewDocumentBand(event.currentTarget.value);
+              setNewDocumentRequirementId("");
+            }}>
               {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
             </select>
+          </label>
+          <label>
+            Requirement <span>Optional</span>
+            <select name="requirementId" value={newDocumentRequirementId} onChange={(event) => setNewDocumentRequirementId(event.currentTarget.value)}>
+              <option value="">Select requirement</option>
+              {documentRequirementOptions(requirements, newDocumentProgram, newDocumentBand).map((requirement) => (
+                <option key={requirement.id} value={requirement.id}>{requirement.name}</option>
+              ))}
+            </select>
+            <small>Optional — select a requirement to show this link in the guide popup.</small>
           </label>
           <label>Session / Module <span>Optional</span><input name="sessionModule" placeholder="Session 3, Module 2, Debate Week" /></label>
           <label>
@@ -374,6 +400,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
                   key={document.id}
                   document={document}
                   clubs={clubs}
+                  requirements={requirements}
                   canEdit={isOperationalManagerRole(user.role) || (user.role === "FACILITATOR" && Boolean(document.clubId))}
                   canArchive={isOperationalManagerRole(user.role)}
                   canDelete={isOperationalManagerRole(user.role)}
@@ -398,6 +425,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
 function ManagerDocumentRow({
   document,
   clubs,
+  requirements,
   canEdit,
   canArchive,
   canDelete,
@@ -412,6 +440,7 @@ function ManagerDocumentRow({
 }: {
   document: BandDocument;
   clubs: AdminOverview["clubs"];
+  requirements: BandRequirement[];
   canEdit: boolean;
   canArchive: boolean;
   canDelete: boolean;
@@ -425,6 +454,15 @@ function ManagerDocumentRow({
   onDelete: (document: BandDocument) => void;
 }) {
   const link = documentLink(document);
+  const [editProgram, setEditProgram] = useState(document.programLevel);
+  const [editBand, setEditBand] = useState(document.bandLevel);
+  const [editRequirementId, setEditRequirementId] = useState(document.requirementId ?? "");
+
+  useEffect(() => {
+    setEditProgram(document.programLevel);
+    setEditBand(document.bandLevel);
+    setEditRequirementId(document.requirementId ?? "");
+  }, [document.bandLevel, document.programLevel, document.requirementId]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -437,6 +475,7 @@ function ManagerDocumentRow({
       programLevel: String(formData.get("programLevel") || "SENIOR"),
       bandLevel: String(formData.get("bandLevel") || "White"),
       sessionModule: String(formData.get("sessionModule") || ""),
+      requirementId: String(formData.get("requirementId") || "") || null,
       clubId: String(formData.get("clubId") || "") || null,
       category: String(formData.get("category") || "Other")
     });
@@ -450,6 +489,7 @@ function ManagerDocumentRow({
         <td className="document-name-cell" data-label="Document Name">
           <strong title={document.title}>{document.title}</strong>
           <small title={document.description || "No description provided."}>{document.description || "No description provided."}</small>
+          {document.requirementName ? <small>Guide requirement: {document.requirementName}</small> : null}
         </td>
         <td data-label="Program">
           <span className="document-badge program-badge">{formatProgramLevel(document.programLevel)}</span>
@@ -498,15 +538,31 @@ function ManagerDocumentRow({
               <label>Session / Module<input name="sessionModule" defaultValue={document.sessionModule ?? ""} placeholder="Optional" /></label>
               <label>
                 Program
-                <select name="programLevel" defaultValue={document.programLevel}>
+                <select name="programLevel" value={editProgram} onChange={(event) => {
+                  setEditProgram(event.currentTarget.value);
+                  setEditRequirementId("");
+                }}>
                   {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
               <label>
                 Band
-                <select name="bandLevel" defaultValue={document.bandLevel}>
+                <select name="bandLevel" value={editBand} onChange={(event) => {
+                  setEditBand(event.currentTarget.value);
+                  setEditRequirementId("");
+                }}>
                   {bandLevelOptions.map((bandLevel) => <option key={bandLevel} value={bandLevel}>{bandLevel}</option>)}
                 </select>
+              </label>
+              <label>
+                Requirement <span>Optional</span>
+                <select name="requirementId" value={editRequirementId} onChange={(event) => setEditRequirementId(event.currentTarget.value)}>
+                  <option value="">Select requirement</option>
+                  {documentRequirementOptions(requirements, editProgram, editBand).map((requirement) => (
+                    <option key={requirement.id} value={requirement.id}>{requirement.name}</option>
+                  ))}
+                </select>
+                <small>Optional — select a requirement to show this link in the guide popup.</small>
               </label>
               <label>
                 Club
@@ -531,6 +587,14 @@ function ManagerDocumentRow({
       ) : null}
     </>
   );
+}
+
+export function documentRequirementOptions(requirements: BandRequirement[], programLevel: string, bandLevel: string) {
+  return requirements.filter((requirement) => (
+    requirement.isActive
+    && requirement.programLevel === programLevel
+    && requirement.bandLevel === bandLevel
+  ));
 }
 
 function StudentResourcesPanel() {

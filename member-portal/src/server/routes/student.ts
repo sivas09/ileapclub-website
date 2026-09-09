@@ -436,12 +436,13 @@ studentRouter.delete("/requirements/:requirementId", requireRole([Role.ADMIN]), 
     return;
   }
 
-  const [progressCount, resourceCount] = await Promise.all([
+  const [progressCount, resourceCount, documentCount] = await Promise.all([
     prisma.studentRequirementProgress.count({ where: { requirementId: existing.id } }),
-    prisma.resourceLink.count({ where: { requirementId: existing.id } })
+    prisma.resourceLink.count({ where: { requirementId: existing.id } }),
+    prisma.bandDocument.count({ where: { requirementId: existing.id } })
   ]);
 
-  if (progressCount > 0 || resourceCount > 0) {
+  if (progressCount > 0 || resourceCount > 0 || documentCount > 0) {
     const requirement = await prisma.bandRequirement.update({
       where: { id: existing.id },
       data: { isActive: false }

@@ -52,6 +52,8 @@ const state = {
   roleUpdates: 0,
   studentRequirementUpserts: 0,
   documentCreates: 0,
+  lastDocumentCreate: null as any,
+  lastDocumentUpdate: null as any,
   noticeCreates: 0,
   resourceCreates: 0,
   userCreates: 0,
@@ -401,11 +403,23 @@ patchModel("bandDocument", {
     state.lastDocumentWhere = where;
     return documentRecords().filter((document) => documentMatchesWhere(document, where));
   },
-  create: () => {
+  create: ({ data }: any) => {
     state.documentCreates += 1;
-    return documentRecord(assignedClubId);
+    state.lastDocumentCreate = data;
+    return documentRecord(data.clubId, {
+      title: data.title,
+      requirementId: data.requirementId,
+      requirement: data.requirementId === "senior-white-induction" ? seniorWhiteRequirementRecord() : null
+    });
   },
   findUnique: ({ where }: any) => where.id === "document-1" ? documentRecord(assignedClubId) : null,
+  update: ({ data }: any) => {
+    state.lastDocumentUpdate = data;
+    return documentRecord(assignedClubId, {
+      requirementId: data.requirementId,
+      requirement: data.requirementId === "requirement-1" ? requirementRecord() : null
+    });
+  },
   delete: () => documentRecord(assignedClubId),
   count: () => 0,
   deleteMany: () => ({ count: 0 })
@@ -454,12 +468,16 @@ patchModel("resourceLink", {
   updateMany: () => ({ count: 0 })
 });
 patchModel("bandRequirement", {
-  findMany: ({ where, select }: any = {}) => where?.programLevel === "JUNIOR" && select?.bandOrder
-    ? [requirementRecord(), orangeRequirementRecord()]
-    : [],
+  findMany: ({ where, select }: any = {}) => {
+    if (where?.programLevel === "JUNIOR" && select?.bandOrder) return [requirementRecord(), orangeRequirementRecord()];
+    if (where?.isActive) return [requirementRecord(), orangeRequirementRecord(), seniorWhiteRequirementRecord()];
+    return [];
+  },
   findUnique: ({ where }: any) => where.id === "requirement-1"
     ? requirementRecord()
-    : null,
+    : where.id === "senior-white-induction"
+      ? seniorWhiteRequirementRecord()
+      : null,
   create: () => requirementRecord(),
   update: () => requirementRecord(),
   delete: () => requirementRecord()
@@ -663,6 +681,22 @@ try {
   assertEqual(state.deletedMeetingIds.has("failure-delete-meeting"), false, "failed related-record deletion leaves meeting intact");
 
   await assertStatus("admin can add documents", "POST", "/api/documents", Role.ADMIN, 201, documentPayload(null));
+  const manualDocumentResponse = await assertStatus(
+    "admin can manually link a Senior White document to Induction Speech",
+    "POST",
+    "/api/documents",
+    Role.ADMIN,
+    201,
+    seniorWhiteDocumentPayload("senior-white-induction")
+  );
+  const manualDocumentPayload = await manualDocumentResponse.json() as { document: { requirementId: string; requirementName: string } };
+  assertEqual(state.lastDocumentCreate?.requirementId, "senior-white-induction", "manual document requirement id is persisted");
+  assertEqual(manualDocumentPayload.document.requirementName, "Induction Speech", "safe requirement metadata is returned with the document");
+  await assertStatus("admin can add an existing document without a requirement link", "POST", "/api/documents", Role.ADMIN, 201, seniorWhiteDocumentPayload(null));
+  assertEqual(state.lastDocumentCreate?.requirementId, null, "existing documents remain valid without a manual requirement link");
+  await assertStatus("admin can edit an existing document to add a manual requirement link", "PATCH", "/api/documents/document-1", Role.ADMIN, 200, { requirementId: "requirement-1" });
+  assertEqual(state.lastDocumentUpdate?.requirementId, "requirement-1", "editing a document persists its manual requirement link");
+  await assertStatus("document requirement must match selected program and band", "POST", "/api/documents", Role.ADMIN, 400, { ...seniorWhiteDocumentPayload("requirement-1") });
   await assertStatus("center director can add assigned-club documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 201, documentPayload(assignedClubId));
   await assertStatus("center director cannot add global documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 403, documentPayload(null));
   await assertStatus("center director cannot add out-of-scope documents", "POST", "/api/documents", Role.CENTER_DIRECTOR, 403, documentPayload(otherClubId));
@@ -1022,6 +1056,19 @@ function documentPayload(clubId: string | null) {
   };
 }
 
+function seniorWhiteDocumentPayload(requirementId: string | null) {
+  return {
+    title: "Induction Speech Guide",
+    description: "Learn how to prepare and present your induction speech.",
+    fileUrl: "https://docs.google.com/document/d/induction-speech",
+    programLevel: "SENIOR",
+    bandLevel: "White",
+    requirementId,
+    clubId: null,
+    category: "Session Materials"
+  };
+}
+
 function noticePayload(clubId: string | null) {
   return {
     title: "Saturday Meeting Reminder",
@@ -1291,7 +1338,15 @@ function documentRecords() {
   return [
     documentRecord(assignedClubId),
     documentRecord(null, { id: "document-global", title: "Complete first speech Guide" }),
-    documentRecord(assignedClubId, { id: "document-next", title: "Storytelling Guide", bandLevel: "Orange I", bandOrder: 4, category: "Session Materials" }),
+    documentRecord(assignedClubId, {
+      id: "document-next",
+      title: "Public Speaking Workbook",
+      bandLevel: "Orange I",
+      bandOrder: 4,
+      category: "Session Materials",
+      requirementId: "requirement-orange",
+      requirement: orangeRequirementRecord()
+    }),
     documentRecord(otherClubId, { id: "document-other" }),
     documentRecord(assignedClubId, { id: "document-archived", status: "ARCHIVED" }),
     documentRecord(assignedClubId, { id: "document-unrelated-future", title: "Future Debate Guide", bandLevel: "Orange I", bandOrder: 4 })
@@ -1304,6 +1359,7 @@ function documentMatchesWhere(document: ReturnType<typeof documentRecord>, where
   if (where.programLevel && document.programLevel !== where.programLevel) return false;
   if (typeof where.bandOrder === "number" && document.bandOrder !== where.bandOrder) return false;
   if (where.bandOrder?.lte != null && document.bandOrder > where.bandOrder.lte) return false;
+  if (typeof where.requirementId === "string" && document.requirementId !== where.requirementId) return false;
   if (where.title?.contains && !document.title.toLowerCase().includes(String(where.title.contains).toLowerCase())) return false;
   if (where.clubId === null && document.clubId !== null) return false;
   if (where.clubId?.in && !where.clubId.in.includes(document.clubId)) return false;
@@ -1318,6 +1374,8 @@ function documentRecord(clubId: string | null, overrides: Partial<{
   bandLevel: string;
   bandOrder: number;
   category: string;
+  requirementId: string | null;
+  requirement: ReturnType<typeof requirementRecord> | ReturnType<typeof seniorWhiteRequirementRecord> | null;
 }> = {}) {
   return {
     id: overrides.id ?? "document-1",
@@ -1329,12 +1387,14 @@ function documentRecord(clubId: string | null, overrides: Partial<{
     bandLevel: overrides.bandLevel ?? "White",
     bandOrder: overrides.bandOrder ?? 1,
     sessionModule: null,
+    requirementId: overrides.requirementId ?? null,
     clubId,
     category: overrides.category ?? "Band Requirements",
     createdAt: new Date(),
     updatedAt: new Date(),
     status: overrides.status ?? "ACTIVE",
     club: clubId ? { id: clubId, name: "Assigned Club" } : null,
+    requirement: overrides.requirement ?? null,
     uploadedBy: { firstName: "Admin", lastName: "User" }
   };
 }
@@ -1492,5 +1552,17 @@ function orangeRequirementRecord() {
     bandOrder: 4,
     name: "Storytelling",
     sortOrder: 1
+  };
+}
+
+function seniorWhiteRequirementRecord() {
+  return {
+    ...requirementRecord(),
+    id: "senior-white-induction",
+    programLevel: "SENIOR",
+    bandLevel: "White",
+    bandOrder: 1,
+    name: "Induction Speech",
+    description: "Deliver an induction speech."
   };
 }

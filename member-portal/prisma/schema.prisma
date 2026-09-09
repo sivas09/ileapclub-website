@@ -376,6 +376,7 @@ model BandRequirement {
 
   progress StudentRequirementProgress[]
   resourceLinks ResourceLink[]
+  bandDocuments BandDocument[]
   learningReflections MemberLearningReflection[]
 
   @@unique([programLevel, bandLevel, name])
@@ -505,6 +506,7 @@ model BandDocument {
   bandLevel    String
   bandOrder    Int
   sessionModule String?
+  requirementId String?
   clubId       String?
   category     String
   uploadedById String
@@ -513,10 +515,12 @@ model BandDocument {
   updatedAt    DateTime @updatedAt
 
   club       Club? @relation(fields: [clubId], references: [id])
+  requirement BandRequirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
   uploadedBy User  @relation("BandDocumentUploadedBy", fields: [uploadedById], references: [id])
 
   @@index([programLevel, bandOrder])
   @@index([clubId])
+  @@index([requirementId])
   @@index([status])
   @@index([category])
 }

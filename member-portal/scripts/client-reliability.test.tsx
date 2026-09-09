@@ -8,7 +8,7 @@ import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
 import { attendanceStatusLabel, guideResourceForRequirement, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentPointsProgress, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
-import { DocumentAddPermissionNotice, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
+import { DocumentAddPermissionNotice, documentRequirementOptions, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
 import {
   claimableMeetingRoleSlots,
   canManageUserFromSetup,
@@ -269,6 +269,7 @@ assert.match(studentOverviewMarkup, />Paid</, "Student Overview shows a Paid sta
 assert.match(studentOverviewMarkup, /Payment received for this month\. Thank you\./, "Student Overview shows the paid confirmation note.");
 
 const seniorWhiteRequirement = requirementFixture("senior-white-induction", "SENIOR", "White", 1, "Induction Speech", "Speech");
+const seniorWhitePresentationRequirement = requirementFixture("senior-white-presentation", "SENIOR", "White", 1, "Basic Presentation", "Presentation");
 const seniorOrangeRequirement = requirementFixture("senior-orange-storytelling", "SENIOR", "Orange I", 4, "Storytelling", "Speech");
 const juniorRequirement = requirementFixture("junior-white-show-tell", "JUNIOR", "White", 1, "Show & Tell", "Presentation");
 const seniorWhiteResource = requirementResourceFixture("guide-senior-white", seniorWhiteRequirement);
@@ -324,7 +325,38 @@ const existingDocumentGuideMarkup = renderToStaticMarkup(
 );
 assert.match(existingDocumentGuideMarkup, /Induction Speech Guide/, "The requirement popup displays the existing document title.");
 assert.match(existingDocumentGuideMarkup, /href="https:\/\/docs\.google\.com\/document\/d\/document-senior-white"/, "The requirement popup displays the existing Google Doc link.");
+assert.match(existingDocumentGuideMarkup, /Open \/ Download/, "The document-backed guide popup has a clear open action.");
 assert.doesNotMatch(existingDocumentGuideMarkup, /Links not added yet/, "A linked existing document does not show the missing-guide message.");
+
+const manuallyLinkedDocument = {
+  ...seniorWhiteDocument,
+  id: "manually-linked-document",
+  title: "Public Speaking Workbook",
+  requirementId: seniorWhiteRequirement.id,
+  requirementName: seniorWhiteRequirement.name,
+  fileUrl: "https://docs.google.com/document/d/manual-induction"
+};
+const titleFallbackDocument = { ...seniorWhiteDocument, id: "title-fallback-document" };
+assert.strictEqual(
+  guideResourceForRequirement([], seniorWhiteRequirement, [titleFallbackDocument, manuallyLinkedDocument]),
+  manuallyLinkedDocument,
+  "A manual requirement link takes priority over title fallback matching."
+);
+assert.strictEqual(
+  documentsForRequirement([titleFallbackDocument, manuallyLinkedDocument], seniorWhiteRequirement)[0],
+  manuallyLinkedDocument,
+  "Overview and My Progress receive the manually linked document first."
+);
+assert.strictEqual(
+  [titleFallbackDocument, manuallyLinkedDocument].find((document) => document.id === manuallyLinkedDocument.id),
+  manuallyLinkedDocument,
+  "The manually linked document remains the same persisted item shown on Resources."
+);
+assert.deepEqual(
+  documentRequirementOptions([seniorWhiteRequirement, seniorWhitePresentationRequirement, seniorOrangeRequirement, juniorRequirement], "SENIOR", "White").map((requirement) => requirement.name),
+  ["Induction Speech", "Basic Presentation"],
+  "The document Requirement dropdown is filtered by selected program and band."
+);
 
 const noLinkDocument = { ...seniorWhiteDocument, id: "document-without-link", fileUrl: "" };
 const noLinkGuideMarkup = renderToStaticMarkup(

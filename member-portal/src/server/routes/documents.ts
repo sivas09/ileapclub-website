@@ -30,6 +30,7 @@ const documentSchema = z.object({
   programLevel: z.enum(programLevels),
   bandLevel: z.enum(bandLevels),
   sessionModule: z.string().trim().optional(),
+  requirementId: z.string().trim().nullable().optional(),
   clubId: z.string().nullable().optional(),
   category: z.enum(documentCategories).optional(),
   status: z.enum(["ACTIVE", "ARCHIVED"]).optional()
@@ -47,7 +48,7 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
   const studentContext = user.role === Role.STUDENT ? await getStudentDocumentContext(user.id) : null;
 
   if (visibleClubIds !== null && visibleClubIds.length === 0) {
-    response.json({ documents: [], clubs: [], studentContext });
+    response.json({ documents: [], clubs: [], requirements: [], studentContext });
     return;
   }
 
@@ -73,7 +74,7 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
 
   if (user.role === Role.STUDENT) {
     if (!studentContext?.programLevel || !studentContext.currentBandOrder) {
-      response.json({ documents: [], clubs: [], studentContext });
+      response.json({ documents: [], clubs: [], requirements: [], studentContext });
       return;
     }
 
@@ -91,7 +92,10 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
             { bandOrder: { lte: studentContext.currentBandOrder } },
             {
               bandOrder: studentContext.nextRequirement.bandOrder,
-              title: { contains: studentContext.nextRequirement.name, mode: "insensitive" }
+              OR: [
+                { requirementId: studentContext.nextRequirement.id },
+                { title: { contains: studentContext.nextRequirement.name, mode: "insensitive" } }
+              ]
             }
           ]
         }
@@ -113,16 +117,11 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
     delete where.OR;
   }
 
-  const [documents, clubs] = await Promise.all([
+  const [documents, clubs, requirements] = await Promise.all([
     prisma.bandDocument.findMany({
       where,
       orderBy: [{ programLevel: "asc" }, { bandOrder: "asc" }, { title: "asc" }],
-      include: {
-        club: true,
-        uploadedBy: {
-          select: publicUserSelect
-        }
-      }
+      include: documentInclude
     }),
     prisma.club.findMany({
       where: visibleClubIds === null
@@ -130,12 +129,19 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
         : { id: { in: visibleClubIds }, isActive: true, centre: { isActive: true } },
       orderBy: { name: "asc" },
       include: { centre: true }
-    })
+    }),
+    user.role === Role.STUDENT
+      ? Promise.resolve([])
+      : prisma.bandRequirement.findMany({
+        where: { isActive: true },
+        orderBy: [{ programLevel: "asc" }, { bandOrder: "asc" }, { sortOrder: "asc" }, { name: "asc" }]
+      })
   ]);
 
   response.json({
     documents: documents.map((document) => serializeDocument(document)),
     clubs,
+    requirements,
     studentContext
   });
 }));
@@ -156,6 +162,13 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
   }
 
   const data = parsed.data;
+  const requirement = await getMatchingRequirement(data.requirementId, data.programLevel, data.bandLevel);
+
+  if (requirement.error) {
+    response.status(400).json({ message: requirement.error });
+    return;
+  }
+
   let clubId = data.clubId || null;
 
   if (isCenterDirector(user) && !clubId) {
@@ -188,6 +201,7 @@ documentsRouter.post("/", asyncRoute(async (request, response) => {
       bandLevel: data.bandLevel,
       bandOrder: getBandOrder(data.bandLevel),
       sessionModule: data.sessionModule || null,
+      requirementId: requirement.value?.id ?? null,
       clubId,
       category: data.category ?? "Other",
       uploadedById: user.id,
@@ -219,6 +233,16 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
 
   if (!existing) {
     response.status(404).json({ message: "Document not found." });
+    return;
+  }
+
+  const targetProgramLevel = parsed.data.programLevel ?? existing.programLevel;
+  const targetBandLevel = parsed.data.bandLevel ?? existing.bandLevel;
+  const targetRequirementId = parsed.data.requirementId === undefined ? existing.requirementId : parsed.data.requirementId;
+  const requirement = await getMatchingRequirement(targetRequirementId, targetProgramLevel, targetBandLevel);
+
+  if (requirement.error) {
+    response.status(400).json({ message: requirement.error });
     return;
   }
 
@@ -262,6 +286,7 @@ documentsRouter.patch("/:documentId", asyncRoute(async (request, response) => {
       bandLevel: parsed.data.bandLevel,
       bandOrder: parsed.data.bandLevel ? getBandOrder(parsed.data.bandLevel) : undefined,
       sessionModule: parsed.data.sessionModule === undefined ? undefined : parsed.data.sessionModule || null,
+      requirementId: parsed.data.requirementId === undefined ? undefined : requirement.value?.id ?? null,
       clubId: targetClubId,
       category: parsed.data.category,
       status: canManageOperationalData(user) ? parsed.data.status : undefined
@@ -307,6 +332,7 @@ export function canPermanentlyDeleteDocument(role: Role) {
 
 const documentInclude = {
   club: true,
+  requirement: true,
   uploadedBy: {
     select: publicUserSelect
   }
@@ -453,6 +479,8 @@ function serializeDocument(document: Prisma.BandDocumentGetPayload<{ include: ty
     bandLevel: document.bandLevel,
     bandOrder: document.bandOrder,
     sessionModule: document.sessionModule,
+    requirementId: document.requirementId,
+    requirementName: document.requirement?.name ?? null,
     clubId: document.clubId,
     clubName: document.club?.name ?? "All clubs",
     category: document.category,
@@ -461,6 +489,24 @@ function serializeDocument(document: Prisma.BandDocumentGetPayload<{ include: ty
     updatedAt: document.updatedAt,
     status: document.status
   };
+}
+
+async function getMatchingRequirement(requirementId: string | null | undefined, programLevel: string, bandLevel: string) {
+  if (!requirementId) {
+    return { value: null, error: "" };
+  }
+
+  const requirement = await prisma.bandRequirement.findUnique({ where: { id: requirementId } });
+
+  if (!requirement || !requirement.isActive) {
+    return { value: null, error: "Choose an active band requirement." };
+  }
+
+  if (requirement.programLevel !== programLevel || requirement.bandLevel !== bandLevel) {
+    return { value: null, error: "The requirement must match the selected program and band." };
+  }
+
+  return { value: requirement, error: "" };
 }
 
 function getStudentProgramLevel(student: { programLevel?: string | null; clubMemberships: Array<{ club: { program: string } }> }): ProgramLevel | null {

@@ -388,6 +388,8 @@ export type BandDocument = {
   bandLevel: string;
   bandOrder: number;
   sessionModule?: string | null;
+  requirementId?: string | null;
+  requirementName?: string | null;
   clubId?: string | null;
   clubName: string;
   category: string;
@@ -442,6 +444,7 @@ export type ResourceLink = {
 export type DocumentsResponse = {
   documents: BandDocument[];
   clubs: Club[];
+  requirements: BandRequirement[];
   studentContext?: {
     programLevel: string | null;
     currentBandLevel: string;
@@ -1122,6 +1125,7 @@ export async function createBandDocument(payload: {
   programLevel: string;
   bandLevel: string;
   sessionModule?: string;
+  requirementId?: string | null;
   clubId?: string | null;
   category?: string;
   status?: string;
@@ -1140,6 +1144,7 @@ export async function updateBandDocument(documentId: string, payload: Partial<{
   programLevel: string;
   bandLevel: string;
   sessionModule: string;
+  requirementId: string | null;
   clubId: string | null;
   category: string;
   status: string;
@@ -1357,6 +1362,7 @@ function parseDocumentsResponse(value: unknown): DocumentsResponse {
   return {
     documents: expectRecordArray(result.documents, "documents") as BandDocument[],
     clubs: expectRecordArray(result.clubs, "documents") as Club[],
+    requirements: Array.isArray(result.requirements) ? result.requirements as BandRequirement[] : [],
     studentContext: isRecord(result.studentContext)
       ? result.studentContext as DocumentsResponse["studentContext"]
       : null

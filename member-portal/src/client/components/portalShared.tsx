@@ -262,7 +262,7 @@ export function ResourcePanel({
             ? (
               <div className="document-actions">
                 {documentUrl
-                  ? <a href={documentUrl} target="_blank" rel="noreferrer">Open Document</a>
+                  ? <a href={documentUrl} target="_blank" rel="noreferrer">Open / Download</a>
                   : <span className="document-disabled-action">Guide exists, but no link has been added yet.</span>}
               </div>
             )
@@ -381,13 +381,18 @@ export function resourcesForRequirement(resources: ResourceLink[], requirementId
 
 export function documentsForRequirement(documents: BandDocument[], requirement: RequirementGuideTarget) {
   const normalizedRequirementName = normalizeResourceKey(requirement.name);
-
-  return documents.filter((document) => (
+  const eligibleDocuments = documents.filter((document) => (
     document.status === "ACTIVE"
     && normalizeProgramLevel(document.programLevel) === normalizeProgramLevel(requirement.programLevel)
     && normalizeResourceKey(document.bandLevel) === normalizeResourceKey(requirement.bandLevel)
+  ));
+  const manuallyLinkedDocuments = eligibleDocuments.filter((document) => document.requirementId === requirement.id);
+  const titleMatchedDocuments = eligibleDocuments.filter((document) => (
+    !document.requirementId
     && normalizeResourceKey(document.title).includes(normalizedRequirementName)
   ));
+
+  return [...manuallyLinkedDocuments, ...titleMatchedDocuments];
 }
 
 export function requirementGuideFor(
@@ -395,6 +400,8 @@ export function requirementGuideFor(
   documents: BandDocument[],
   requirement: RequirementGuideTarget
 ): RequirementGuide | null {
+  const matchingDocuments = documentsForRequirement(documents, requirement);
+  const manuallyLinkedDocument = matchingDocuments.find((document) => document.requirementId === requirement.id);
   const matchingResource = resourcesForRequirement(resources, requirement.id, requirement.name)
     .find((resource) => (
       resource.status === "ACTIVE"
@@ -409,7 +416,7 @@ export function requirementGuideFor(
         ))
     ));
 
-  return matchingResource ?? documentsForRequirement(documents, requirement)[0] ?? null;
+  return manuallyLinkedDocument ?? matchingResource ?? matchingDocuments[0] ?? null;
 }
 
 export function roleDefinitionsForMeeting(roleDefinitions: RoleDefinition[], meeting: Meeting) {
