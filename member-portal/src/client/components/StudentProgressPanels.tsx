@@ -35,15 +35,19 @@ export function StudentHomeSummaryView({
   user,
   progress,
   paymentStatus,
+  resources = [],
   error = "",
   isLoading = false
 }: {
   user: PortalUser;
   progress: StudentProgress | null;
   paymentStatus: OwnMemberPaymentStatus | null;
+  resources?: ResourceLink[];
   error?: string;
   isLoading?: boolean;
 }) {
+  const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
+  const [missingGuideRequirement, setMissingGuideRequirement] = useState<StudentProgress["requirements"][number]["requirement"] | null>(null);
   const currentBand = progress?.summary.bandLevel ?? "Not set";
   const nextRequirement = progress?.requirements
     .filter((entry) => !entry.isCompleted)
@@ -55,6 +59,19 @@ export function StudentHomeSummaryView({
         || left.requirement.sortOrder - right.requirement.sortOrder;
     })[0];
   const studentName = `${user.firstName} ${user.lastName}`;
+
+  function openNextRequirementGuide() {
+    if (!nextRequirement) return;
+
+    const resource = guideResourceForRequirement(resources, nextRequirement.requirement);
+    setSelectedResource(resource);
+    setMissingGuideRequirement(resource ? null : nextRequirement.requirement);
+  }
+
+  function closeNextRequirementGuide() {
+    setSelectedResource(null);
+    setMissingGuideRequirement(null);
+  }
 
   return (
     <section className="student-home-summary" aria-labelledby="student-summary-title">
@@ -92,14 +109,41 @@ export function StudentHomeSummaryView({
           <span>Program Level</span>
           <strong>{formatProgramLevel(progress?.summary.programLevel)}</strong>
         </article>
-        <article>
+        <article className="student-next-requirement">
           <span>Next Requirement</span>
           <strong>{nextRequirement?.requirement.name || "No pending requirement"}</strong>
           {nextRequirement ? <small>{nextRequirement.requirement.bandLevel}</small> : null}
+          {nextRequirement ? (
+            <button
+              type="button"
+              className="next-requirement-guide-button"
+              aria-label={`Open guide for ${nextRequirement.requirement.name}`}
+              onClick={openNextRequirementGuide}
+            >
+              Open guide
+            </button>
+          ) : null}
         </article>
       </div>
+      <ResourcePanel
+        resource={selectedResource}
+        missingGuide={missingGuideRequirement ? {
+          title: missingGuideRequirement.name,
+          programLevel: missingGuideRequirement.programLevel,
+          bandLevel: missingGuideRequirement.bandLevel,
+          requirementName: missingGuideRequirement.name
+        } : null}
+        onClose={closeNextRequirementGuide}
+      />
     </section>
   );
+}
+
+export function guideResourceForRequirement(
+  resources: ResourceLink[],
+  requirement: StudentProgress["requirements"][number]["requirement"]
+) {
+  return resourcesForRequirement(resources, requirement.id, requirement.name)[0] ?? null;
 }
 
 export function StudentClubMembersPanel() {

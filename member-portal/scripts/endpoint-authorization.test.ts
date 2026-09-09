@@ -65,6 +65,7 @@ const state = {
   meetingDeletionSteps: {} as Record<string, string[]>,
   meetingRelatedDeleteCounts: {} as Record<string, Record<string, number>>,
   lastDocumentWhere: null as any,
+  lastResourceWhere: null as any,
   lastNoticeWhere: null as any,
   lastReportWhere: null as any,
   lastStudentUpdate: null as any,
@@ -182,7 +183,7 @@ patchModel("centreFacilitator", {
 patchModel("studentClubMembership", {
   findMany: ({ where, select }: any = {}) => {
     if (where?.student?.userId === users.student.id) {
-      return [{ clubId: assignedClubId }];
+      return [{ clubId: assignedClubId, club: { centreId: "centre-1" } }];
     }
 
     if (where?.studentId === assignedStudentId) {
@@ -430,17 +431,19 @@ patchModel("notice", {
   delete: ({ where }: any) => noticeRecords().find((notice) => notice.id === where.id) ?? noticeRecord(where.id, assignedClubId)
 });
 patchModel("resourceLink", {
-  findMany: ({ where }: any = {}) => [
-    resourceRecord(null),
-    resourceRecord("centre-1"),
-    resourceRecord("centre-2")
-  ].filter((resource) => {
-    if (where?.centreId?.in) return Boolean(resource.centreId && where.centreId.in.includes(resource.centreId));
-    if (where?.OR) return where.OR.some((clause: any) => clause.centreId === null
-      ? resource.centreId === null
-      : Boolean(resource.centreId && clause.centreId?.in?.includes(resource.centreId)));
-    return true;
-  }),
+  findMany: ({ where }: any = {}) => {
+    state.lastResourceWhere = where;
+    return [
+      resourceRecord(null, { id: "resource-global", requirementId: "requirement-1", requirement: requirementRecord() }),
+      resourceRecord("centre-1", { id: "resource-next", requirementId: "requirement-orange", requirement: orangeRequirementRecord() }),
+      resourceRecord("centre-2", { id: "resource-outside" }),
+      resourceRecord("centre-1", { id: "resource-archived", status: "ARCHIVED" })
+    ].filter((resource) => {
+      if (where.status && resource.status !== where.status) return false;
+      if (!resourceMatchesCentreScope(resource, where)) return false;
+      return (where.AND ?? []).every((condition: any) => resourceMatchesCentreScope(resource, condition));
+    });
+  },
   create: ({ data }: any) => {
     state.resourceCreates += 1;
     return resourceRecord(data.centreId ?? null);
@@ -451,7 +454,9 @@ patchModel("resourceLink", {
   updateMany: () => ({ count: 0 })
 });
 patchModel("bandRequirement", {
-  findMany: () => [],
+  findMany: ({ where, select }: any = {}) => where?.programLevel === "JUNIOR" && select?.bandOrder
+    ? [requirementRecord(), orangeRequirementRecord()]
+    : [],
   findUnique: ({ where }: any) => where.id === "requirement-1"
     ? requirementRecord()
     : null,
@@ -734,6 +739,13 @@ try {
   const directorResources = await directorResourcesResponse.json() as { resources: Array<{ centreId: string | null }> };
   assertEqual(directorResources.resources.length === 1 && directorResources.resources[0]?.centreId === "centre-1", true, "center director resource list contains only assigned-centre resources");
   await assertStatus("facilitator cannot add resources", "POST", "/api/resources", Role.FACILITATOR, 403, resourcePayload());
+  const studentResourcesResponse = await assertStatus("student sees only active in-scope requirement resources", "GET", "/api/resources", Role.STUDENT, 200);
+  const studentResources = await studentResourcesResponse.json() as { resources: Array<{ id: string }> };
+  assertEqual(studentResources.resources.some((resource) => resource.id === "resource-global"), true, "student sees an active global requirement resource");
+  assertEqual(studentResources.resources.some((resource) => resource.id === "resource-next"), true, "student sees the active resource for the next requirement");
+  assertEqual(studentResources.resources.some((resource) => resource.id === "resource-outside"), false, "student cannot see out-of-scope resources");
+  assertEqual(studentResources.resources.some((resource) => resource.id === "resource-archived"), false, "student cannot see inactive resources");
+  assertEqual(JSON.stringify(state.lastResourceWhere).includes("requirement-orange"), true, "student resource scope includes the next active requirement without exposing every future requirement");
   await assertStatus("student cannot delete resources", "DELETE", "/api/resources/resource-1", Role.STUDENT, 403);
   await assertStatus("admin can delete resources", "DELETE", "/api/resources/resource-1", Role.ADMIN, 200);
   await assertStatus("admin resource list excludes confidential fields", "GET", "/api/resources", Role.ADMIN, 200);
@@ -1096,6 +1108,14 @@ function studentRecordForInclude(studentId: string, userId: string, clubId: stri
     if (!include?.[relation]) delete record[relation];
   }
 
+  if (include?.requirementProgress && !include?.attendance) {
+    record.requirementProgress = [{
+      requirementId: "requirement-1",
+      isCompleted: true,
+      requirement: requirementRecord()
+    }];
+  }
+
   return record;
 }
 
@@ -1368,7 +1388,7 @@ function withoutUndefined(value: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
-function resourceRecord(centreId: string | null) {
+function resourceRecord(centreId: string | null, overrides: Record<string, unknown> = {}) {
   return {
     id: centreId ? `resource-${centreId}` : "resource-global",
     title: "Prepared Speech Guide",
@@ -1387,8 +1407,25 @@ function resourceRecord(centreId: string | null) {
     createdAt: new Date(),
     requirement: null,
     createdBy: { firstName: "Admin", lastName: "User" },
-    updatedBy: null
+    updatedBy: null,
+    ...overrides
   };
+}
+
+function resourceMatchesCentreScope(resource: { centreId: string | null }, where: any) {
+  if (where?.centreId?.in) {
+    return Boolean(resource.centreId && where.centreId.in.includes(resource.centreId));
+  }
+
+  const centreClauses = Array.isArray(where?.OR)
+    ? where.OR.filter((clause: any) => Object.prototype.hasOwnProperty.call(clause, "centreId"))
+    : [];
+
+  if (!centreClauses.length) return true;
+
+  return centreClauses.some((clause: any) => clause.centreId === null
+    ? resource.centreId === null
+    : Boolean(resource.centreId && clause.centreId?.in?.includes(resource.centreId)));
 }
 
 function requirementRecord() {
@@ -1403,5 +1440,16 @@ function requirementRecord() {
     targetCount: 1,
     sortOrder: 1,
     isActive: true
+  };
+}
+
+function orangeRequirementRecord() {
+  return {
+    ...requirementRecord(),
+    id: "requirement-orange",
+    bandLevel: "Orange I",
+    bandOrder: 4,
+    name: "Storytelling",
+    sortOrder: 1
   };
 }

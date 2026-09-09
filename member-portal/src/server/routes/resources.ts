@@ -320,16 +320,31 @@ async function getStudentResourceContext(userId: string) {
     ...visibleMeetingRoleSlots.map((slot) => slot.roleDefinition.name),
     ...visibleMeetingRoleSlots.map((slot) => slot.slotLabel).filter(Boolean)
   ];
-  const currentAndPreviousRequirements = programLevel && currentBandOrder
+  const activeRequirements = programLevel && currentBandOrder
     ? await prisma.bandRequirement.findMany({
       where: {
         programLevel,
-        isActive: true,
-        bandOrder: { lte: currentBandOrder }
+        isActive: true
       },
-      select: { id: true }
+      select: { id: true, bandLevel: true, bandOrder: true, sortOrder: true },
+      orderBy: [{ bandOrder: "asc" }, { sortOrder: "asc" }]
     })
     : [];
+  const completedRequirementIds = new Set(
+    student.requirementProgress.filter((entry) => entry.isCompleted).map((entry) => entry.requirementId)
+  );
+  const nextRequirement = activeRequirements
+    .filter((requirement) => !completedRequirementIds.has(requirement.id))
+    .sort((left, right) => {
+      const leftIsCurrentBand = left.bandLevel === student.bandLevel ? 0 : 1;
+      const rightIsCurrentBand = right.bandLevel === student.bandLevel ? 0 : 1;
+      return leftIsCurrentBand - rightIsCurrentBand
+        || left.bandOrder - right.bandOrder
+        || left.sortOrder - right.sortOrder;
+    })[0];
+  const currentAndPreviousRequirementIds = activeRequirements
+    .filter((requirement) => requirement.bandOrder <= (currentBandOrder ?? 0))
+    .map((requirement) => requirement.id);
 
   return {
     programLevel,
@@ -339,7 +354,8 @@ async function getStudentResourceContext(userId: string) {
     roleResourceKeys: [...new Set(visibleRoleNames.map(roleResourceKey))],
     requirementIds: [...new Set([
       ...student.requirementProgress.map((entry) => entry.requirementId),
-      ...currentAndPreviousRequirements.map((requirement) => requirement.id)
+      ...currentAndPreviousRequirementIds,
+      ...(nextRequirement ? [nextRequirement.id] : [])
     ])]
   };
 }

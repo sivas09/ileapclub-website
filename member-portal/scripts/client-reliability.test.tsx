@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type LearningReflection, type Meeting, type MemberPointsProgress, type ResourceLink } from "../src/client/api";
+import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type BandRequirement, type LearningReflection, type Meeting, type MemberPointsProgress, type ResourceLink, type StudentProgress } from "../src/client/api";
 import { AttendanceRosterForm, BandProgressEmptyState, MeetingAttendancePanel, MeetingEditForm, MeetingSelectionPrompt, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
-import { attendanceStatusLabel, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentPointsProgress, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
+import { attendanceStatusLabel, guideResourceForRequirement, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentPointsProgress, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import { DocumentAddPermissionNotice, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
@@ -19,7 +19,9 @@ import {
   groupResourceLinks,
   overviewLinksForRole,
   portalNavigationItems,
+  ResourcePanel,
   resourceGroupFor,
+  resourcesForRequirement,
   sectionHrefForHash
 } from "../src/client/components/portalShared";
 
@@ -265,6 +267,57 @@ assert.match(studentOverviewMarkup, /Payment Status/, "Student Overview shows th
 assert.match(studentOverviewMarkup, />Paid</, "Student Overview shows a Paid status.");
 assert.match(studentOverviewMarkup, /Payment received for this month\. Thank you\./, "Student Overview shows the paid confirmation note.");
 
+const seniorWhiteRequirement = requirementFixture("senior-white-induction", "SENIOR", "White", 1, "Induction Speech", "Speech");
+const seniorOrangeRequirement = requirementFixture("senior-orange-storytelling", "SENIOR", "Orange I", 4, "Storytelling", "Speech");
+const juniorRequirement = requirementFixture("junior-white-show-tell", "JUNIOR", "White", 1, "Show & Tell", "Presentation");
+const seniorWhiteResource = requirementResourceFixture("guide-senior-white", seniorWhiteRequirement);
+const seniorOrangeResource = requirementResourceFixture("guide-senior-orange", seniorOrangeRequirement);
+const juniorResource = requirementResourceFixture("guide-junior-white", juniorRequirement);
+
+for (const [requirement, resource, expectedLabel] of [
+  [seniorWhiteRequirement, seniorWhiteResource, "Senior White Induction Speech"],
+  [seniorOrangeRequirement, seniorOrangeResource, "Senior Orange I Storytelling"],
+  [juniorRequirement, juniorResource, "Junior White Show & Tell"]
+] as const) {
+  const requirementOverviewMarkup = renderToStaticMarkup(
+    <StudentHomeSummaryView
+      user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
+      progress={progressForRequirement(parsedProgress, requirement)}
+      paymentStatus={null}
+      resources={[resource]}
+    />
+  );
+  assert.match(requirementOverviewMarkup, new RegExp(requirement.name.replace("&", "&amp;")), `${expectedLabel} appears in the Overview Next Requirement card.`);
+  assert.match(requirementOverviewMarkup, new RegExp(`aria-label="Open guide for ${requirement.name.replace("&", "&amp;")}"`), `${expectedLabel} has a guide action.`);
+  assert.match(requirementOverviewMarkup, />Open guide<\/button>/, `${expectedLabel} renders a clear Open guide button.`);
+  assert.strictEqual(guideResourceForRequirement([resource], requirement), resource, `${expectedLabel} resolves its linked resource by requirement.`);
+}
+
+const sharedRequirementResources = [seniorOrangeResource];
+const overviewGuide = guideResourceForRequirement(sharedRequirementResources, seniorOrangeRequirement);
+const myProgressGuides = resourcesForRequirement(sharedRequirementResources, seniorOrangeRequirement.id, seniorOrangeRequirement.name);
+const resourcesPageGuides = sharedRequirementResources.filter((resource) => resource.requirementId === seniorOrangeRequirement.id);
+assert.strictEqual(overviewGuide, seniorOrangeResource, "Overview reuses the linked requirement resource object.");
+assert.strictEqual(myProgressGuides[0], seniorOrangeResource, "My Progress resolves the same linked requirement resource object.");
+assert.strictEqual(resourcesPageGuides[0], seniorOrangeResource, "Resources receives the same linked requirement resource object.");
+assert.equal(new Set([...myProgressGuides, ...resourcesPageGuides].map((resource) => resource.id)).size, 1, "One linked resource is reused across Overview, My Progress, and Resources without duplication.");
+
+assert.equal(guideResourceForRequirement([], juniorRequirement), null, "A missing requirement guide does not create a resource record.");
+const missingGuideMarkup = renderToStaticMarkup(
+  <ResourcePanel
+    resource={null}
+    missingGuide={{
+      title: juniorRequirement.name,
+      programLevel: juniorRequirement.programLevel,
+      bandLevel: juniorRequirement.bandLevel,
+      requirementName: juniorRequirement.name
+    }}
+    onClose={() => undefined}
+  />
+);
+assert.match(missingGuideMarkup, /Guide link has not been added yet\./, "A missing Overview guide opens friendly guidance.");
+assert.match(missingGuideMarkup, /Links not added yet/, "A missing Overview guide uses the shared empty-link message.");
+
 const unpaidStudentOverviewMarkup = renderToStaticMarkup(
   <StudentHomeSummaryView
     user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
@@ -430,6 +483,56 @@ function resourceFixture(id: string, title: string, category: string, roleKey: s
     status: "ACTIVE",
     createdAt: "2026-08-16T12:00:00.000Z",
     createdBy: "Admin"
+  };
+}
+
+function requirementFixture(
+  id: string,
+  programLevel: "JUNIOR" | "SENIOR",
+  bandLevel: string,
+  bandOrder: number,
+  name: string,
+  requirementType: string
+): BandRequirement {
+  return {
+    id,
+    programLevel,
+    bandLevel,
+    bandOrder,
+    name,
+    description: `${name} requirement`,
+    requirementType,
+    targetCount: 1,
+    sortOrder: 1,
+    isActive: true
+  };
+}
+
+function requirementResourceFixture(id: string, requirement: BandRequirement): ResourceLink {
+  return {
+    ...resourceFixture(id, `${requirement.name} Guide`, "Requirement Guide"),
+    documentUrl: `https://example.com/${id}`,
+    programLevel: requirement.programLevel,
+    bandLevel: requirement.bandLevel,
+    bandOrder: requirement.bandOrder,
+    requirementId: requirement.id,
+    requirementName: requirement.name
+  };
+}
+
+function progressForRequirement(progress: StudentProgress, requirement: BandRequirement): StudentProgress {
+  return {
+    ...progress,
+    requirements: [{
+      requirement,
+      currentCount: 0,
+      isCompleted: false
+    }],
+    summary: {
+      ...progress.summary,
+      programLevel: requirement.programLevel,
+      bandLevel: requirement.bandLevel
+    }
   };
 }
 

@@ -206,8 +206,23 @@ export function HelpLabel({
   );
 }
 
-export function ResourcePanel({ resource, onClose }: { resource: ResourceLink | null; onClose: () => void }) {
-  if (!resource) {
+export type MissingRequirementGuide = {
+  title: string;
+  programLevel?: string | null;
+  bandLevel?: string | null;
+  requirementName: string;
+};
+
+export function ResourcePanel({
+  resource,
+  missingGuide = null,
+  onClose
+}: {
+  resource: ResourceLink | null;
+  missingGuide?: MissingRequirementGuide | null;
+  onClose: () => void;
+}) {
+  if (!resource && !missingGuide) {
     return null;
   }
 
@@ -216,19 +231,21 @@ export function ResourcePanel({ resource, onClose }: { resource: ResourceLink | 
       <section className="resource-panel" role="dialog" aria-modal="true" aria-labelledby="resource-panel-title" onClick={(event) => event.stopPropagation()}>
         <div className="resource-panel-header">
           <div>
-            <p className="eyebrow">{resource.category}</p>
-            <h3 id="resource-panel-title">{resource.title}</h3>
+            <p className="eyebrow">{resource?.category ?? "Requirement Guide"}</p>
+            <h3 id="resource-panel-title">{resource?.title ?? missingGuide?.title}</h3>
           </div>
           <button type="button" aria-label="Close help panel" onClick={onClose}>Close</button>
         </div>
-        <p>{resource.explanation}</p>
+        <p>{resource?.explanation ?? "Guide link has not been added yet."}</p>
         <dl className="document-meta">
-          <div><dt>Role</dt><dd>{resource.roleKey || "Any"}</dd></div>
-          <div><dt>Program</dt><dd>{formatProgramLevel(resource.programLevel)}</dd></div>
-          <div><dt>Band</dt><dd>{resource.bandLevel || "Any"}</dd></div>
-          <div><dt>Requirement</dt><dd>{resource.requirementName || "Any"}</dd></div>
+          <div><dt>Role</dt><dd>{resource?.roleKey || "Any"}</dd></div>
+          <div><dt>Program</dt><dd>{formatProgramLevel(resource?.programLevel ?? missingGuide?.programLevel)}</dd></div>
+          <div><dt>Band</dt><dd>{resource?.bandLevel || missingGuide?.bandLevel || "Any"}</dd></div>
+          <div><dt>Requirement</dt><dd>{resource?.requirementName || missingGuide?.requirementName || "Any"}</dd></div>
         </dl>
-        <ResourceActions resource={resource} />
+        {resource
+          ? <ResourceActions resource={resource} />
+          : <div className="document-actions"><span className="document-disabled-action">Links not added yet</span></div>}
       </section>
     </div>
   );

@@ -4172,6 +4172,35 @@ body {
   line-height: 1.35;
 }
 
+.student-home-grid .student-next-requirement {
+  border-color: #8cc8df;
+  background: #f0f9fd;
+}
+
+.next-requirement-guide-button {
+  width: fit-content;
+  min-height: 34px;
+  margin-top: 4px;
+  border: 1px solid #2387b4;
+  border-radius: 7px;
+  padding: 0 11px;
+  color: #005f89;
+  background: #ffffff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.next-requirement-guide-button:hover,
+.next-requirement-guide-button:focus-visible {
+  color: #ffffff;
+  background: #006f9f;
+}
+
+.next-requirement-guide-button:focus-visible {
+  outline: 3px solid rgba(0, 137, 202, 0.24);
+  outline-offset: 2px;
+}
+
 .student-quick-links {
   display: flex;
   flex-wrap: wrap;
