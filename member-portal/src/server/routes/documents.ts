@@ -78,10 +78,24 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
     }
 
     where.programLevel = studentContext.programLevel;
-    where.bandOrder = { lte: studentContext.currentBandOrder };
-    where.OR = [
-      { clubId: null },
-      { clubId: { in: studentContext.clubIds } }
+    where.AND = [
+      {
+        OR: [
+          { clubId: null },
+          { clubId: { in: studentContext.clubIds } }
+        ]
+      },
+      studentContext.nextRequirement && studentContext.nextRequirement.bandOrder > studentContext.currentBandOrder
+        ? {
+          OR: [
+            { bandOrder: { lte: studentContext.currentBandOrder } },
+            {
+              bandOrder: studentContext.nextRequirement.bandOrder,
+              title: { contains: studentContext.nextRequirement.name, mode: "insensitive" }
+            }
+          ]
+        }
+        : { bandOrder: { lte: studentContext.currentBandOrder } }
     ];
   } else if (visibleClubIds !== null) {
     if (isCenterDirector(user)) {
@@ -341,7 +355,8 @@ async function getStudentDocumentContext(userId: string) {
           club: { isActive: true, centre: { isActive: true } }
         },
         include: { club: true }
-      }
+      },
+      requirementProgress: true
     }
   });
 
@@ -350,12 +365,33 @@ async function getStudentDocumentContext(userId: string) {
   }
 
   const programLevel = getStudentProgramLevel(student);
+  const currentBandOrder = getBandOrder(student.bandLevel);
+  const activeRequirements = programLevel && currentBandOrder
+    ? await prisma.bandRequirement.findMany({
+      where: { programLevel, isActive: true },
+      select: { id: true, name: true, bandLevel: true, bandOrder: true, sortOrder: true },
+      orderBy: [{ bandOrder: "asc" }, { sortOrder: "asc" }]
+    })
+    : [];
+  const completedRequirementIds = new Set(
+    student.requirementProgress.filter((entry) => entry.isCompleted).map((entry) => entry.requirementId)
+  );
+  const nextRequirement = activeRequirements
+    .filter((requirement) => !completedRequirementIds.has(requirement.id))
+    .sort((left, right) => {
+      const leftIsCurrentBand = left.bandLevel === student.bandLevel ? 0 : 1;
+      const rightIsCurrentBand = right.bandLevel === student.bandLevel ? 0 : 1;
+      return leftIsCurrentBand - rightIsCurrentBand
+        || left.bandOrder - right.bandOrder
+        || left.sortOrder - right.sortOrder;
+    })[0] ?? null;
 
   return {
     programLevel,
     currentBandLevel: student.bandLevel,
-    currentBandOrder: getBandOrder(student.bandLevel),
-    clubIds: student.clubMemberships.map((membership) => membership.clubId)
+    currentBandOrder,
+    clubIds: student.clubMemberships.map((membership) => membership.clubId),
+    nextRequirement
   };
 }
 

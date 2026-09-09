@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import {
   createLearningReflection,
   deleteLearningReflection,
+  getBandDocuments,
   getMemberDetail,
   getOwnMemberPointsProgress,
   getMembers,
@@ -18,6 +19,7 @@ import {
   StudentProgress,
   updateLearningReflection
 } from "../api";
+import type { BandDocument } from "../api";
 import {
   DataPanel,
   formatBandLadder,
@@ -26,7 +28,7 @@ import {
   getNextBandLevel,
   HelpLabel,
   ResourcePanel,
-  resourcesForRequirement,
+  requirementGuideFor,
   resourcesForRoleName,
   SummaryTile
 } from "./portalShared";
@@ -36,6 +38,7 @@ export function StudentHomeSummaryView({
   progress,
   paymentStatus,
   resources = [],
+  documents = [],
   error = "",
   isLoading = false
 }: {
@@ -43,10 +46,12 @@ export function StudentHomeSummaryView({
   progress: StudentProgress | null;
   paymentStatus: OwnMemberPaymentStatus | null;
   resources?: ResourceLink[];
+  documents?: BandDocument[];
   error?: string;
   isLoading?: boolean;
 }) {
   const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<BandDocument | null>(null);
   const [missingGuideRequirement, setMissingGuideRequirement] = useState<StudentProgress["requirements"][number]["requirement"] | null>(null);
   const currentBand = progress?.summary.bandLevel ?? "Not set";
   const nextRequirement = progress?.requirements
@@ -63,13 +68,15 @@ export function StudentHomeSummaryView({
   function openNextRequirementGuide() {
     if (!nextRequirement) return;
 
-    const resource = guideResourceForRequirement(resources, nextRequirement.requirement);
-    setSelectedResource(resource);
-    setMissingGuideRequirement(resource ? null : nextRequirement.requirement);
+    const guide = guideResourceForRequirement(resources, nextRequirement.requirement, documents);
+    setSelectedResource(isResourceLink(guide) ? guide : null);
+    setSelectedDocument(isBandDocument(guide) ? guide : null);
+    setMissingGuideRequirement(guide ? null : nextRequirement.requirement);
   }
 
   function closeNextRequirementGuide() {
     setSelectedResource(null);
+    setSelectedDocument(null);
     setMissingGuideRequirement(null);
   }
 
@@ -127,6 +134,7 @@ export function StudentHomeSummaryView({
       </div>
       <ResourcePanel
         resource={selectedResource}
+        document={selectedDocument}
         missingGuide={missingGuideRequirement ? {
           title: missingGuideRequirement.name,
           programLevel: missingGuideRequirement.programLevel,
@@ -141,9 +149,18 @@ export function StudentHomeSummaryView({
 
 export function guideResourceForRequirement(
   resources: ResourceLink[],
-  requirement: StudentProgress["requirements"][number]["requirement"]
+  requirement: StudentProgress["requirements"][number]["requirement"],
+  documents: BandDocument[] = []
 ) {
-  return resourcesForRequirement(resources, requirement.id, requirement.name)[0] ?? null;
+  return requirementGuideFor(resources, documents, requirement);
+}
+
+function isResourceLink(guide: ResourceLink | BandDocument | null): guide is ResourceLink {
+  return Boolean(guide && "explanation" in guide);
+}
+
+function isBandDocument(guide: ResourceLink | BandDocument | null): guide is BandDocument {
+  return Boolean(guide && "fileUrl" in guide);
 }
 
 export function StudentClubMembersPanel() {
@@ -232,20 +249,43 @@ export function StudentProgressDashboard() {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [pointsProgress, setPointsProgress] = useState<MemberPointsProgress | null>(null);
   const [resources, setResources] = useState<ResourceLink[]>([]);
+  const [documents, setDocuments] = useState<BandDocument[]>([]);
   const [selectedResource, setSelectedResource] = useState<ResourceLink | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<BandDocument | null>(null);
+  const [guideRequirement, setGuideRequirement] = useState<StudentProgress["requirements"][number]["requirement"] | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getStudentProgress(), getResourceLinks(), getOwnMemberPointsProgress()])
-      .then(([progressResult, resourceResult, pointsResult]) => {
+    Promise.all([getStudentProgress(), getResourceLinks(), getBandDocuments(), getOwnMemberPointsProgress()])
+      .then(([progressResult, resourceResult, documentResult, pointsResult]) => {
         setProgress(progressResult);
         setResources(resourceResult.resources);
+        setDocuments(documentResult.documents);
         setPointsProgress(pointsResult);
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load progress."))
       .finally(() => setIsLoading(false));
   }, []);
+
+  function openRequirementGuide(requirement: StudentProgress["requirements"][number]["requirement"]) {
+    const guide = guideResourceForRequirement(resources, requirement, documents);
+    setSelectedResource(isResourceLink(guide) ? guide : null);
+    setSelectedDocument(isBandDocument(guide) ? guide : null);
+    setGuideRequirement(requirement);
+  }
+
+  function openRoleResource(resource: ResourceLink) {
+    setSelectedDocument(null);
+    setGuideRequirement(null);
+    setSelectedResource(resource);
+  }
+
+  function closeGuide() {
+    setSelectedResource(null);
+    setSelectedDocument(null);
+    setGuideRequirement(null);
+  }
 
   const feedbackRows = progress ? [
     ...progress.memberFeedback.map((entry) => ({
@@ -343,11 +383,15 @@ export function StudentProgressDashboard() {
                     <div>
                       <strong>
                         {entry.requirement.bandLevel}: {entry.requirement.requirementType} -{" "}
-                        <HelpLabel
-                          label={entry.requirement.name}
-                          resources={resourcesForRequirement(resources, entry.requirement.id, entry.requirement.name)}
-                          onSelectResource={setSelectedResource}
-                        />
+                        <span className="help-label">
+                          <span>{entry.requirement.name}</span>
+                          <button
+                            type="button"
+                            className="help-icon"
+                            aria-label={`Open help for ${entry.requirement.name}`}
+                            onClick={() => openRequirementGuide(entry.requirement)}
+                          >i</button>
+                        </span>
                       </strong>
                       <span>
                         {entry.requirement.description}
@@ -372,7 +416,7 @@ export function StudentProgressDashboard() {
                         <HelpLabel
                           label={slot.roleDefinition.name}
                           resources={resourcesForRoleName(resources, slot.roleDefinition.name)}
-                          onSelectResource={setSelectedResource}
+                          onSelectResource={openRoleResource}
                         />
                       </strong>
                       <span>{slot.meeting.title} - {formatDate(slot.meeting.meetingDate)} - score: {slot.score?.score ?? "Not scored"}</span>
@@ -391,7 +435,7 @@ export function StudentProgressDashboard() {
                         <HelpLabel
                           label={`${score.roleSlot.roleDefinition.name}: ${score.score}/100`}
                           resources={resourcesForRoleName(resources, score.roleSlot.roleDefinition.name)}
-                          onSelectResource={setSelectedResource}
+                          onSelectResource={openRoleResource}
                         />
                       </strong>
                       <span>{score.meeting.title} - {score.feedback || "No feedback entered yet."}</span>
@@ -416,7 +460,17 @@ export function StudentProgressDashboard() {
           </div>
         </>
       ) : null}
-      <ResourcePanel resource={selectedResource} onClose={() => setSelectedResource(null)} />
+      <ResourcePanel
+        resource={selectedResource}
+        document={selectedDocument}
+        missingGuide={guideRequirement ? {
+          title: guideRequirement.name,
+          programLevel: guideRequirement.programLevel,
+          bandLevel: guideRequirement.bandLevel,
+          requirementName: guideRequirement.name
+        } : null}
+        onClose={closeGuide}
+      />
     </section>
   );
 }

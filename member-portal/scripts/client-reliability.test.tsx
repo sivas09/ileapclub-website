@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type BandRequirement, type LearningReflection, type Meeting, type MemberPointsProgress, type ResourceLink, type StudentProgress } from "../src/client/api";
+import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type BandDocument, type BandRequirement, type LearningReflection, type Meeting, type MemberPointsProgress, type ResourceLink, type StudentProgress } from "../src/client/api";
 import { AttendanceRosterForm, BandProgressEmptyState, MeetingAttendancePanel, MeetingEditForm, MeetingSelectionPrompt, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
 import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
@@ -14,6 +14,7 @@ import {
   canManageUserFromSetup,
   canResetUserPasswordFromSetup,
   dateInputValue,
+  documentsForRequirement,
   formatDate,
   formatRole,
   groupResourceLinks,
@@ -273,6 +274,7 @@ const juniorRequirement = requirementFixture("junior-white-show-tell", "JUNIOR",
 const seniorWhiteResource = requirementResourceFixture("guide-senior-white", seniorWhiteRequirement);
 const seniorOrangeResource = requirementResourceFixture("guide-senior-orange", seniorOrangeRequirement);
 const juniorResource = requirementResourceFixture("guide-junior-white", juniorRequirement);
+const seniorWhiteDocument = requirementDocumentFixture("document-senior-white", seniorWhiteRequirement, "Session Materials");
 
 for (const [requirement, resource, expectedLabel] of [
   [seniorWhiteRequirement, seniorWhiteResource, "Senior White Induction Speech"],
@@ -301,6 +303,48 @@ assert.strictEqual(overviewGuide, seniorOrangeResource, "Overview reuses the lin
 assert.strictEqual(myProgressGuides[0], seniorOrangeResource, "My Progress resolves the same linked requirement resource object.");
 assert.strictEqual(resourcesPageGuides[0], seniorOrangeResource, "Resources receives the same linked requirement resource object.");
 assert.equal(new Set([...myProgressGuides, ...resourcesPageGuides].map((resource) => resource.id)).size, 1, "One linked resource is reused across Overview, My Progress, and Resources without duplication.");
+
+const existingDocumentGuide = guideResourceForRequirement([], seniorWhiteRequirement, [seniorWhiteDocument]);
+assert.strictEqual(existingDocumentGuide, seniorWhiteDocument, "Senior White Induction Speech reuses the existing BandDocument guide.");
+assert.strictEqual(documentsForRequirement([seniorWhiteDocument], seniorWhiteRequirement)[0], seniorWhiteDocument, "My Progress and Overview use the same document matcher.");
+assert.strictEqual([seniorWhiteDocument].find((document) => document.id === existingDocumentGuide?.id), seniorWhiteDocument, "Resources receives the same persisted document without duplication.");
+assert.equal(seniorWhiteDocument.category, "Session Materials", "Requirement document matching is independent of document category.");
+const existingDocumentGuideMarkup = renderToStaticMarkup(
+  <ResourcePanel
+    resource={null}
+    document={seniorWhiteDocument}
+    missingGuide={{
+      title: seniorWhiteRequirement.name,
+      programLevel: seniorWhiteRequirement.programLevel,
+      bandLevel: seniorWhiteRequirement.bandLevel,
+      requirementName: seniorWhiteRequirement.name
+    }}
+    onClose={() => undefined}
+  />
+);
+assert.match(existingDocumentGuideMarkup, /Induction Speech Guide/, "The requirement popup displays the existing document title.");
+assert.match(existingDocumentGuideMarkup, /href="https:\/\/docs\.google\.com\/document\/d\/document-senior-white"/, "The requirement popup displays the existing Google Doc link.");
+assert.doesNotMatch(existingDocumentGuideMarkup, /Links not added yet/, "A linked existing document does not show the missing-guide message.");
+
+const noLinkDocument = { ...seniorWhiteDocument, id: "document-without-link", fileUrl: "" };
+const noLinkGuideMarkup = renderToStaticMarkup(
+  <ResourcePanel resource={null} document={noLinkDocument} missingGuide={{
+    title: seniorWhiteRequirement.name,
+    programLevel: seniorWhiteRequirement.programLevel,
+    bandLevel: seniorWhiteRequirement.bandLevel,
+    requirementName: seniorWhiteRequirement.name
+  }} onClose={() => undefined} />
+);
+assert.match(noLinkGuideMarkup, /Guide exists, but no link has been added yet\./, "A matching document without a link has a specific friendly message.");
+
+const archivedDocument = { ...seniorWhiteDocument, id: "archived-document", status: "ARCHIVED" };
+const outOfProgramDocument = { ...seniorWhiteDocument, id: "junior-document", programLevel: "JUNIOR" };
+const outOfBandDocument = { ...seniorWhiteDocument, id: "orange-document", bandLevel: "Orange I", bandOrder: 4 };
+assert.equal(
+  guideResourceForRequirement([], seniorWhiteRequirement, [archivedDocument, outOfProgramDocument, outOfBandDocument]),
+  null,
+  "Inactive, out-of-program, and out-of-band documents cannot resolve as requirement guides."
+);
 
 assert.equal(guideResourceForRequirement([], juniorRequirement), null, "A missing requirement guide does not create a resource record.");
 const missingGuideMarkup = renderToStaticMarkup(
@@ -517,6 +561,27 @@ function requirementResourceFixture(id: string, requirement: BandRequirement): R
     bandOrder: requirement.bandOrder,
     requirementId: requirement.id,
     requirementName: requirement.name
+  };
+}
+
+function requirementDocumentFixture(id: string, requirement: BandRequirement, category: string): BandDocument {
+  return {
+    id,
+    title: `${requirement.name} Guide`,
+    description: `Learn how to prepare and present your ${requirement.name.toLowerCase()}.`,
+    fileName: requirement.name,
+    fileUrl: `https://docs.google.com/document/d/${id}`,
+    programLevel: requirement.programLevel,
+    bandLevel: requirement.bandLevel,
+    bandOrder: requirement.bandOrder,
+    sessionModule: null,
+    clubId: null,
+    clubName: "All clubs",
+    category,
+    uploadedBy: "Admin User",
+    createdAt: "2026-09-01T12:00:00.000Z",
+    updatedAt: "2026-09-01T12:00:00.000Z",
+    status: "ACTIVE"
   };
 }
 

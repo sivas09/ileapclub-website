@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Meeting, MeetingsOverview, MemberDetail, ResourceLink, Role, RoleDefinition } from "../api";
+import type { BandDocument, Meeting, MeetingsOverview, MemberDetail, ResourceLink, Role, RoleDefinition } from "../api";
 import {
   bandLevels,
   documentCategories,
@@ -213,39 +213,60 @@ export type MissingRequirementGuide = {
   requirementName: string;
 };
 
+export type RequirementGuide = ResourceLink | BandDocument;
+
+export type RequirementGuideTarget = {
+  id: string;
+  name: string;
+  programLevel: string;
+  bandLevel: string;
+};
+
 export function ResourcePanel({
   resource,
+  document = null,
   missingGuide = null,
   onClose
 }: {
   resource: ResourceLink | null;
+  document?: BandDocument | null;
   missingGuide?: MissingRequirementGuide | null;
   onClose: () => void;
 }) {
-  if (!resource && !missingGuide) {
+  if (!resource && !document && !missingGuide) {
     return null;
   }
+
+  const documentUrl = document ? documentLink(document) : "";
 
   return (
     <div className="resource-panel-backdrop" role="presentation" onClick={onClose}>
       <section className="resource-panel" role="dialog" aria-modal="true" aria-labelledby="resource-panel-title" onClick={(event) => event.stopPropagation()}>
         <div className="resource-panel-header">
           <div>
-            <p className="eyebrow">{resource?.category ?? "Requirement Guide"}</p>
-            <h3 id="resource-panel-title">{resource?.title ?? missingGuide?.title}</h3>
+            <p className="eyebrow">{resource?.category ?? document?.category ?? "Requirement Guide"}</p>
+            <h3 id="resource-panel-title">{resource?.title ?? document?.title ?? missingGuide?.title}</h3>
           </div>
           <button type="button" aria-label="Close help panel" onClick={onClose}>Close</button>
         </div>
-        <p>{resource?.explanation ?? "Guide link has not been added yet."}</p>
+        <p>{resource?.explanation ?? document?.description ?? (document ? "Guide exists, but no description has been added yet." : "Guide link has not been added yet.")}</p>
         <dl className="document-meta">
           <div><dt>Role</dt><dd>{resource?.roleKey || "Any"}</dd></div>
-          <div><dt>Program</dt><dd>{formatProgramLevel(resource?.programLevel ?? missingGuide?.programLevel)}</dd></div>
-          <div><dt>Band</dt><dd>{resource?.bandLevel || missingGuide?.bandLevel || "Any"}</dd></div>
+          <div><dt>Program</dt><dd>{formatProgramLevel(resource?.programLevel ?? document?.programLevel ?? missingGuide?.programLevel)}</dd></div>
+          <div><dt>Band</dt><dd>{resource?.bandLevel || document?.bandLevel || missingGuide?.bandLevel || "Any"}</dd></div>
           <div><dt>Requirement</dt><dd>{resource?.requirementName || missingGuide?.requirementName || "Any"}</dd></div>
         </dl>
         {resource
           ? <ResourceActions resource={resource} />
-          : <div className="document-actions"><span className="document-disabled-action">Links not added yet</span></div>}
+          : document
+            ? (
+              <div className="document-actions">
+                {documentUrl
+                  ? <a href={documentUrl} target="_blank" rel="noreferrer">Open Document</a>
+                  : <span className="document-disabled-action">Guide exists, but no link has been added yet.</span>}
+              </div>
+            )
+            : <div className="document-actions"><span className="document-disabled-action">Links not added yet</span></div>}
       </section>
     </div>
   );
@@ -356,6 +377,39 @@ export function resourcesForRequirement(resources: ResourceLink[], requirementId
     return normalizeResourceKey(resource.requirementName ?? resource.title).includes(normalizedRequirementName)
       || normalizedRequirementName.includes(normalizeResourceKey(resource.requirementName ?? resource.title));
   });
+}
+
+export function documentsForRequirement(documents: BandDocument[], requirement: RequirementGuideTarget) {
+  const normalizedRequirementName = normalizeResourceKey(requirement.name);
+
+  return documents.filter((document) => (
+    document.status === "ACTIVE"
+    && normalizeProgramLevel(document.programLevel) === normalizeProgramLevel(requirement.programLevel)
+    && normalizeResourceKey(document.bandLevel) === normalizeResourceKey(requirement.bandLevel)
+    && normalizeResourceKey(document.title).includes(normalizedRequirementName)
+  ));
+}
+
+export function requirementGuideFor(
+  resources: ResourceLink[],
+  documents: BandDocument[],
+  requirement: RequirementGuideTarget
+): RequirementGuide | null {
+  const matchingResource = resourcesForRequirement(resources, requirement.id, requirement.name)
+    .find((resource) => (
+      resource.status === "ACTIVE"
+      && (resource.requirementId === requirement.id
+        ? (!resource.programLevel || normalizeProgramLevel(resource.programLevel) === normalizeProgramLevel(requirement.programLevel))
+          && (!resource.bandLevel || normalizeResourceKey(resource.bandLevel) === normalizeResourceKey(requirement.bandLevel))
+        : Boolean(
+          resource.programLevel
+          && resource.bandLevel
+          && normalizeProgramLevel(resource.programLevel) === normalizeProgramLevel(requirement.programLevel)
+          && normalizeResourceKey(resource.bandLevel) === normalizeResourceKey(requirement.bandLevel)
+        ))
+    ));
+
+  return matchingResource ?? documentsForRequirement(documents, requirement)[0] ?? null;
 }
 
 export function roleDefinitionsForMeeting(roleDefinitions: RoleDefinition[], meeting: Meeting) {

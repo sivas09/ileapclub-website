@@ -5,6 +5,7 @@ import {
   clearToken,
   getCurrentUser,
   getAdminOverview,
+  getBandDocuments,
   getOwnMemberPaymentStatus,
   getResourceLinks,
   getStoredToken,
@@ -18,6 +19,7 @@ import {
   storeToken,
   StudentProgress
 } from "./api";
+import type { BandDocument } from "./api";
 import { AdminWorkspace } from "./components/AdminWorkspace";
 import { CenterDirectorScopeView } from "./components/CenterDirectorScopeView";
 import { DocumentsWorkspace } from "./components/DocumentsWorkspace";
@@ -341,21 +343,23 @@ function StudentHomeSummary({ user }: { user: PortalUser }) {
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<OwnMemberPaymentStatus | null>(null);
   const [resources, setResources] = useState<ResourceLink[]>([]);
+  const [documents, setDocuments] = useState<BandDocument[]>([]);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getStudentProgress(), getOwnMemberPaymentStatus(), getResourceLinks()])
-      .then(([progressResult, paymentResult, resourceResult]) => {
+    Promise.all([getStudentProgress(), getOwnMemberPaymentStatus(), getResourceLinks(), getBandDocuments()])
+      .then(([progressResult, paymentResult, resourceResult, documentResult]) => {
         setProgress(progressResult);
         setPaymentStatus(paymentResult);
         setResources(resourceResult.resources);
+        setDocuments(documentResult.documents);
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load your dashboard summary."))
       .finally(() => setIsLoading(false));
   }, []);
 
-  return <StudentHomeSummaryView user={user} progress={progress} paymentStatus={paymentStatus} resources={resources} error={error} isLoading={isLoading} />;
+  return <StudentHomeSummaryView user={user} progress={progress} paymentStatus={paymentStatus} resources={resources} documents={documents} error={error} isLoading={isLoading} />;
 }
 
 function ChangePasswordPanel() {

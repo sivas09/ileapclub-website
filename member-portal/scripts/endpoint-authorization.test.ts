@@ -399,7 +399,7 @@ patchModel("memberFeedback", {
 patchModel("bandDocument", {
   findMany: ({ where }: any) => {
     state.lastDocumentWhere = where;
-    return [documentRecord(assignedClubId)];
+    return documentRecords().filter((document) => documentMatchesWhere(document, where));
   },
   create: () => {
     state.documentCreates += 1;
@@ -682,6 +682,16 @@ try {
   assertEqual(state.lastDocumentWhere?.status === "ACTIVE", true, "facilitator document list remains active-only");
   await assertStatus("student cannot request archived documents", "GET", "/api/documents?status=ARCHIVED", Role.STUDENT, 200);
   assertEqual(state.lastDocumentWhere?.status === "ACTIVE", true, "student document list remains active-only");
+  const scopedStudentDocumentsResponse = await assertStatus("student sees scoped active requirement documents", "GET", "/api/documents", Role.STUDENT, 200);
+  const scopedStudentDocumentsPayload = await scopedStudentDocumentsResponse.json() as { documents: Array<{ id: string }> };
+  const scopedStudentDocumentIds = scopedStudentDocumentsPayload.documents.map((document) => document.id);
+  assertEqual(scopedStudentDocumentIds.includes("document-1"), true, "student sees an active current-band document for the assigned club");
+  assertEqual(scopedStudentDocumentIds.includes("document-global"), true, "student sees an active current-band all-clubs document");
+  assertEqual(scopedStudentDocumentIds.includes("document-next"), true, "student sees the active document matching the exact next requirement");
+  assertEqual(scopedStudentDocumentIds.includes("document-other"), false, "student cannot see an out-of-scope club document");
+  assertEqual(scopedStudentDocumentIds.includes("document-archived"), false, "student cannot see an archived document");
+  assertEqual(scopedStudentDocumentIds.includes("document-unrelated-future"), false, "student cannot see unrelated future-band documents");
+  assertEqual(JSON.stringify(scopedStudentDocumentsPayload).includes("passwordHash"), false, "student document responses omit sensitive account fields");
   await assertStatus("admin can delete documents", "DELETE", "/api/documents/document-1", Role.ADMIN, 200);
   await assertStatus("facilitator cannot permanently delete documents", "DELETE", "/api/documents/document-1", Role.FACILITATOR, 403);
 
@@ -1277,22 +1287,53 @@ function roleSlot(id: string, meetingId: string, clubId: string, assignedStudent
   };
 }
 
-function documentRecord(clubId: string | null) {
+function documentRecords() {
+  return [
+    documentRecord(assignedClubId),
+    documentRecord(null, { id: "document-global", title: "Complete first speech Guide" }),
+    documentRecord(assignedClubId, { id: "document-next", title: "Storytelling Guide", bandLevel: "Orange I", bandOrder: 4, category: "Session Materials" }),
+    documentRecord(otherClubId, { id: "document-other" }),
+    documentRecord(assignedClubId, { id: "document-archived", status: "ARCHIVED" }),
+    documentRecord(assignedClubId, { id: "document-unrelated-future", title: "Future Debate Guide", bandLevel: "Orange I", bandOrder: 4 })
+  ];
+}
+
+function documentMatchesWhere(document: ReturnType<typeof documentRecord>, where: any): boolean {
+  if (!where) return true;
+  if (where.status && document.status !== where.status) return false;
+  if (where.programLevel && document.programLevel !== where.programLevel) return false;
+  if (typeof where.bandOrder === "number" && document.bandOrder !== where.bandOrder) return false;
+  if (where.bandOrder?.lte != null && document.bandOrder > where.bandOrder.lte) return false;
+  if (where.title?.contains && !document.title.toLowerCase().includes(String(where.title.contains).toLowerCase())) return false;
+  if (where.clubId === null && document.clubId !== null) return false;
+  if (where.clubId?.in && !where.clubId.in.includes(document.clubId)) return false;
+  if (where.OR && !where.OR.some((condition: any) => documentMatchesWhere(document, condition))) return false;
+  return (where.AND ?? []).every((condition: any) => documentMatchesWhere(document, condition));
+}
+
+function documentRecord(clubId: string | null, overrides: Partial<{
+  id: string;
+  title: string;
+  status: string;
+  bandLevel: string;
+  bandOrder: number;
+  category: string;
+}> = {}) {
   return {
-    id: "document-1",
-    title: "Band checklist",
+    id: overrides.id ?? "document-1",
+    title: overrides.title ?? "Band checklist",
     description: "Checklist",
     fileName: "checklist.pdf",
     fileUrl: "https://example.com/checklist.pdf",
     programLevel: "JUNIOR",
-    bandLevel: "White",
-    bandOrder: 1,
+    bandLevel: overrides.bandLevel ?? "White",
+    bandOrder: overrides.bandOrder ?? 1,
     sessionModule: null,
     clubId,
-    category: "Band Requirements",
+    category: overrides.category ?? "Band Requirements",
     createdAt: new Date(),
     updatedAt: new Date(),
-    status: "ACTIVE",
+    status: overrides.status ?? "ACTIVE",
     club: clubId ? { id: clubId, name: "Assigned Club" } : null,
     uploadedBy: { firstName: "Admin", lastName: "User" }
   };
