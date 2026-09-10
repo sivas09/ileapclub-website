@@ -64,6 +64,23 @@ resourcesRouter.get("/", asyncRoute(async (request, response) => {
     where.AND = [
       { status: "ACTIVE" },
       { OR: [{ centreId: null }, { centreId: { in: scope.centreIds ?? [] } }] },
+      ...(studentContext.programLevel ? [
+        {
+          OR: [
+            { programLevel: null },
+            { programLevel: studentContext.programLevel }
+          ]
+        },
+        {
+          NOT: {
+            programLevel: studentContext.programLevel,
+            title: {
+              startsWith: studentContext.programLevel === "SENIOR" ? "Junior" : "Senior",
+              mode: "insensitive" as const
+            }
+          }
+        }
+      ] : []),
       {
         OR: [
           studentContext.roleKeys.length ? { roleKey: { in: studentContext.roleKeys } } : {},

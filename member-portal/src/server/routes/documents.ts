@@ -81,6 +81,14 @@ documentsRouter.get("/", asyncRoute(async (request, response) => {
     where.programLevel = studentContext.programLevel;
     where.AND = [
       {
+        NOT: {
+          title: {
+            startsWith: studentContext.programLevel === "SENIOR" ? "Junior" : "Senior",
+            mode: "insensitive"
+          }
+        }
+      },
+      {
         OR: [
           { clubId: null },
           { clubId: { in: studentContext.clubIds } }

@@ -18,6 +18,7 @@ import {
   bandLevelOptions,
   documentCategoryOptions,
   documentLink,
+  documentProgramTitleWarning,
   formatBandLadder,
   formatDate,
   formatProgramLevel,
@@ -93,6 +94,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [newDocumentTitle, setNewDocumentTitle] = useState("");
   const [newDocumentProgram, setNewDocumentProgram] = useState("SENIOR");
   const [newDocumentBand, setNewDocumentBand] = useState("White");
   const [newDocumentRequirementId, setNewDocumentRequirementId] = useState("");
@@ -169,6 +171,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
         clubId: String(formData.get("clubId") || "") || null
       });
       form.reset();
+      setNewDocumentTitle("");
       setNewDocumentProgram("SENIOR");
       setNewDocumentBand("White");
       setNewDocumentRequirementId("");
@@ -322,7 +325,7 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
       {isAddFormOpen ? (
         <form className="document-form" onSubmit={handleCreateDocument}>
           <h3>Add New Document</h3>
-          <label>Document Title<input name="title" required /></label>
+          <label>Document Title<input name="title" value={newDocumentTitle} onChange={(event) => setNewDocumentTitle(event.currentTarget.value)} required /></label>
           <label>Description <span>Optional</span><textarea name="description" rows={3} /></label>
           <label>
             Program Level for this resource
@@ -333,6 +336,11 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
               {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
+          {documentProgramTitleWarning(newDocumentTitle, newDocumentProgram) ? (
+            <p className="admin-status is-warning document-program-warning" role="status" aria-live="polite">
+              {documentProgramTitleWarning(newDocumentTitle, newDocumentProgram)}
+            </p>
+          ) : null}
           <label>
             Band Level for this resource
             <select name="bandLevel" value={newDocumentBand} onChange={(event) => {
@@ -454,15 +462,17 @@ function ManagerDocumentRow({
   onDelete: (document: BandDocument) => void;
 }) {
   const link = documentLink(document);
+  const [editTitle, setEditTitle] = useState(document.title);
   const [editProgram, setEditProgram] = useState(document.programLevel);
   const [editBand, setEditBand] = useState(document.bandLevel);
   const [editRequirementId, setEditRequirementId] = useState(document.requirementId ?? "");
 
   useEffect(() => {
+    setEditTitle(document.title);
     setEditProgram(document.programLevel);
     setEditBand(document.bandLevel);
     setEditRequirementId(document.requirementId ?? "");
-  }, [document.bandLevel, document.programLevel, document.requirementId]);
+  }, [document.bandLevel, document.programLevel, document.requirementId, document.title]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -489,6 +499,9 @@ function ManagerDocumentRow({
         <td className="document-name-cell" data-label="Document Name">
           <strong title={document.title}>{document.title}</strong>
           <small title={document.description || "No description provided."}>{document.description || "No description provided."}</small>
+          {documentProgramTitleWarning(document.title, document.programLevel) ? (
+            <small className="document-title-warning">{documentProgramTitleWarning(document.title, document.programLevel)}</small>
+          ) : null}
           {document.requirementName ? <small>Guide requirement: {document.requirementName}</small> : null}
         </td>
         <td data-label="Program">
@@ -532,7 +545,7 @@ function ManagerDocumentRow({
         <tr className="document-edit-row">
           <td colSpan={8}>
             <form className="document-edit-form" onSubmit={handleSubmit}>
-              <label>Document Title<input name="title" defaultValue={document.title} required /></label>
+              <label>Document Title<input name="title" value={editTitle} onChange={(event) => setEditTitle(event.currentTarget.value)} required /></label>
               <label>Description<textarea name="description" defaultValue={document.description ?? ""} rows={3} /></label>
               <label>Document Link<input name="fileUrl" type="url" defaultValue={document.fileUrl} placeholder="Paste Google Drive, PDF, or website link" /></label>
               <label>Session / Module<input name="sessionModule" defaultValue={document.sessionModule ?? ""} placeholder="Optional" /></label>
@@ -545,6 +558,11 @@ function ManagerDocumentRow({
                   {programLevelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
+              {documentProgramTitleWarning(editTitle, editProgram) ? (
+                <p className="admin-status is-warning document-program-warning" role="status" aria-live="polite">
+                  {documentProgramTitleWarning(editTitle, editProgram)}
+                </p>
+              ) : null}
               <label>
                 Band
                 <select name="bandLevel" value={editBand} onChange={(event) => {

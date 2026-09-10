@@ -451,12 +451,10 @@ patchModel("resourceLink", {
       resourceRecord(null, { id: "resource-global", requirementId: "requirement-1", requirement: requirementRecord() }),
       resourceRecord("centre-1", { id: "resource-next", requirementId: "requirement-orange", requirement: orangeRequirementRecord() }),
       resourceRecord("centre-2", { id: "resource-outside" }),
-      resourceRecord("centre-1", { id: "resource-archived", status: "ARCHIVED" })
-    ].filter((resource) => {
-      if (where.status && resource.status !== where.status) return false;
-      if (!resourceMatchesCentreScope(resource, where)) return false;
-      return (where.AND ?? []).every((condition: any) => resourceMatchesCentreScope(resource, condition));
-    });
+      resourceRecord("centre-1", { id: "resource-archived", status: "ARCHIVED" }),
+      resourceRecord(null, { id: "resource-out-of-program", title: "Senior White Band Guide", programLevel: "SENIOR", category: "Band Guide" }),
+      resourceRecord(null, { id: "resource-mismatched-title", title: "Senior White Band Guide", category: "Band Guide" })
+    ].filter((resource) => resourceMatchesWhere(resource, where));
   },
   create: ({ data }: any) => {
     state.resourceCreates += 1;
@@ -735,6 +733,8 @@ try {
   assertEqual(scopedStudentDocumentIds.includes("document-other"), false, "student cannot see an out-of-scope club document");
   assertEqual(scopedStudentDocumentIds.includes("document-archived"), false, "student cannot see an archived document");
   assertEqual(scopedStudentDocumentIds.includes("document-unrelated-future"), false, "student cannot see unrelated future-band documents");
+  assertEqual(scopedStudentDocumentIds.includes("document-out-of-program"), false, "Resources excludes a current-band document for the other program");
+  assertEqual(scopedStudentDocumentIds.includes("document-mismatched-title"), false, "Resources excludes a document whose title conflicts with its selected program");
   assertEqual(JSON.stringify(scopedStudentDocumentsPayload).includes("passwordHash"), false, "student document responses omit sensitive account fields");
   await assertStatus("admin can delete documents", "DELETE", "/api/documents/document-1", Role.ADMIN, 200);
   await assertStatus("facilitator cannot permanently delete documents", "DELETE", "/api/documents/document-1", Role.FACILITATOR, 403);
@@ -799,6 +799,8 @@ try {
   assertEqual(studentResources.resources.some((resource) => resource.id === "resource-next"), true, "student sees the active resource for the next requirement");
   assertEqual(studentResources.resources.some((resource) => resource.id === "resource-outside"), false, "student cannot see out-of-scope resources");
   assertEqual(studentResources.resources.some((resource) => resource.id === "resource-archived"), false, "student cannot see inactive resources");
+  assertEqual(studentResources.resources.some((resource) => resource.id === "resource-out-of-program"), false, "student cannot see another program's band resource");
+  assertEqual(studentResources.resources.some((resource) => resource.id === "resource-mismatched-title"), false, "student cannot see a band resource whose title conflicts with its program");
   assertEqual(JSON.stringify(state.lastResourceWhere).includes("requirement-orange"), true, "student resource scope includes the next active requirement without exposing every future requirement");
   await assertStatus("student cannot delete resources", "DELETE", "/api/resources/resource-1", Role.STUDENT, 403);
   await assertStatus("admin can delete resources", "DELETE", "/api/resources/resource-1", Role.ADMIN, 200);
@@ -1359,7 +1361,9 @@ function documentRecords() {
     }),
     documentRecord(otherClubId, { id: "document-other" }),
     documentRecord(assignedClubId, { id: "document-archived", status: "ARCHIVED" }),
-    documentRecord(assignedClubId, { id: "document-unrelated-future", title: "Future Debate Guide", bandLevel: "Orange I", bandOrder: 4 })
+    documentRecord(assignedClubId, { id: "document-unrelated-future", title: "Future Debate Guide", bandLevel: "Orange I", bandOrder: 4 }),
+    documentRecord(null, { id: "document-out-of-program", title: "Senior White Band Guide", programLevel: "SENIOR" }),
+    documentRecord(null, { id: "document-mismatched-title", title: "Senior White Band Guide" })
   ];
 }
 
@@ -1371,8 +1375,10 @@ function documentMatchesWhere(document: ReturnType<typeof documentRecord>, where
   if (where.bandOrder?.lte != null && document.bandOrder > where.bandOrder.lte) return false;
   if (typeof where.requirementId === "string" && document.requirementId !== where.requirementId) return false;
   if (where.title?.contains && !document.title.toLowerCase().includes(String(where.title.contains).toLowerCase())) return false;
+  if (where.title?.startsWith && !document.title.toLowerCase().startsWith(String(where.title.startsWith).toLowerCase())) return false;
   if (where.clubId === null && document.clubId !== null) return false;
   if (where.clubId?.in && !where.clubId.in.includes(document.clubId)) return false;
+  if (where.NOT && documentMatchesWhere(document, where.NOT)) return false;
   if (where.OR && !where.OR.some((condition: any) => documentMatchesWhere(document, condition))) return false;
   return (where.AND ?? []).every((condition: any) => documentMatchesWhere(document, condition));
 }
@@ -1381,6 +1387,7 @@ function documentRecord(clubId: string | null, overrides: Partial<{
   id: string;
   title: string;
   status: string;
+  programLevel: string;
   bandLevel: string;
   bandOrder: number;
   category: string;
@@ -1393,7 +1400,7 @@ function documentRecord(clubId: string | null, overrides: Partial<{
     description: "Checklist",
     fileName: "checklist.pdf",
     fileUrl: "https://example.com/checklist.pdf",
-    programLevel: "JUNIOR",
+    programLevel: overrides.programLevel ?? "JUNIOR",
     bandLevel: overrides.bandLevel ?? "White",
     bandOrder: overrides.bandOrder ?? 1,
     sessionModule: null,
@@ -1523,20 +1530,21 @@ function resourceRecord(centreId: string | null, overrides: Record<string, unkno
   };
 }
 
-function resourceMatchesCentreScope(resource: { centreId: string | null }, where: any) {
-  if (where?.centreId?.in) {
-    return Boolean(resource.centreId && where.centreId.in.includes(resource.centreId));
-  }
-
-  const centreClauses = Array.isArray(where?.OR)
-    ? where.OR.filter((clause: any) => Object.prototype.hasOwnProperty.call(clause, "centreId"))
-    : [];
-
-  if (!centreClauses.length) return true;
-
-  return centreClauses.some((clause: any) => clause.centreId === null
-    ? resource.centreId === null
-    : Boolean(resource.centreId && clause.centreId?.in?.includes(resource.centreId)));
+function resourceMatchesWhere(resource: ReturnType<typeof resourceRecord>, where: any): boolean {
+  if (!where) return true;
+  if (where.status && resource.status !== where.status) return false;
+  if (where.programLevel === null && resource.programLevel !== null) return false;
+  if (typeof where.programLevel === "string" && resource.programLevel !== where.programLevel) return false;
+  if (where.bandOrder?.lte != null && resource.bandOrder > where.bandOrder.lte) return false;
+  if (where.centreId === null && resource.centreId !== null) return false;
+  if (where.centreId?.in && (!resource.centreId || !where.centreId.in.includes(resource.centreId))) return false;
+  if (where.roleKey?.in && !where.roleKey.in.includes(resource.roleKey)) return false;
+  if (where.requirementId?.in && !where.requirementId.in.includes(resource.requirementId)) return false;
+  if (typeof where.requirementId === "string" && resource.requirementId !== where.requirementId) return false;
+  if (where.title?.startsWith && !resource.title.toLowerCase().startsWith(String(where.title.startsWith).toLowerCase())) return false;
+  if (where.NOT && resourceMatchesWhere(resource, where.NOT)) return false;
+  if (where.OR && !where.OR.some((condition: any) => resourceMatchesWhere(resource, condition))) return false;
+  return (where.AND ?? []).every((condition: any) => resourceMatchesWhere(resource, condition));
 }
 
 function requirementRecord() {

@@ -17,6 +17,7 @@ import {
   dateInputValue,
   documentsForRequirement,
   documentCategoryOptions,
+  documentProgramTitleWarning,
   formatDate,
   formatRole,
   groupResourceLinks,
@@ -278,6 +279,74 @@ const seniorWhiteResource = requirementResourceFixture("guide-senior-white", sen
 const seniorOrangeResource = requirementResourceFixture("guide-senior-orange", seniorOrangeRequirement);
 const juniorResource = requirementResourceFixture("guide-junior-white", juniorRequirement);
 const seniorWhiteDocument = requirementDocumentFixture("document-senior-white", seniorWhiteRequirement, "Session Materials");
+
+const juniorBlueBandGuide: BandDocument = {
+  ...seniorWhiteDocument,
+  id: "junior-blue-band-guide",
+  title: "Junior Blue I Band Guide",
+  fileUrl: "https://docs.google.com/document/d/junior-blue-band-guide",
+  programLevel: "JUNIOR",
+  bandLevel: "Blue I",
+  bandOrder: 7,
+  requirementId: null,
+  requirementName: null,
+  category: "Band Guide"
+};
+const seniorBlueBandGuide: BandDocument = {
+  ...juniorBlueBandGuide,
+  id: "senior-blue-band-guide",
+  title: "Senior Blue I Band Guide",
+  fileUrl: "https://docs.google.com/document/d/senior-blue-band-guide",
+  programLevel: "SENIOR"
+};
+const mismatchedSeniorBlueBandGuide: BandDocument = {
+  ...seniorBlueBandGuide,
+  id: "mismatched-senior-blue-band-guide",
+  title: "Junior Blue I Band Guide"
+};
+
+assert.strictEqual(
+  bandGuideFor([], [juniorBlueBandGuide, mismatchedSeniorBlueBandGuide, seniorBlueBandGuide], { programLevel: "SENIOR", bandLevel: "Blue I" }),
+  seniorBlueBandGuide,
+  "A Senior Blue I student resolves only the correctly labelled Senior Blue I band guide."
+);
+assert.equal(
+  bandGuideFor([], [juniorBlueBandGuide, mismatchedSeniorBlueBandGuide], { programLevel: "SENIOR", bandLevel: "Blue I" }),
+  null,
+  "A Senior Blue I student never receives a Junior Blue I guide, including a mislabelled Senior-program record."
+);
+assert.strictEqual(
+  bandGuideFor([], [seniorBlueBandGuide, juniorBlueBandGuide], { programLevel: "JUNIOR", bandLevel: "Blue I" }),
+  juniorBlueBandGuide,
+  "A Junior Blue I student resolves only the Junior Blue I band guide."
+);
+assert.equal(
+  documentProgramTitleWarning("Junior Blue I Band Guide", "SENIOR"),
+  "This document title says Junior but the selected program is Senior.",
+  "Admin receives the required warning for a Junior title assigned to Senior."
+);
+assert.equal(
+  documentProgramTitleWarning("Senior Blue I Band Guide", "JUNIOR"),
+  "This document title says Senior but the selected program is Junior.",
+  "Admin receives the required warning for a Senior title assigned to Junior."
+);
+assert.equal(documentProgramTitleWarning("Blue I Band Guide", "SENIOR"), "", "Program-neutral titles do not produce a mismatch warning.");
+
+const seniorBlueOverviewMarkup = renderToStaticMarkup(
+  <StudentHomeSummaryView
+    user={{ id: "senior-blue-student", email: "senior-blue@example.com", firstName: "Senior", lastName: "Member", role: "STUDENT" }}
+    progress={progressForRequirement(parsedProgress, requirementFixture("senior-blue-requirement", "SENIOR", "Blue I", 7, "Blue Reflection", "Speech"))}
+    paymentStatus={null}
+    documents={[juniorBlueBandGuide, mismatchedSeniorBlueBandGuide, seniorBlueBandGuide]}
+  />
+);
+assert.match(seniorBlueOverviewMarkup, /aria-label="Open band guide for Blue I"/, "Senior Blue I Overview exposes the strictly matched guide action.");
+assert.doesNotMatch(seniorBlueOverviewMarkup, /Junior Blue I Band Guide/, "Senior Blue I Overview does not render the Junior guide.");
+const seniorBlueGuidePanel = renderToStaticMarkup(
+  <ResourcePanel resource={null} document={seniorBlueBandGuide} onClose={() => undefined} />
+);
+assert.match(seniorBlueGuidePanel, /Senior Blue I Band Guide/, "The Current Band popup uses the selected Senior document title.");
+assert.match(seniorBlueGuidePanel, /<dt>Program<\/dt><dd>Senior<\/dd>/, "The Current Band popup displays the selected document's actual program.");
 
 const juniorOrangeBandGuide: BandDocument = {
   ...seniorWhiteDocument,

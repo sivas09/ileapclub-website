@@ -1277,6 +1277,16 @@ button {
   line-height: 1.5;
 }
 
+.document-program-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.document-name-cell .document-title-warning {
+  color: #9a5800;
+  font-weight: 800;
+}
+
 .document-form label,
 .document-edit-form label {
   display: grid;

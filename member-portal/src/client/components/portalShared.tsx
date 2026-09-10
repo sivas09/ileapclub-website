@@ -429,7 +429,9 @@ export function bandGuideFor(
   documents: BandDocument[],
   target: BandGuideTarget
 ): RequirementGuide | null {
-  const programLevel = normalizeProgramLevel(target.programLevel);
+  const programLevel = target.programLevel === "JUNIOR" || target.programLevel === "SENIOR"
+    ? target.programLevel
+    : null;
   const bandLevel = normalizeBandLevel(target.bandLevel);
 
   if (!programLevel || !bandLevel) {
@@ -440,8 +442,9 @@ export function bandGuideFor(
     item.status === "ACTIVE"
     && !item.requirementId
     && (!("roleKey" in item) || !item.roleKey)
-    && normalizeProgramLevel(item.programLevel) === programLevel
+    && item.programLevel === programLevel
     && normalizeBandLevel(item.bandLevel) === bandLevel
+    && !documentProgramTitleWarning(item.title, item.programLevel)
   );
   const categoryPriority = (item: ResourceLink | BandDocument) => {
     const category = normalizeResourceKey(item.category);
@@ -455,6 +458,20 @@ export function bandGuideFor(
     .sort((left, right) => categoryPriority(left) - categoryPriority(right));
 
   return matchingGuides[0] ?? null;
+}
+
+export function documentProgramTitleWarning(title: string, programLevel: string | null | undefined) {
+  const titleProgram = title.match(/^\s*(junior|senior)\b/i)?.[1]?.toUpperCase();
+
+  if (titleProgram === "JUNIOR" && programLevel === "SENIOR") {
+    return "This document title says Junior but the selected program is Senior.";
+  }
+
+  if (titleProgram === "SENIOR" && programLevel === "JUNIOR") {
+    return "This document title says Senior but the selected program is Junior.";
+  }
+
+  return "";
 }
 
 export function roleDefinitionsForMeeting(roleDefinitions: RoleDefinition[], meeting: Meeting) {
