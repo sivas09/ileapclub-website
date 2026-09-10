@@ -21,6 +21,7 @@ import {
 } from "../api";
 import type { BandDocument } from "../api";
 import {
+  bandGuideFor,
   DataPanel,
   formatBandLadder,
   formatDate,
@@ -63,7 +64,17 @@ export function StudentHomeSummaryView({
         || left.requirement.bandOrder - right.requirement.bandOrder
         || left.requirement.sortOrder - right.requirement.sortOrder;
     })[0];
+  const currentBandGuide = bandGuideFor(resources, documents, {
+    programLevel: progress?.summary.programLevel,
+    bandLevel: progress?.summary.bandLevel
+  });
   const studentName = `${user.firstName} ${user.lastName}`;
+
+  function openCurrentBandGuide() {
+    setSelectedResource(isResourceLink(currentBandGuide) ? currentBandGuide : null);
+    setSelectedDocument(isBandDocument(currentBandGuide) ? currentBandGuide : null);
+    setMissingGuideRequirement(null);
+  }
 
   function openNextRequirementGuide() {
     if (!nextRequirement) return;
@@ -96,6 +107,16 @@ export function StudentHomeSummaryView({
         <article className="student-band-highlight">
           <span>Current Band</span>
           <strong>{currentBand}</strong>
+          {currentBandGuide ? (
+            <button
+              type="button"
+              className="next-requirement-guide-button"
+              aria-label={`Open band guide for ${currentBand}`}
+              onClick={openCurrentBandGuide}
+            >
+              Open band guide
+            </button>
+          ) : progress && !isLoading ? <small>Band guide has not been added yet.</small> : null}
         </article>
         <article className={`student-payment-status${paymentStatus ? (paymentStatus.status === "PAID" ? " is-paid" : " is-not-paid") : ""}`}>
           <span>Payment Status</span>

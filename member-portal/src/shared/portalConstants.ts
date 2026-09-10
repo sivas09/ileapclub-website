@@ -20,6 +20,7 @@ export const bandLevels = [
 ] as const;
 
 export const documentCategories = [
+  "Band Guide",
   "Band Requirements",
   "Session Materials",
   "Case Studies",
@@ -37,6 +38,7 @@ export const documentCategories = [
 ] as const;
 
 export const resourceCategories = [
+  "Band Guide",
   "Role Guide",
   "Speech Guide",
   "Presentation Guide",

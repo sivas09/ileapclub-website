@@ -345,12 +345,12 @@ function ManagerDocumentsPanel({ user }: { user: PortalUser }) {
           <label>
             Requirement <span>Optional</span>
             <select name="requirementId" value={newDocumentRequirementId} onChange={(event) => setNewDocumentRequirementId(event.currentTarget.value)}>
-              <option value="">Select requirement</option>
+              <option value="">None (band-level document)</option>
               {documentRequirementOptions(requirements, newDocumentProgram, newDocumentBand).map((requirement) => (
                 <option key={requirement.id} value={requirement.id}>{requirement.name}</option>
               ))}
             </select>
-            <small>Optional — select a requirement to show this link in the guide popup.</small>
+            <small>Leave blank for an overall band guide. Select a requirement only for a requirement-specific guide.</small>
           </label>
           <label>Session / Module <span>Optional</span><input name="sessionModule" placeholder="Session 3, Module 2, Debate Week" /></label>
           <label>
@@ -557,12 +557,12 @@ function ManagerDocumentRow({
               <label>
                 Requirement <span>Optional</span>
                 <select name="requirementId" value={editRequirementId} onChange={(event) => setEditRequirementId(event.currentTarget.value)}>
-                  <option value="">Select requirement</option>
+                  <option value="">None (band-level document)</option>
                   {documentRequirementOptions(requirements, editProgram, editBand).map((requirement) => (
                     <option key={requirement.id} value={requirement.id}>{requirement.name}</option>
                   ))}
                 </select>
-                <small>Optional — select a requirement to show this link in the guide popup.</small>
+                <small>Leave blank for an overall band guide. Select a requirement only for a requirement-specific guide.</small>
               </label>
               <label>
                 Club

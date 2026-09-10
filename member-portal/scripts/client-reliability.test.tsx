@@ -10,11 +10,13 @@ import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/c
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import { DocumentAddPermissionNotice, documentRequirementOptions, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
 import {
+  bandGuideFor,
   claimableMeetingRoleSlots,
   canManageUserFromSetup,
   canResetUserPasswordFromSetup,
   dateInputValue,
   documentsForRequirement,
+  documentCategoryOptions,
   formatDate,
   formatRole,
   groupResourceLinks,
@@ -276,6 +278,103 @@ const seniorWhiteResource = requirementResourceFixture("guide-senior-white", sen
 const seniorOrangeResource = requirementResourceFixture("guide-senior-orange", seniorOrangeRequirement);
 const juniorResource = requirementResourceFixture("guide-junior-white", juniorRequirement);
 const seniorWhiteDocument = requirementDocumentFixture("document-senior-white", seniorWhiteRequirement, "Session Materials");
+
+const juniorOrangeBandGuide: BandDocument = {
+  ...seniorWhiteDocument,
+  id: "junior-orange-band-guide",
+  title: "Junior Orange I Band Guide",
+  fileUrl: "https://docs.google.com/document/d/junior-orange-band-guide",
+  programLevel: "JUNIOR",
+  bandLevel: "Orange I",
+  bandOrder: 4,
+  requirementId: null,
+  requirementName: null,
+  category: "Band Guide"
+};
+const seniorWhiteBandGuide: ResourceLink = {
+  ...resourceFixture("senior-white-band-guide", "Senior White Band Guide", "Band Guide"),
+  documentUrl: "https://example.com/senior-white-band-guide",
+  programLevel: "SENIOR",
+  bandLevel: "White",
+  bandOrder: 1,
+  roleKey: null,
+  requirementId: null,
+  requirementName: null
+};
+
+assert.strictEqual(
+  bandGuideFor([], [juniorOrangeBandGuide], { programLevel: "JUNIOR", bandLevel: "Orange I" }),
+  juniorOrangeBandGuide,
+  "A Junior Orange I student resolves the existing Junior Orange I band document."
+);
+assert.equal(documentCategoryOptions.includes("Band Guide"), true, "Admin document forms offer the Band Guide category.");
+assert.strictEqual(
+  bandGuideFor([seniorWhiteBandGuide], [], { programLevel: "SENIOR", bandLevel: "White" }),
+  seniorWhiteBandGuide,
+  "A Senior White student resolves the existing Senior White band resource."
+);
+const juniorOrangeOverviewMarkup = renderToStaticMarkup(
+  <StudentHomeSummaryView
+    user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
+    progress={progressForRequirement(parsedProgress, requirementFixture("junior-orange-requirement", "JUNIOR", "Orange I", 4, "Story Circle", "Speech"))}
+    paymentStatus={null}
+    documents={[juniorOrangeBandGuide]}
+  />
+);
+assert.match(juniorOrangeOverviewMarkup, /aria-label="Open band guide for Orange I"/, "Student Overview offers the current Junior Orange I band guide.");
+assert.match(juniorOrangeOverviewMarkup, />Open band guide<\/button>/, "The Current Band card has a clear Open band guide button.");
+const juniorOrangeBandGuidePanel = renderToStaticMarkup(
+  <ResourcePanel resource={null} document={juniorOrangeBandGuide} onClose={() => undefined} />
+);
+assert.match(juniorOrangeBandGuidePanel, /href="https:\/\/docs\.google\.com\/document\/d\/junior-orange-band-guide"/, "Junior Orange I can open the linked band guide.");
+assert.match(juniorOrangeBandGuidePanel, /Open \/ Download/, "The band guide popup has a clear open action.");
+
+const seniorWhiteOverviewMarkup = renderToStaticMarkup(
+  <StudentHomeSummaryView
+    user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
+    progress={progressForRequirement(parsedProgress, seniorWhiteRequirement)}
+    paymentStatus={null}
+    resources={[seniorWhiteBandGuide]}
+  />
+);
+assert.match(seniorWhiteOverviewMarkup, /aria-label="Open band guide for White"/, "Student Overview offers the current Senior White band guide.");
+assert.strictEqual(
+  [juniorOrangeBandGuide].find((document) => document.id === juniorOrangeBandGuide.id),
+  bandGuideFor([], [juniorOrangeBandGuide], { programLevel: "JUNIOR", bandLevel: "Orange I" }),
+  "Overview and Resources reuse the same persisted band document without duplication."
+);
+
+const missingBandGuideMarkup = renderToStaticMarkup(
+  <StudentHomeSummaryView
+    user={{ id: "student-user-1", email: "max@example.com", firstName: "Max", lastName: "Mao", role: "STUDENT" }}
+    progress={progressForRequirement(parsedProgress, juniorRequirement)}
+    paymentStatus={null}
+  />
+);
+assert.match(missingBandGuideMarkup, /Band guide has not been added yet\./, "A missing current-band guide shows friendly guidance.");
+
+const archivedBandGuide = { ...juniorOrangeBandGuide, id: "archived-band-guide", status: "ARCHIVED" };
+const outOfProgramBandGuide = { ...juniorOrangeBandGuide, id: "senior-orange-band-guide", programLevel: "SENIOR" };
+assert.equal(
+  bandGuideFor([], [archivedBandGuide, outOfProgramBandGuide], { programLevel: "JUNIOR", bandLevel: "Orange I" }),
+  null,
+  "Inactive and out-of-program documents cannot resolve as current-band guides."
+);
+const futureBandGuide = { ...juniorOrangeBandGuide, id: "future-band-guide", bandLevel: "Purple 2", bandOrder: 15 };
+assert.strictEqual(
+  bandGuideFor([], [futureBandGuide], { programLevel: "JUNIOR", bandLevel: "Purple 2" }),
+  futureBandGuide,
+  "Current-band guide matching is data-driven for future band names."
+);
+assert.equal(
+  bandGuideFor(
+    [seniorWhiteResource],
+    [{ ...seniorWhiteDocument, requirementId: seniorWhiteRequirement.id }],
+    { programLevel: "SENIOR", bandLevel: "White" }
+  ),
+  null,
+  "Requirement-linked guides remain separate from the overall current-band guide."
+);
 
 for (const [requirement, resource, expectedLabel] of [
   [seniorWhiteRequirement, seniorWhiteResource, "Senior White Induction Speech"],

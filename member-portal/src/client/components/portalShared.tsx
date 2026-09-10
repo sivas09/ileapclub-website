@@ -215,6 +215,11 @@ export type MissingRequirementGuide = {
 
 export type RequirementGuide = ResourceLink | BandDocument;
 
+export type BandGuideTarget = {
+  programLevel?: string | null;
+  bandLevel?: string | null;
+};
+
 export type RequirementGuideTarget = {
   id: string;
   name: string;
@@ -419,6 +424,39 @@ export function requirementGuideFor(
   return manuallyLinkedDocument ?? matchingResource ?? matchingDocuments[0] ?? null;
 }
 
+export function bandGuideFor(
+  resources: ResourceLink[],
+  documents: BandDocument[],
+  target: BandGuideTarget
+): RequirementGuide | null {
+  const programLevel = normalizeProgramLevel(target.programLevel);
+  const bandLevel = normalizeBandLevel(target.bandLevel);
+
+  if (!programLevel || !bandLevel) {
+    return null;
+  }
+
+  const matchesBand = (item: ResourceLink | BandDocument) => (
+    item.status === "ACTIVE"
+    && !item.requirementId
+    && (!("roleKey" in item) || !item.roleKey)
+    && normalizeProgramLevel(item.programLevel) === programLevel
+    && normalizeBandLevel(item.bandLevel) === bandLevel
+  );
+  const categoryPriority = (item: ResourceLink | BandDocument) => {
+    const category = normalizeResourceKey(item.category);
+
+    if (category === "band guide") return 0;
+    if (category === "band requirements") return 1;
+    return 2;
+  };
+  const matchingGuides = [...documents, ...resources]
+    .filter(matchesBand)
+    .sort((left, right) => categoryPriority(left) - categoryPriority(right));
+
+  return matchingGuides[0] ?? null;
+}
+
 export function roleDefinitionsForMeeting(roleDefinitions: RoleDefinition[], meeting: Meeting) {
   const programLevel = normalizeProgramLevel(meeting.club.program);
 
@@ -477,6 +515,10 @@ export function normalizeResourceKey(value: string) {
     .replace(/\s*\([^)]*\)\s*/g, " ")
     .replace(/\s+\d+$/g, "")
     .replace(/\s+/g, " ");
+}
+
+function normalizeBandLevel(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 export function formatStudentName(student: { user: { firstName: string; lastName: string } }) {

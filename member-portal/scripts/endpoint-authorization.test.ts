@@ -694,6 +694,16 @@ try {
   assertEqual(manualDocumentPayload.document.requirementName, "Induction Speech", "safe requirement metadata is returned with the document");
   await assertStatus("admin can add an existing document without a requirement link", "POST", "/api/documents", Role.ADMIN, 201, seniorWhiteDocumentPayload(null));
   assertEqual(state.lastDocumentCreate?.requirementId, null, "existing documents remain valid without a manual requirement link");
+  await assertStatus(
+    "admin can add a Band Guide document without a requirement link",
+    "POST",
+    "/api/documents",
+    Role.ADMIN,
+    201,
+    { ...seniorWhiteDocumentPayload(null), category: "Band Guide" }
+  );
+  assertEqual(state.lastDocumentCreate?.category, "Band Guide", "Band Guide category is persisted for a band-level document");
+  assertEqual(state.lastDocumentCreate?.requirementId, null, "Band Guide documents do not require a requirement link");
   await assertStatus("admin can edit an existing document to add a manual requirement link", "PATCH", "/api/documents/document-1", Role.ADMIN, 200, { requirementId: "requirement-1" });
   assertEqual(state.lastDocumentUpdate?.requirementId, "requirement-1", "editing a document persists its manual requirement link");
   await assertStatus("document requirement must match selected program and band", "POST", "/api/documents", Role.ADMIN, 400, { ...seniorWhiteDocumentPayload("requirement-1") });
