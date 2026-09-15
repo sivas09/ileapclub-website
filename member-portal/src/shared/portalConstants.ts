@@ -53,7 +53,8 @@ export const noticeStatuses = ["ACTIVE", "ARCHIVED"] as const;
 
 export const noticeLimits = {
   title: 120,
-  message: 2000
+  message: 2000,
+  storedMessage: 20_000
 } as const;
 
 export const leadershipRoleKeys = ["ichair", "igrammarian", "ifinesmaster", "ifillercounter", "itimer"] as const;

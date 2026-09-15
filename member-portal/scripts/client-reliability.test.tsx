@@ -9,7 +9,8 @@ import { attendanceStatusLabel, guideResourceForRequirement, LearningReflectionH
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import { DocumentAddPermissionNotice, documentRequirementOptions, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
-import { NoticeMessage } from "../src/client/components/NoticesWorkspace";
+import { NoticeFields, NoticeMessage, NoticesWorkspace } from "../src/client/components/NoticesWorkspace";
+import { noticeRichTextPrefix, serializeNoticeDocument } from "../src/shared/noticeRichText";
 import {
   bandGuideFor,
   claimableMeetingRoleSlots,
@@ -32,14 +33,60 @@ import {
 
 const meeting = meetingFixture();
 
+const noticeEditorMarkup = renderToStaticMarkup(<NoticeFields clubs={[]} allowAllClubs />);
+assert.match(noticeEditorMarkup, /role="toolbar" aria-label="Message formatting"/, "Notice editor renders a formatting toolbar.");
+assert.match(noticeEditorMarkup, /aria-label="Bold"/, "Notice editor offers one-click bold formatting.");
+assert.match(noticeEditorMarkup, /aria-label="Italic"/, "Notice editor offers one-click italic formatting.");
+assert.match(noticeEditorMarkup, /aria-label="Underline"/, "Notice editor offers one-click underline formatting.");
+assert.match(noticeEditorMarkup, /aria-label="Bulleted list"/, "Notice editor offers one-click bullet lists.");
+assert.match(noticeEditorMarkup, /aria-label="Numbered list"/, "Notice editor offers one-click numbered lists.");
+assert.match(noticeEditorMarkup, /contenteditable="true"/, "Notice editor exposes a larger rich-text editing surface.");
+
+const richTextNotice = serializeNoticeDocument({
+  type: "doc",
+  blocks: [
+    {
+      type: "p",
+      content: [
+        { type: "text", text: "Bold", bold: true },
+        { type: "text", text: ", " },
+        { type: "text", text: "italic", italic: true },
+        { type: "text", text: ", and " },
+        { type: "text", text: "underlined", underline: true }
+      ]
+    },
+    { type: "ul", items: [[{ type: "text", text: "Notebook" }], [{ type: "text", text: "Water bottle" }]] },
+    { type: "ol", items: [[{ type: "text", text: "Prepare" }], [{ type: "text", text: "Practise" }]] }
+  ]
+});
+assert.match(richTextNotice, new RegExp(`^${noticeRichTextPrefix}`), "Rich-text notice formatting is serialized for saving.");
+const richTextNoticeMarkup = renderToStaticMarkup(<NoticeMessage message={richTextNotice} />);
+assert.match(richTextNoticeMarkup, /<strong>Bold<\/strong>/, "Saved bold notice formatting renders.");
+assert.match(richTextNoticeMarkup, /<em>italic<\/em>/, "Saved italic notice formatting renders.");
+assert.match(richTextNoticeMarkup, /<u>underlined<\/u>/, "Saved underline notice formatting renders.");
+assert.match(richTextNoticeMarkup, /<ul><li><span>Notebook<\/span><\/li><li><span>Water bottle<\/span><\/li><\/ul>/, "Saved bullet lists render.");
+assert.match(richTextNoticeMarkup, /<ol><li><span>Prepare<\/span><\/li><li><span>Practise<\/span><\/li><\/ol>/, "Saved numbered lists render.");
+
+const strippedRichTextMarkup = renderToStaticMarkup(
+  <NoticeMessage message={`${noticeRichTextPrefix}${JSON.stringify({
+    type: "doc",
+    blocks: [
+      { type: "p", content: [{ type: "text", text: "Safe text", bold: true, onclick: "alert(1)", href: "javascript:alert(1)" }] },
+      { type: "script", content: [{ type: "text", text: "Unsafe" }] }
+    ]
+  })}`} />
+);
+assert.match(strippedRichTextMarkup, /<strong>Safe text<\/strong>/, "Allowed rich-text content survives sanitization.");
+assert.doesNotMatch(strippedRichTextMarkup, /onclick|javascript:|Unsafe|<script/i, "Unknown rich-text tags, attributes, handlers, and URLs are stripped.");
+
 const formattedNoticeMarkup = renderToStaticMarkup(
   <NoticeMessage message={"**Important**\nPlease prepare your speech.\n\n**Bring:**\n- Notebook\n- Water bottle"} />
 );
 assert.match(formattedNoticeMarkup, /<strong>Important<\/strong>/, "Notice Markdown renders bold text as strong emphasis.");
 assert.match(formattedNoticeMarkup, /<strong>Bring:<\/strong>/, "Notice Markdown supports more than one bold phrase.");
-assert.match(formattedNoticeMarkup, /<br\/>Please prepare your speech\./, "Notice Markdown preserves a line break within a paragraph.");
+assert.match(formattedNoticeMarkup, /<br\/><span>Please prepare your speech\.<\/span>/, "Notice Markdown preserves a line break within a paragraph.");
 assert.match(formattedNoticeMarkup, /<\/p><p>/, "Blank notice lines create separate paragraphs.");
-assert.match(formattedNoticeMarkup, /<ul><li>Notebook<\/li><li>Water bottle<\/li><\/ul>/, "Notice Markdown renders simple bullet lists.");
+assert.match(formattedNoticeMarkup, /<ul><li><span>Notebook<\/span><\/li><li><span>Water bottle<\/span><\/li><\/ul>/, "Notice Markdown renders simple bullet lists.");
 
 const plainNoticeMarkup = renderToStaticMarkup(<NoticeMessage message="A plain text reminder." />);
 assert.match(plainNoticeMarkup, /<p><span>A plain text reminder\.<\/span><\/p>/, "Plain text notices continue to render normally.");
@@ -49,6 +96,11 @@ const unsafeNoticeMarkup = renderToStaticMarkup(
 );
 assert.doesNotMatch(unsafeNoticeMarkup, /<(script|iframe|style|img)\b/i, "Notice content cannot create unsafe HTML elements.");
 assert.match(unsafeNoticeMarkup, /&lt;script&gt;/, "Unsafe notice HTML is rendered as escaped text.");
+
+const studentNoticesMarkup = renderToStaticMarkup(
+  <NoticesWorkspace user={{ id: "student-user", email: "student@example.com", firstName: "Alex", lastName: "Student", role: "STUDENT" }} />
+);
+assert.doesNotMatch(studentNoticesMarkup, /Add New Notice|Message formatting|contenteditable|>Edit<|>Archive</, "Student notice views remain read-only.");
 
 const editMarkup = renderToStaticMarkup(
   <MeetingEditForm meeting={meeting} clubs={[meeting.club]} isSubmitting={false} onSave={() => undefined} />

@@ -7,6 +7,7 @@ import { prisma } from "../db.js";
 import { canManageOperationalData, getOperationalScope, isCenterDirector, scopeIncludesClub } from "../permissions.js";
 import { publicUserSelect } from "../services/safeUser.js";
 import { noticeLimits, noticeStatuses } from "../../shared/portalConstants.js";
+import { isValidStoredNoticeMessage, normalizeStoredNoticeMessage, noticeMessageText } from "../../shared/noticeRichText.js";
 
 export const noticesRouter = Router();
 
@@ -14,7 +15,12 @@ noticesRouter.use(requireAuth);
 
 const noticeSchema = z.object({
   title: z.string().trim().min(1).max(noticeLimits.title),
-  message: z.string().trim().min(1).max(noticeLimits.message),
+  message: z.string().trim().min(1).max(noticeLimits.storedMessage)
+    .refine(isValidStoredNoticeMessage)
+    .refine((message) => {
+      const textLength = noticeMessageText(message).trim().length;
+      return textLength >= 1 && textLength <= noticeLimits.message;
+    }),
   clubId: z.string().trim().min(1).nullable().optional(),
   status: z.enum(noticeStatuses).optional(),
   expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
@@ -141,7 +147,7 @@ noticesRouter.post("/", asyncRoute(async (request, response) => {
   const notice = await prisma.notice.create({
     data: {
       title: data.title,
-      message: data.message,
+      message: normalizeStoredNoticeMessage(data.message),
       clubId,
       createdByUserId: user.id,
       status: canManageOperationalData(user) ? data.status ?? "ACTIVE" : "ACTIVE",
@@ -209,7 +215,7 @@ noticesRouter.patch("/:noticeId", asyncRoute(async (request, response) => {
     where: { id: existing.id },
     data: {
       title: parsed.data.title,
-      message: parsed.data.message,
+      message: parsed.data.message === undefined ? undefined : normalizeStoredNoticeMessage(parsed.data.message),
       clubId: targetClubId,
       status: parsed.data.status,
       expiresAt: parsed.data.expiresAt === undefined ? undefined : parseExpiry(parsed.data.expiresAt),

@@ -2,6 +2,7 @@ import express from "express";
 import type { Server } from "node:http";
 import { Role } from "@prisma/client";
 import { parseStudentProgressResponse } from "../src/client/api.js";
+import { noticeRichTextPrefix, serializeNoticeDocument } from "../src/shared/noticeRichText.js";
 import { signToken } from "../src/server/auth.js";
 import { prisma } from "../src/server/db.js";
 import { adminRouter } from "../src/server/routes/admin.js";
@@ -55,6 +56,7 @@ const state = {
   lastDocumentCreate: null as any,
   lastDocumentUpdate: null as any,
   noticeCreates: 0,
+  lastNoticeCreate: null as any,
   resourceCreates: 0,
   userCreates: 0,
   centerDirectorAssignmentCreates: 0,
@@ -431,6 +433,7 @@ patchModel("notice", {
   },
   create: ({ data }: any) => {
     state.noticeCreates += 1;
+    state.lastNoticeCreate = data;
     return noticeRecord("created-notice", data.clubId, data.status, data.expiresAt, data.isPinned);
   },
   findUnique: ({ where }: any) => noticeRecords().find((notice) => notice.id === where.id) ?? null,
@@ -740,6 +743,15 @@ try {
   await assertStatus("facilitator cannot permanently delete documents", "DELETE", "/api/documents/document-1", Role.FACILITATOR, 403);
 
   await assertStatus("admin can create Club A notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(assignedClubId));
+  const formattedNoticeMessage = serializeNoticeDocument({
+    type: "doc",
+    blocks: [{ type: "p", content: [{ type: "text", text: "Important", bold: true }] }]
+  });
+  await assertStatus("admin can save a formatted notice", "POST", "/api/notices", Role.ADMIN, 201, {
+    ...noticePayload(assignedClubId),
+    message: formattedNoticeMessage
+  });
+  assertEqual(state.lastNoticeCreate.message, formattedNoticeMessage, "formatted notice content reaches persistence intact");
   await assertStatus("admin can create Club B notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(otherClubId));
   await assertStatus("admin can create all-clubs notice", "POST", "/api/notices", Role.ADMIN, 201, noticePayload(null));
   await assertStatus("center director can create assigned-club notice", "POST", "/api/notices", Role.CENTER_DIRECTOR, 201, noticePayload(assignedClubId));
@@ -747,6 +759,8 @@ try {
   await assertStatus("center director cannot create out-of-scope notice", "POST", "/api/notices", Role.CENTER_DIRECTOR, 403, noticePayload(otherClubId));
   await assertStatus("notice title maximum is enforced", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), title: "x".repeat(121) });
   await assertStatus("notice message is required", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), message: "" });
+  await assertStatus("malformed rich-text notices are rejected", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), message: `${noticeRichTextPrefix}{not-json}` });
+  await assertStatus("notice visible-text maximum is enforced", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), message: "x".repeat(2001) });
   await assertStatus("notice expiry must be a valid timestamp", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), expiresAt: "not-a-date" });
   await assertStatus("notice status must be valid", "POST", "/api/notices", Role.ADMIN, 400, { ...noticePayload(assignedClubId), status: "PUBLISHED" });
   const adminNoticesResponse = await assertStatus("admin can view notices across clubs", "GET", "/api/notices", Role.ADMIN, 200);

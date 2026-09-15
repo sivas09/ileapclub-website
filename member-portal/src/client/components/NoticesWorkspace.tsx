@@ -1,4 +1,4 @@
-import { FormEvent, type ReactNode, useEffect, useId, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import {
   Club,
   createNotice,
@@ -9,6 +9,13 @@ import {
   updateNotice
 } from "../api";
 import { noticeLimits, noticeStatuses } from "../../shared/portalConstants";
+import {
+  documentText,
+  noticeDocument,
+  type NoticeDocument,
+  type NoticeInline,
+  serializeNoticeDocument
+} from "../../shared/noticeRichText";
 import { formatDate, isOperationalManagerRole } from "./portalShared";
 
 type NoticeFilters = {
@@ -61,12 +68,21 @@ function ManagerNoticesPanel({ user }: { user: PortalUser }) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const payload = noticePayload(formData);
+    const messageError = validateNoticeMessage(payload.message);
+
+    if (messageError) {
+      setError(messageError);
+      setStatusMessage("");
+      return;
+    }
+
     setIsSubmitting(true);
     setError("");
     setStatusMessage("");
 
     try {
-      await createNotice(noticePayload(formData));
+      await createNotice(payload);
       form.reset();
       await refreshNotices();
       setIsAddFormOpen(false);
@@ -79,12 +95,21 @@ function ManagerNoticesPanel({ user }: { user: PortalUser }) {
   }
 
   async function handleSave(noticeId: string, formData: FormData) {
+    const payload = noticePayload(formData);
+    const messageError = validateNoticeMessage(payload.message);
+
+    if (messageError) {
+      setError(messageError);
+      setStatusMessage("");
+      return;
+    }
+
     setIsSubmitting(true);
     setError("");
     setStatusMessage("");
 
     try {
-      await updateNotice(noticeId, noticePayload(formData));
+      await updateNotice(noticeId, payload);
       await refreshNotices();
       setEditingNotice(null);
       setStatusMessage("Notice updated.");
@@ -290,9 +315,36 @@ function ManagerNoticeCard({
   );
 }
 
-function NoticeFields({ notice, clubs, allowAllClubs }: { notice?: Notice; clubs: Club[]; allowAllClubs: boolean }) {
-  const [message, setMessage] = useState(notice?.message ?? "");
+export function NoticeFields({ notice, clubs, allowAllClubs }: { notice?: Notice; clubs: Club[]; allowAllClubs: boolean }) {
+  const [initialDocument] = useState(() => noticeDocument(notice?.message ?? ""));
+  const [message, setMessage] = useState(() => serializeNoticeDocument(initialDocument));
+  const editorRef = useRef<HTMLDivElement>(null);
   const formattingHelpId = useId();
+  const messageLabelId = useId();
+  const messageText = documentText(noticeDocument(message));
+
+  function syncEditor() {
+    if (editorRef.current) {
+      setMessage(serializeNoticeDocument(richTextDocumentFromElement(editorRef.current)));
+    }
+  }
+
+  function applyFormat(command: "bold" | "italic" | "underline" | "insertUnorderedList" | "insertOrderedList") {
+    const editor = editorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    const selection = window.getSelection();
+
+    if (!selection?.anchorNode || !editor.contains(selection.anchorNode)) {
+      editor.focus();
+    }
+
+    document.execCommand(command, false);
+    syncEditor();
+  }
 
   return (
     <>
@@ -300,20 +352,45 @@ function NoticeFields({ notice, clubs, allowAllClubs }: { notice?: Notice; clubs
         Title
         <input name="title" defaultValue={notice?.title ?? ""} maxLength={noticeLimits.title} required />
       </label>
-      <label className="notice-message-field">
-        Message
-        <textarea
-          name="message"
-          value={message}
-          onChange={(event) => setMessage(event.currentTarget.value)}
-          maxLength={noticeLimits.message}
-          rows={8}
-          required
+      <div className="notice-message-field notice-rich-text-field" role="group" aria-labelledby={messageLabelId}>
+        <span className="notice-field-label" id={messageLabelId}>Message</span>
+        <div className="notice-editor-toolbar" role="toolbar" aria-label="Message formatting">
+          <button type="button" className="text-action" aria-label="Bold" title="Bold" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("bold")}><strong aria-hidden="true">B</strong></button>
+          <button type="button" className="text-action" aria-label="Italic" title="Italic" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("italic")}><em aria-hidden="true">I</em></button>
+          <button type="button" className="text-action" aria-label="Underline" title="Underline" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("underline")}><u aria-hidden="true">U</u></button>
+          <span className="notice-toolbar-divider" aria-hidden="true" />
+          <button type="button" className="text-action notice-list-tool" aria-label="Bulleted list" title="Bulleted list" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("insertUnorderedList")}><span aria-hidden="true">• List</span></button>
+          <button type="button" className="text-action notice-list-tool" aria-label="Numbered list" title="Numbered list" onMouseDown={(event) => event.preventDefault()} onClick={() => applyFormat("insertOrderedList")}><span aria-hidden="true">1. List</span></button>
+        </div>
+        <div
+          ref={editorRef}
+          className="notice-rich-text-editor"
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          aria-required="true"
+          aria-invalid={messageText.length > noticeLimits.message}
           aria-describedby={formattingHelpId}
-        />
-        <small id={formattingHelpId} className="notice-formatting-help">Use **double asterisks** to make text bold. Start a line with - for a bullet point.</small>
-      </label>
-      {message.trim() ? (
+          data-placeholder="Write the notice message…"
+          onInput={syncEditor}
+          onBlur={syncEditor}
+          onPaste={(event) => {
+            event.preventDefault();
+            document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+            syncEditor();
+          }}
+          onDrop={(event) => event.preventDefault()}
+        >
+          <NoticeDocumentContent document={initialDocument} />
+        </div>
+        <input type="hidden" name="message" value={message} />
+        <div className="notice-editor-help">
+          <small id={formattingHelpId} className="notice-formatting-help">Select text, then use the toolbar to format it.</small>
+          <small className={messageText.length > noticeLimits.message ? "is-over-limit" : ""}>{messageText.length}/{noticeLimits.message}</small>
+        </div>
+      </div>
+      {messageText.trim() ? (
         <div className="notice-preview" aria-live="polite">
           <span>Preview</span>
           <NoticeMessage message={message} />
@@ -386,93 +463,121 @@ function StudentNoticesPanel() {
   );
 }
 
-type NoticeBlock =
-  | { type: "paragraph"; lines: string[] }
-  | { type: "list"; items: string[] };
-
 export function NoticeMessage({ message }: { message: string }) {
-  const blocks = noticeBlocks(message);
-
   return (
     <div className="notice-message">
-      {blocks.map((block, blockIndex) => block.type === "list" ? (
-        <ul key={`list-${blockIndex}`}>
-          {block.items.map((item, itemIndex) => <li key={`${blockIndex}-${itemIndex}`}>{boldText(item)}</li>)}
-        </ul>
-      ) : (
-        <p key={`paragraph-${blockIndex}`}>
-          {block.lines.map((line, lineIndex) => (
-            <span key={`${blockIndex}-${lineIndex}`}>
-              {lineIndex ? <br /> : null}
-              {boldText(line)}
-            </span>
-          ))}
-        </p>
-      ))}
+      <NoticeDocumentContent document={noticeDocument(message)} />
     </div>
   );
 }
 
-function noticeBlocks(message: string): NoticeBlock[] {
-  const blocks: NoticeBlock[] = [];
-  const lines = message.replace(/\r\n?/g, "\n").split("\n");
-  let paragraphLines: string[] = [];
-  let listItems: string[] = [];
-
-  function flushParagraph() {
-    if (paragraphLines.length) {
-      blocks.push({ type: "paragraph", lines: paragraphLines });
-      paragraphLines = [];
-    }
-  }
-
-  function flushList() {
-    if (listItems.length) {
-      blocks.push({ type: "list", items: listItems });
-      listItems = [];
-    }
-  }
-
-  for (const line of lines) {
-    const bullet = line.match(/^\s*-\s+(.+)$/);
-
-    if (bullet) {
-      flushParagraph();
-      listItems.push(bullet[1]);
-    } else if (!line.trim()) {
-      flushParagraph();
-      flushList();
-    } else {
-      flushList();
-      paragraphLines.push(line);
-    }
-  }
-
-  flushParagraph();
-  flushList();
-  return blocks;
+function NoticeDocumentContent({ document: richDocument }: { document: NoticeDocument }) {
+  return richDocument.blocks.map((block, blockIndex) => block.type === "p" ? (
+    <p key={`paragraph-${blockIndex}`}><NoticeInlineContent content={block.content} /></p>
+  ) : block.type === "ul" ? (
+    <ul key={`list-${blockIndex}`}>
+      {block.items.map((item, itemIndex) => <li key={`${blockIndex}-${itemIndex}`}><NoticeInlineContent content={item} /></li>)}
+    </ul>
+  ) : (
+    <ol key={`list-${blockIndex}`}>
+      {block.items.map((item, itemIndex) => <li key={`${blockIndex}-${itemIndex}`}><NoticeInlineContent content={item} /></li>)}
+    </ol>
+  ));
 }
 
-function boldText(value: string): ReactNode[] {
-  const parts: ReactNode[] = [];
-  const boldPattern = /\*\*(.+?)\*\*/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = boldPattern.exec(value))) {
-    if (match.index > cursor) {
-      parts.push(value.slice(cursor, match.index));
+function NoticeInlineContent({ content }: { content: NoticeInline[] }) {
+  return content.map((inline, index) => {
+    if (inline.type === "br") {
+      return <br key={`break-${index}`} />;
     }
 
-    parts.push(<strong key={`${match.index}-${match[1]}`}>{match[1]}</strong>);
-    cursor = match.index + match[0].length;
+    let rendered: ReactNode = inline.text;
+
+    if (inline.bold) rendered = <strong>{rendered}</strong>;
+    if (inline.italic) rendered = <em>{rendered}</em>;
+    if (inline.underline) rendered = <u>{rendered}</u>;
+    return <span key={`text-${index}`}>{rendered}</span>;
+  });
+}
+
+function richTextDocumentFromElement(element: HTMLElement): NoticeDocument {
+  const blocks: NoticeDocument["blocks"] = [];
+  let looseContent: NoticeInline[] = [];
+
+  function flushLooseContent() {
+    if (looseContent.length) {
+      blocks.push({ type: "p", content: looseContent });
+      looseContent = [];
+    }
   }
 
-  if (cursor < value.length) {
-    parts.push(value.slice(cursor));
+  for (const node of Array.from(element.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE || isInlineElement(node)) {
+      collectInlineContent(node, {}, looseContent);
+      continue;
+    }
+
+    if (!(node instanceof HTMLElement)) {
+      continue;
+    }
+
+    const tag = node.tagName.toLowerCase();
+
+    if (tag === "ul" || tag === "ol") {
+      flushLooseContent();
+      const items = Array.from(node.children)
+        .filter((child) => child.tagName.toLowerCase() === "li")
+        .map((item) => {
+          const content: NoticeInline[] = [];
+          collectInlineContent(item, {}, content);
+          return content;
+        });
+      blocks.push({ type: tag, items });
+    } else {
+      flushLooseContent();
+      const content: NoticeInline[] = [];
+      collectInlineContent(node, {}, content);
+      blocks.push({ type: "p", content: content.length ? content : [{ type: "br" }] });
+    }
   }
 
-  return parts;
+  flushLooseContent();
+  return { type: "doc", blocks };
+}
+
+type InlineMarks = { bold?: true; italic?: true; underline?: true };
+
+function collectInlineContent(node: Node, marks: InlineMarks, result: NoticeInline[]) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    if (node.textContent) {
+      result.push({ type: "text", text: node.textContent, ...marks });
+    }
+    return;
+  }
+
+  if (!(node instanceof HTMLElement)) {
+    return;
+  }
+
+  const tag = node.tagName.toLowerCase();
+
+  if (tag === "br") {
+    result.push({ type: "br" });
+    return;
+  }
+
+  const nextMarks: InlineMarks = { ...marks };
+  if (tag === "strong" || tag === "b") nextMarks.bold = true;
+  if (tag === "em" || tag === "i") nextMarks.italic = true;
+  if (tag === "u") nextMarks.underline = true;
+
+  for (const child of Array.from(node.childNodes)) {
+    collectInlineContent(child, nextMarks, result);
+  }
+}
+
+function isInlineElement(node: Node) {
+  return node instanceof HTMLElement && ["br", "strong", "b", "em", "i", "u", "span"].includes(node.tagName.toLowerCase());
 }
 
 function noticePayload(formData: FormData) {
@@ -483,6 +588,20 @@ function noticePayload(formData: FormData) {
     expiresAt: expiryIso(String(formData.get("expiresAt") || "")),
     isPinned: formData.get("isPinned") === "on"
   };
+}
+
+function validateNoticeMessage(message: string) {
+  const length = documentText(noticeDocument(message)).trim().length;
+
+  if (!length) {
+    return "Enter a notice message.";
+  }
+
+  if (length > noticeLimits.message) {
+    return `Keep the notice message to ${noticeLimits.message.toLocaleString("en-CA")} characters or fewer.`;
+  }
+
+  return "";
 }
 
 function expiryIso(value: string) {
