@@ -10,6 +10,7 @@ import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/c
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import { DocumentAddPermissionNotice, documentRequirementOptions, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
 import { NoticeFields, NoticeMessage, NoticesWorkspace } from "../src/client/components/NoticesWorkspace";
+import { noticeDocumentFromPaste, noticeDocumentToEditorHtml } from "../src/client/noticePaste";
 import { noticeRichTextPrefix, serializeNoticeDocument } from "../src/shared/noticeRichText";
 import {
   bandGuideFor,
@@ -66,6 +67,52 @@ assert.match(richTextNoticeMarkup, /<em>italic<\/em>/, "Saved italic notice form
 assert.match(richTextNoticeMarkup, /<u>underlined<\/u>/, "Saved underline notice formatting renders.");
 assert.match(richTextNoticeMarkup, /<ul><li><span>Notebook<\/span><\/li><li><span>Water bottle<\/span><\/li><\/ul>/, "Saved bullet lists render.");
 assert.match(richTextNoticeMarkup, /<ol><li><span>Prepare<\/span><\/li><li><span>Practise<\/span><\/li><\/ol>/, "Saved numbered lists render.");
+
+const pastedFormattingDocument = noticeDocumentFromPaste(
+  '<p>This is <b>bold</b>, <i>italic</i>, and <u>underlined</u>.</p><p><span style="font-weight: 700">Word bold</span> and <span style="font-style: italic; text-decoration: underline">Docs formatting</span><br>Next line</p>',
+  ""
+);
+const pastedFormattingMarkup = renderToStaticMarkup(<NoticeMessage message={serializeNoticeDocument(pastedFormattingDocument)} />);
+assert.match(pastedFormattingMarkup, /<strong>bold<\/strong>/, "Pasting bold HTML preserves bold formatting.");
+assert.match(pastedFormattingMarkup, /<em>italic<\/em>/, "Pasting italic HTML preserves italic formatting.");
+assert.match(pastedFormattingMarkup, /<u>underlined<\/u>/, "Pasting underline HTML preserves underline formatting.");
+assert.match(pastedFormattingMarkup, /<strong>Word bold<\/strong>/, "Pasting Word-style font-weight formatting preserves bold.");
+assert.match(pastedFormattingMarkup, /<u><em>Docs formatting<\/em><\/u>/, "Pasting common editor inline styles preserves safe combined formatting.");
+assert.match(pastedFormattingMarkup, /<\/p><p>/, "Pasting rich HTML preserves paragraph boundaries.");
+assert.match(pastedFormattingMarkup, /<br\/><span>Next line<\/span>/, "Pasting rich HTML preserves explicit line breaks.");
+
+const pastedListsMarkup = renderToStaticMarkup(<NoticeMessage message={serializeNoticeDocument(noticeDocumentFromPaste(
+  "<ul><li>Notebook</li><li><strong>Speech notes</strong></li></ul><ol><li>Prepare</li><li>Practise</li></ol>",
+  ""
+))} />);
+assert.match(pastedListsMarkup, /<ul><li><span>Notebook<\/span><\/li><li><span><strong>Speech notes<\/strong><\/span><\/li><\/ul>/, "Pasting a bulleted list preserves bullets and inline formatting.");
+assert.match(pastedListsMarkup, /<ol><li><span>Prepare<\/span><\/li><li><span>Practise<\/span><\/li><\/ol>/, "Pasting a numbered list preserves numbering.");
+
+const pastedWordListMarkup = renderToStaticMarkup(<NoticeMessage message={serializeNoticeDocument(noticeDocumentFromPaste(
+  '<p class="MsoListParagraphCxSpFirst" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">•<span>&nbsp;&nbsp;</span></span><b>First Word item</b></p><p class="MsoListParagraphCxSpLast" style="mso-list:l0 level1 lfo1"><span style="mso-list:Ignore">•<span>&nbsp;&nbsp;</span></span>Second Word item</p>',
+  ""
+))} />);
+assert.match(pastedWordListMarkup, /<ul><li><span><strong>First Word item<\/strong><\/span><\/li><li><span>Second Word item<\/span><\/li><\/ul>/, "Pasting Microsoft Word list markup preserves a clean bullet list.");
+
+const pastedPlainTextMarkup = renderToStaticMarkup(<NoticeMessage message={serializeNoticeDocument(noticeDocumentFromPaste(
+  "",
+  "First line\nSecond line\n\nNext paragraph"
+))} />);
+assert.match(pastedPlainTextMarkup, /First line<\/span><br\/><span>Second line/, "Plain-text paste preserves line breaks.");
+assert.match(pastedPlainTextMarkup, /<\/p><p><span>Next paragraph/, "Plain-text paste preserves paragraphs.");
+
+const unsafePasteDocument = noticeDocumentFromPaste(
+  '<script>alert("bad")</script><style>body{display:none}</style><p onclick="alert(1)">Keep <strong onerror="alert(2)">safe</strong> <a href="javascript:alert(3)" data-track="x">link text</a><img src="tracker.gif"></p><form action="javascript:alert(4)">form text</form><iframe>hidden</iframe>',
+  "Keep safe link text"
+);
+const unsafePasteMarkup = renderToStaticMarkup(<NoticeMessage message={serializeNoticeDocument(unsafePasteDocument)} />);
+const safeEditorHtml = noticeDocumentToEditorHtml(unsafePasteDocument);
+assert.match(unsafePasteMarkup, /Keep /, "Unsafe pasted HTML retains ordinary safe text.");
+assert.match(unsafePasteMarkup, /<strong>safe<\/strong>/, "Unsafe pasted HTML retains allowed formatting.");
+assert.match(unsafePasteMarkup, /link text/, "Unsupported pasted links retain their visible text.");
+assert.match(unsafePasteMarkup, /form text/, "Stripped unsafe wrapper elements retain ordinary safe text.");
+assert.doesNotMatch(unsafePasteMarkup, /alert\(|script|style|iframe|img|onclick|onerror|javascript:|href=|data-track/i, "Paste sanitization removes unsafe elements, URLs, and handlers before rendering.");
+assert.doesNotMatch(safeEditorHtml, /alert\(|script|style|iframe|img|onclick|onerror|javascript:|href=|class=|data-track/i, "Paste sanitization generates attribute-free safe HTML before editor insertion.");
 
 const strippedRichTextMarkup = renderToStaticMarkup(
   <NoticeMessage message={`${noticeRichTextPrefix}${JSON.stringify({

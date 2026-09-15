@@ -16,6 +16,7 @@ import {
   type NoticeInline,
   serializeNoticeDocument
 } from "../../shared/noticeRichText";
+import { noticeDocumentFromPaste, noticeDocumentToEditorHtml } from "../noticePaste";
 import { formatDate, isOperationalManagerRole } from "./portalShared";
 
 type NoticeFilters = {
@@ -377,7 +378,22 @@ export function NoticeFields({ notice, clubs, allowAllClubs }: { notice?: Notice
           onBlur={syncEditor}
           onPaste={(event) => {
             event.preventDefault();
-            document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
+            const html = event.clipboardData.getData("text/html");
+            const plainText = event.clipboardData.getData("text/plain");
+
+            if (html.trim()) {
+              const pastedDocument = noticeDocumentFromPaste(html, plainText);
+              const safeHtml = noticeDocumentToEditorHtml(pastedDocument);
+
+              if (safeHtml) {
+                document.execCommand("insertHTML", false, safeHtml);
+              } else {
+                document.execCommand("insertText", false, plainText);
+              }
+            } else {
+              document.execCommand("insertText", false, plainText);
+            }
+
             syncEditor();
           }}
           onDrop={(event) => event.preventDefault()}
