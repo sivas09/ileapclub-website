@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useId, useState } from "react";
 import {
   Club,
   createNotice,
@@ -186,47 +186,31 @@ function ManagerNoticesPanel({ user }: { user: PortalUser }) {
       {!isLoading && !notices.length ? <p className="loading-state notice-empty-state">No notices match the selected filters.</p> : null}
 
       {!isLoading && notices.length ? (
-        <div className="document-list-wrap notice-list-wrap">
-          <table className="document-list-table notice-management-table">
-            <caption className="sr-only">Notices and management actions</caption>
-            <thead>
-              <tr>
-                <th scope="col">Notice</th>
-                <th scope="col">Club</th>
-                <th scope="col">Status</th>
-                <th scope="col">Posted By</th>
-                <th scope="col">Posted</th>
-                <th scope="col">Expires</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notices.map((notice) => (
-                <ManagerNoticeRow
-                  key={notice.id}
-                  notice={notice}
-                  clubs={clubs}
-                  allowAllClubs={user.role === "ADMIN"}
-                  canEdit={isOperationalManagerRole(user.role) || Boolean(notice.clubId)}
-                  canDelete={isOperationalManagerRole(user.role)}
-                  isEditing={editingNotice?.id === notice.id}
-                  isSubmitting={isSubmitting}
-                  onEdit={() => setEditingNotice(notice)}
-                  onCancel={() => setEditingNotice(null)}
-                  onSave={handleSave}
-                  onStatusChange={handleStatusChange}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="notice-management-list" aria-label="Notices and management actions">
+          {notices.map((notice) => (
+            <ManagerNoticeCard
+              key={notice.id}
+              notice={notice}
+              clubs={clubs}
+              allowAllClubs={user.role === "ADMIN"}
+              canEdit={isOperationalManagerRole(user.role) || Boolean(notice.clubId)}
+              canDelete={isOperationalManagerRole(user.role)}
+              isEditing={editingNotice?.id === notice.id}
+              isSubmitting={isSubmitting}
+              onEdit={() => setEditingNotice(notice)}
+              onCancel={() => setEditingNotice(null)}
+              onSave={handleSave}
+              onStatusChange={handleStatusChange}
+              onDelete={handleDelete}
+            />
+          ))}
         </div>
       ) : null}
     </section>
   );
 }
 
-function ManagerNoticeRow({
+function ManagerNoticeCard({
   notice,
   clubs,
   allowAllClubs,
@@ -261,54 +245,55 @@ function ManagerNoticeRow({
   const statusLabel = formatNoticeStatus(notice.status);
 
   return (
-    <>
-      <tr className={notice.status === "ARCHIVED" ? "is-archived" : ""}>
-        <td className="notice-title-cell" data-label="Notice">
+    <article className={`notice-card ${notice.isPinned ? "is-important" : ""} ${notice.status === "ARCHIVED" ? "is-archived" : ""}`}>
+      <div className="notice-card-heading">
+        <div>
           <div className="notice-title-line">
-            <strong title={notice.title}>{notice.title}</strong>
+            <h3>{notice.title}</h3>
             {notice.isPinned ? <span className="notice-important-badge">Important</span> : null}
           </div>
-          <small title={notice.message}>{notice.message}</small>
-        </td>
-        <td data-label="Club"><span className="document-badge secondary-badge">{notice.clubName}</span></td>
-        <td data-label="Status">
-          <span className={`document-badge status-badge ${notice.status === "ARCHIVED" ? "is-archived" : "is-active"}`}>{statusLabel}</span>
-        </td>
-        <td data-label="Posted By">{notice.createdBy}</td>
-        <td data-label="Posted"><time dateTime={notice.createdAt}>{formatDate(notice.createdAt)}</time></td>
-        <td data-label="Expires">{notice.expiresAt ? <time dateTime={notice.expiresAt}>{formatExpiryDate(notice.expiresAt)}</time> : "No expiry"}</td>
-        <td className="document-row-actions" data-label="Actions">
-          <div className="document-actions document-actions-compact">
-            {canEdit ? <button type="button" aria-label={`Edit ${notice.title}`} onClick={onEdit}>Edit</button> : null}
-            {canEdit ? (
-              <button type="button" aria-label={`${notice.status === "ARCHIVED" ? "Activate" : "Archive"} ${notice.title}`} onClick={() => onStatusChange(notice)} disabled={isSubmitting}>
-                {notice.status === "ARCHIVED" ? "Activate" : "Archive"}
-              </button>
-            ) : null}
-            {canDelete ? (
-              <button type="button" className="danger-action" aria-label={`Delete ${notice.title}`} onClick={() => onDelete(notice)} disabled={isSubmitting}>Delete</button>
-            ) : null}
-          </div>
-        </td>
-      </tr>
+        </div>
+        <span className={`document-badge status-badge ${notice.status === "ARCHIVED" ? "is-archived" : "is-active"}`}>{statusLabel}</span>
+      </div>
+
+      <NoticeMessage message={notice.message} />
+
+      <dl className="notice-meta">
+        <div><dt>Club</dt><dd>{notice.clubName}</dd></div>
+        <div><dt>Posted by</dt><dd>{notice.createdBy}</dd></div>
+        <div><dt>Posted</dt><dd><time dateTime={notice.createdAt}>{formatDate(notice.createdAt)}</time></dd></div>
+        <div><dt>Expires</dt><dd>{notice.expiresAt ? <time dateTime={notice.expiresAt}>{formatExpiryDate(notice.expiresAt)}</time> : "No expiry"}</dd></div>
+      </dl>
+
+      <div className="document-actions notice-card-actions">
+        {canEdit ? <button type="button" aria-label={`Edit ${notice.title}`} onClick={onEdit}>Edit</button> : null}
+        {canEdit ? (
+          <button type="button" aria-label={`${notice.status === "ARCHIVED" ? "Activate" : "Archive"} ${notice.title}`} onClick={() => onStatusChange(notice)} disabled={isSubmitting}>
+            {notice.status === "ARCHIVED" ? "Activate" : "Archive"}
+          </button>
+        ) : null}
+        {canDelete ? (
+          <button type="button" className="danger-action" aria-label={`Delete ${notice.title}`} onClick={() => onDelete(notice)} disabled={isSubmitting}>Delete</button>
+        ) : null}
+      </div>
+
       {isEditing ? (
-        <tr className="document-edit-row notice-edit-row">
-          <td colSpan={7}>
-            <form className="document-edit-form notice-form" onSubmit={handleSubmit}>
-              <NoticeFields notice={notice} clubs={clubs} allowAllClubs={allowAllClubs} />
-              <div className="document-actions">
-                <button type="submit" disabled={isSubmitting}>Save</button>
-                <button type="button" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
-              </div>
-            </form>
-          </td>
-        </tr>
+        <form className="document-edit-form notice-form notice-card-edit-form" onSubmit={handleSubmit}>
+          <NoticeFields notice={notice} clubs={clubs} allowAllClubs={allowAllClubs} />
+          <div className="document-actions">
+            <button type="submit" disabled={isSubmitting}>Save</button>
+            <button type="button" onClick={onCancel} disabled={isSubmitting}>Cancel</button>
+          </div>
+        </form>
       ) : null}
-    </>
+    </article>
   );
 }
 
 function NoticeFields({ notice, clubs, allowAllClubs }: { notice?: Notice; clubs: Club[]; allowAllClubs: boolean }) {
+  const [message, setMessage] = useState(notice?.message ?? "");
+  const formattingHelpId = useId();
+
   return (
     <>
       <label>
@@ -317,8 +302,23 @@ function NoticeFields({ notice, clubs, allowAllClubs }: { notice?: Notice; clubs
       </label>
       <label className="notice-message-field">
         Message
-        <textarea name="message" defaultValue={notice?.message ?? ""} maxLength={noticeLimits.message} rows={4} required />
+        <textarea
+          name="message"
+          value={message}
+          onChange={(event) => setMessage(event.currentTarget.value)}
+          maxLength={noticeLimits.message}
+          rows={8}
+          required
+          aria-describedby={formattingHelpId}
+        />
+        <small id={formattingHelpId} className="notice-formatting-help">Use **double asterisks** to make text bold. Start a line with - for a bullet point.</small>
       </label>
+      {message.trim() ? (
+        <div className="notice-preview" aria-live="polite">
+          <span>Preview</span>
+          <NoticeMessage message={message} />
+        </div>
+      ) : null}
       <label>
         Club
         <select name="clubId" defaultValue={notice?.clubId ?? ""} required={!allowAllClubs}>
@@ -366,22 +366,113 @@ function StudentNoticesPanel() {
       {notices.length ? (
         <div className="student-notice-list">
           {notices.map((notice) => (
-            <article className={`student-notice-card ${notice.isPinned ? "is-important" : ""}`} key={notice.id}>
-              <div className="student-notice-heading">
+            <article className={`notice-card student-notice-card ${notice.isPinned ? "is-important" : ""}`} key={notice.id}>
+              <div className="notice-card-heading student-notice-heading">
                 <h3>{notice.title}</h3>
                 {notice.isPinned ? <span className="notice-important-badge">Important</span> : null}
               </div>
-              <p>{notice.message}</p>
-              <div className="student-notice-meta">
-                <span>{notice.clubName}</span>
-                <time dateTime={notice.createdAt}>Posted {formatDate(notice.createdAt)}</time>
-              </div>
+              <NoticeMessage message={notice.message} />
+              <dl className="notice-meta student-notice-meta">
+                <div><dt>Club</dt><dd>{notice.clubName}</dd></div>
+                <div><dt>Posted by</dt><dd>{notice.createdBy}</dd></div>
+                <div><dt>Posted</dt><dd><time dateTime={notice.createdAt}>{formatDate(notice.createdAt)}</time></dd></div>
+                <div><dt>Expires</dt><dd>{notice.expiresAt ? <time dateTime={notice.expiresAt}>{formatExpiryDate(notice.expiresAt)}</time> : "No expiry"}</dd></div>
+              </dl>
             </article>
           ))}
         </div>
       ) : null}
     </section>
   );
+}
+
+type NoticeBlock =
+  | { type: "paragraph"; lines: string[] }
+  | { type: "list"; items: string[] };
+
+export function NoticeMessage({ message }: { message: string }) {
+  const blocks = noticeBlocks(message);
+
+  return (
+    <div className="notice-message">
+      {blocks.map((block, blockIndex) => block.type === "list" ? (
+        <ul key={`list-${blockIndex}`}>
+          {block.items.map((item, itemIndex) => <li key={`${blockIndex}-${itemIndex}`}>{boldText(item)}</li>)}
+        </ul>
+      ) : (
+        <p key={`paragraph-${blockIndex}`}>
+          {block.lines.map((line, lineIndex) => (
+            <span key={`${blockIndex}-${lineIndex}`}>
+              {lineIndex ? <br /> : null}
+              {boldText(line)}
+            </span>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function noticeBlocks(message: string): NoticeBlock[] {
+  const blocks: NoticeBlock[] = [];
+  const lines = message.replace(/\r\n?/g, "\n").split("\n");
+  let paragraphLines: string[] = [];
+  let listItems: string[] = [];
+
+  function flushParagraph() {
+    if (paragraphLines.length) {
+      blocks.push({ type: "paragraph", lines: paragraphLines });
+      paragraphLines = [];
+    }
+  }
+
+  function flushList() {
+    if (listItems.length) {
+      blocks.push({ type: "list", items: listItems });
+      listItems = [];
+    }
+  }
+
+  for (const line of lines) {
+    const bullet = line.match(/^\s*-\s+(.+)$/);
+
+    if (bullet) {
+      flushParagraph();
+      listItems.push(bullet[1]);
+    } else if (!line.trim()) {
+      flushParagraph();
+      flushList();
+    } else {
+      flushList();
+      paragraphLines.push(line);
+    }
+  }
+
+  flushParagraph();
+  flushList();
+  return blocks;
+}
+
+function boldText(value: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const boldPattern = /\*\*(.+?)\*\*/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = boldPattern.exec(value))) {
+    if (match.index > cursor) {
+      parts.push(value.slice(cursor, match.index));
+    }
+
+    parts.push(<strong key={`${match.index}-${match[1]}`}>{match[1]}</strong>);
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < value.length) {
+    parts.push(value.slice(cursor));
+  }
+
+  return parts;
 }
 
 function noticePayload(formData: FormData) {

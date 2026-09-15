@@ -1647,6 +1647,39 @@ button {
   grid-column: 1 / -1;
 }
 
+.notice-message-field textarea {
+  min-height: 180px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.6;
+}
+
+.notice-formatting-help {
+  color: var(--portal-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.45;
+  text-transform: none;
+}
+
+.notice-preview {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px dashed #b8c7d9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.notice-preview > span {
+  color: var(--portal-muted);
+  font-size: 0.7rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .notice-checkbox {
   display: flex !important;
   align-items: center;
@@ -1672,44 +1705,57 @@ button {
   text-transform: none !important;
 }
 
-.notice-list-wrap {
+.notice-management-list,
+.student-notice-list {
+  display: grid;
+  gap: 18px;
   margin-top: 18px;
 }
 
-.notice-management-table {
-  min-width: 980px;
+.notice-card {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  padding: clamp(22px, 3vw, 30px);
+  border: 1px solid #d6e0eb;
+  border-left: 5px solid var(--portal-teal);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(18, 34, 56, 0.055);
 }
 
-.notice-title-cell {
-  width: 32%;
-  min-width: 240px;
+.notice-card.is-important {
+  border-color: #ead6b7;
+  border-left-color: #b96a24;
+  background: #fffaf2;
+}
+
+.notice-card.is-archived {
+  border-left-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.notice-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .notice-title-line {
   display: flex;
-  align-items: center;
-  gap: 7px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 9px;
   min-width: 0;
 }
 
-.notice-title-line strong,
-.notice-title-cell small {
-  display: block;
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.notice-title-line strong {
+.notice-title-line h3,
+.student-notice-heading h3 {
+  margin: 0;
   color: var(--portal-blue);
-  font-size: 0.9rem;
-}
-
-.notice-title-cell small {
-  margin-top: 3px;
-  color: var(--portal-muted);
-  font-size: 0.75rem;
+  font-size: clamp(1.18rem, 2vw, 1.42rem);
+  line-height: 1.25;
 }
 
 .notice-important-badge {
@@ -1733,54 +1779,82 @@ button {
   color: var(--portal-muted);
 }
 
-.student-notice-list {
+.notice-message {
   display: grid;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 0.9em;
+  min-width: 0;
+  color: var(--portal-ink);
+  font-size: 1.04rem;
+  line-height: 1.72;
+  overflow-wrap: anywhere;
+}
+
+.notice-message p,
+.notice-message ul {
+  margin: 0;
+}
+
+.notice-message ul {
+  padding-left: 1.4em;
+}
+
+.notice-message li + li {
+  margin-top: 0.28em;
+}
+
+.notice-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 22px;
+  margin: 0;
+  padding-top: 15px;
+  border-top: 1px solid #e3e9f0;
+}
+
+.notice-meta div {
+  min-width: 0;
+}
+
+.notice-meta dt {
+  color: var(--portal-muted);
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.notice-meta dd {
+  margin: 0;
+  color: #415168;
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.notice-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.notice-card-actions button {
+  min-height: 36px;
+}
+
+.notice-card-actions .danger-action {
+  color: #9f1239;
+  border-color: #fecdd3;
+  background: #fff1f2;
+}
+
+.notice-card-edit-form {
+  margin: 2px -4px -4px;
+  border-top-color: var(--portal-teal);
 }
 
 .student-notice-card {
-  display: grid;
-  gap: 9px;
-  padding: 15px 16px;
-  border: 1px solid #d6e0eb;
-  border-left: 4px solid var(--portal-teal);
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.student-notice-card.is-important {
-  border-left-color: var(--portal-orange);
-  background: #fffdf8;
-}
-
-.student-notice-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.student-notice-heading h3 {
-  margin: 0;
-  color: var(--portal-blue);
-  font-size: 1rem;
-}
-
-.student-notice-card > p {
-  margin: 0;
-  color: var(--portal-ink);
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-
-.student-notice-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 18px;
-  color: var(--portal-muted);
-  font-size: 0.76rem;
-  font-weight: 800;
+  gap: 18px;
 }
 
 .student-dashboard-notices {
@@ -3578,15 +3652,8 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .document-list-table .notice-title-cell {
-    grid-column: 1 / -1;
-    width: auto;
-    min-width: 0;
-  }
-
-  .notice-title-line strong,
-  .notice-title-cell small {
-    max-width: none;
+  .notice-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -3768,14 +3835,25 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .document-list-table .notice-title-cell {
-    grid-column: auto;
+  .notice-card {
+    gap: 15px;
+    padding: 18px 16px;
   }
 
+  .notice-card-heading,
   .student-notice-heading,
   .student-dashboard-notices-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .notice-meta {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .notice-card-actions button {
+    flex: 1 1 auto;
   }
 }
 

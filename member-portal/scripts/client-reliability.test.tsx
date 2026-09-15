@@ -9,6 +9,7 @@ import { attendanceStatusLabel, guideResourceForRequirement, LearningReflectionH
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
 import { CenterDirectorScopeView } from "../src/client/components/CenterDirectorScopeView";
 import { DocumentAddPermissionNotice, documentRequirementOptions, DocumentsWorkspace } from "../src/client/components/DocumentsWorkspace";
+import { NoticeMessage } from "../src/client/components/NoticesWorkspace";
 import {
   bandGuideFor,
   claimableMeetingRoleSlots,
@@ -30,6 +31,25 @@ import {
 } from "../src/client/components/portalShared";
 
 const meeting = meetingFixture();
+
+const formattedNoticeMarkup = renderToStaticMarkup(
+  <NoticeMessage message={"**Important**\nPlease prepare your speech.\n\n**Bring:**\n- Notebook\n- Water bottle"} />
+);
+assert.match(formattedNoticeMarkup, /<strong>Important<\/strong>/, "Notice Markdown renders bold text as strong emphasis.");
+assert.match(formattedNoticeMarkup, /<strong>Bring:<\/strong>/, "Notice Markdown supports more than one bold phrase.");
+assert.match(formattedNoticeMarkup, /<br\/>Please prepare your speech\./, "Notice Markdown preserves a line break within a paragraph.");
+assert.match(formattedNoticeMarkup, /<\/p><p>/, "Blank notice lines create separate paragraphs.");
+assert.match(formattedNoticeMarkup, /<ul><li>Notebook<\/li><li>Water bottle<\/li><\/ul>/, "Notice Markdown renders simple bullet lists.");
+
+const plainNoticeMarkup = renderToStaticMarkup(<NoticeMessage message="A plain text reminder." />);
+assert.match(plainNoticeMarkup, /<p><span>A plain text reminder\.<\/span><\/p>/, "Plain text notices continue to render normally.");
+
+const unsafeNoticeMarkup = renderToStaticMarkup(
+  <NoticeMessage message={'<script>alert("x")</script>\n<iframe src="bad"></iframe>\n<style>body { display: none; }</style>\n<img src=x onerror="alert(1)">'} />
+);
+assert.doesNotMatch(unsafeNoticeMarkup, /<(script|iframe|style|img)\b/i, "Notice content cannot create unsafe HTML elements.");
+assert.match(unsafeNoticeMarkup, /&lt;script&gt;/, "Unsafe notice HTML is rendered as escaped text.");
+
 const editMarkup = renderToStaticMarkup(
   <MeetingEditForm meeting={meeting} clubs={[meeting.club]} isSubmitting={false} onSave={() => undefined} />
 );
