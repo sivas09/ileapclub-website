@@ -66,6 +66,8 @@ for (const [title, nextTitle] of [
   const block = sectionBlock(agenda, title, nextTitle);
   assertNotMatches(block, /\\row\\par(?=[^a-z])/, `${title} rows do not insert blank paragraphs`);
   assertNotIncludes(block, "\\row\\pard\\sa", `${title} rows do not inherit paragraph-after spacing`);
+  assertNotIncludes(block, "__________________", `${title} does not contain a long underline leader`);
+  assertNotIncludes(block, "\\line", `${title} does not insert a second visual line in paired rows`);
 }
 assertIncludes(
   agenda,
@@ -100,10 +102,10 @@ function assignedRole(roleName: string, firstName: string, lastName: string, sor
 function pairedRow(number: number, speakerName: string, evaluatorName: string) {
   return [
     "\\trowd\\trgaph40\\trleft0\\trkeep",
-    "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
+    "\\cellx500\\cellx4800\\cellx5700\\cellx10440",
     compactCell(`${number}.`),
     compactCell(speakerName),
-    compactCell("__________________"),
+    compactCell(".........."),
     compactCell(evaluatorName),
     "\\row"
   ].join("");

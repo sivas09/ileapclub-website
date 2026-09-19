@@ -117,9 +117,9 @@ function renderPairedSection(title: string, layout: PairedRoleLayout, roleSlots:
 function compactAssignmentLine(label: string, duration: string, memberName: string) {
   return [
     "\\trowd\\trgaph40\\trleft0",
-    "\\cellx4300\\cellx6500\\cellx10440",
+    "\\cellx4300\\cellx5300\\cellx10440",
     compactTableCell(escapeRtf(`${label} (${duration})`)),
-    compactTableCell("__________________"),
+    compactTableCell(".........."),
     compactTableCell(escapeRtf(memberName)),
     "\\row"
   ].join("");
@@ -128,7 +128,7 @@ function compactAssignmentLine(label: string, duration: string, memberName: stri
 function pairedRoleHeader(speakerDuration: string) {
   return [
     "\\trowd\\trgaph40\\trleft0\\trkeep",
-    "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
+    "\\cellx500\\cellx4800\\cellx5700\\cellx10440",
     compactTableCell(""),
     compactTableCell(`\\b ${escapeRtf(`Speakers (${speakerDuration})`)}\\b0 `),
     compactTableCell(""),
@@ -140,10 +140,10 @@ function pairedRoleHeader(speakerDuration: string) {
 function pairedRoleRow(number: number, speakerName: string, evaluatorName: string) {
   return [
     "\\trowd\\trgaph40\\trleft0\\trkeep",
-    "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
+    "\\cellx500\\cellx4800\\cellx5700\\cellx10440",
     compactTableCell(`${number}.`),
     compactTableCell(escapeRtf(speakerName)),
-    compactTableCell("__________________"),
+    compactTableCell(".........."),
     compactTableCell(escapeRtf(evaluatorName)),
     "\\row"
   ].join("");
