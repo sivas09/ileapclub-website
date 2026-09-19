@@ -19,14 +19,7 @@ type AgendaMeeting = Prisma.MeetingGetPayload<{
 export function buildAgendaRtf(meeting: AgendaMeeting) {
   const roleSlots = [...meeting.roleSlots].sort((left, right) => left.sortOrder - right.sortOrder);
   const agendaRows = agendaSectionsForTemplate(meeting.templateType)
-    .flatMap((section) => [
-      sectionHeading(section.title),
-      ...section.items.map((item) => tableRow([
-        item.duration,
-        item.activity,
-        item.roles.map((roleName) => `${roleName}: ${assignedMemberForRole(roleSlots, roleName)}`).join("; ") || "All members"
-      ]))
-    ])
+    .flatMap((section) => renderSection(section, roleSlots))
     .join("");
 
   return [
@@ -85,7 +78,75 @@ function tableRow(values: string[], isHeader = false) {
 }
 
 function sectionHeading(title: string) {
-  return `\\pard\\sb180\\sa60\\b\\fs26 ${escapeRtf(title.toUpperCase())}\\b0\\fs22\\par`;
+  return `\\pard\\sb120\\sa40\\b\\fs26 ${escapeRtf(title.toUpperCase())}\\b0\\fs22\\par`;
+}
+
+function renderSection(section: AgendaSection, roleSlots: AgendaRoleSlot[]) {
+  if (section.pairedRoles) {
+    return renderPairedSection(section.title, section.pairedRoles, roleSlots);
+  }
+
+  return [
+    sectionHeading(section.title),
+    ...section.items.map((item) => tableRow([
+      item.duration,
+      item.activity,
+      item.roles.map((roleName, index) => {
+        const displayLabel = item.roleDisplayLabels?.[index] ?? roleName;
+        return `${displayLabel}: ${assignedMemberForRole(roleSlots, roleName)}`;
+      }).join("; ") || "All members"
+    ]))
+  ];
+}
+
+function renderPairedSection(title: string, layout: PairedRoleLayout, roleSlots: AgendaRoleSlot[]) {
+  const rows = layout.speakers.map((speakerRole, index) => pairedRoleRow(
+    index + 1,
+    assignedMemberForRole(roleSlots, speakerRole),
+    assignedMemberForRole(roleSlots, layout.evaluators[index])
+  ));
+
+  return [
+    sectionHeading(title),
+    compactAssignmentLine(layout.introductionLabel, layout.introductionDuration, assignedMemberForRole(roleSlots, layout.introductionRole)),
+    pairedRoleHeader(layout.speakerDuration),
+    ...rows
+  ];
+}
+
+function compactAssignmentLine(label: string, duration: string, memberName: string) {
+  return [
+    "\\trowd\\trgaph40\\trleft0",
+    "\\cellx4300\\cellx6500\\cellx10440",
+    `\\intbl ${escapeRtf(`${label} (${duration})`)}\\cell`,
+    "\\intbl __________________\\cell",
+    `\\intbl ${escapeRtf(memberName)}\\cell`,
+    "\\row"
+  ].join("");
+}
+
+function pairedRoleHeader(speakerDuration: string) {
+  return [
+    "\\trowd\\trgaph40\\trleft0\\trkeep",
+    "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
+    "\\intbl \\cell",
+    `\\intbl \\b ${escapeRtf(`Speakers (${speakerDuration})`)}\\b0 \\cell`,
+    "\\intbl \\cell",
+    "\\intbl \\b Evaluators\\b0 \\cell",
+    "\\row"
+  ].join("");
+}
+
+function pairedRoleRow(number: number, speakerName: string, evaluatorName: string) {
+  return [
+    "\\trowd\\trgaph40\\trleft0\\trkeep",
+    "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
+    `\\intbl ${number}.\\cell`,
+    `\\intbl ${escapeRtf(speakerName)}\\cell`,
+    "\\intbl __________________\\cell",
+    `\\intbl ${escapeRtf(evaluatorName)}\\cell`,
+    "\\row"
+  ].join("");
 }
 
 function formatDate(value: Date) {
@@ -109,6 +170,16 @@ type AgendaSection = {
   offset: string;
   title: string;
   items: AgendaItem[];
+  pairedRoles?: PairedRoleLayout;
+};
+
+type PairedRoleLayout = {
+  introductionLabel: string;
+  introductionDuration: string;
+  introductionRole: string;
+  speakerDuration: string;
+  speakers: string[];
+  evaluators: string[];
 };
 
 type AgendaItem = {
@@ -116,6 +187,7 @@ type AgendaItem = {
   activity: string;
   roles: string[];
   notes: string;
+  roleDisplayLabels?: string[];
 };
 
 type AgendaRoleSlot = AgendaMeeting["roleSlots"][number];
@@ -142,19 +214,28 @@ const regularMeetingSections: AgendaSection[] = [
   {
     offset: "+10 min",
     title: "Speeches",
-    items: [
-      { duration: "2 min", activity: "Prepared speech introductions", roles: ["iChair"], notes: "Introduce each speaker and evaluator pair." },
-      { duration: "4 min each", activity: "4 prepared speeches", roles: ["Prepared Speech 1", "Prepared Speech 2", "Prepared Speech 3", "Prepared Speech 4"], notes: "Speakers present prepared speech projects." },
-      { duration: "During speeches", activity: "4 speech evaluations", roles: ["Prepared Speech Evaluator 1", "Prepared Speech Evaluator 2", "Prepared Speech Evaluator 3", "Prepared Speech Evaluator 4"], notes: "Evaluators listen for strengths and growth points." }
-    ]
+    items: [],
+    pairedRoles: {
+      introductionLabel: "iChair Introduction",
+      introductionDuration: "2 min",
+      introductionRole: "iChair",
+      speakerDuration: "4 min",
+      speakers: ["Prepared Speech 1", "Prepared Speech 2", "Prepared Speech 3", "Prepared Speech 4"],
+      evaluators: ["Prepared Speech Evaluator 1", "Prepared Speech Evaluator 2", "Prepared Speech Evaluator 3", "Prepared Speech Evaluator 4"]
+    }
   },
   {
     offset: "+35 min",
     title: "Presentations",
-    items: [
-      { duration: "4 min each", activity: "4 prepared presentations", roles: ["Prepared Presentation 1", "Prepared Presentation 2", "Prepared Presentation 3", "Prepared Presentation 4"], notes: "Presenters deliver prepared presentation projects." },
-      { duration: "During presentations", activity: "4 presentation evaluations", roles: ["Prepared Presentation Evaluator 1", "Prepared Presentation Evaluator 2", "Prepared Presentation Evaluator 3", "Prepared Presentation Evaluator 4"], notes: "Evaluators prepare presentation feedback." }
-    ]
+    items: [],
+    pairedRoles: {
+      introductionLabel: "iChair Introduction",
+      introductionDuration: "2 min",
+      introductionRole: "iChair",
+      speakerDuration: "4 min",
+      speakers: ["Prepared Presentation 1", "Prepared Presentation 2", "Prepared Presentation 3", "Prepared Presentation 4"],
+      evaluators: ["Prepared Presentation Evaluator 1", "Prepared Presentation Evaluator 2", "Prepared Presentation Evaluator 3", "Prepared Presentation Evaluator 4"]
+    }
   },
   {
     offset: "+60 min",
@@ -165,12 +246,16 @@ const regularMeetingSections: AgendaSection[] = [
   },
   {
     offset: "+80 min",
-    title: "Think on My Feet",
-    items: [
-      { duration: "3 min", activity: "Impromptu speaking setup", roles: ["iThink on My Feet Master"], notes: "Introduce prompts and response expectations." },
-      { duration: "2 min each", activity: "4 impromptu participants", roles: ["iThink on My Feet Participant 1", "iThink on My Feet Participant 2", "iThink on My Feet Participant 3", "iThink on My Feet Participant 4"], notes: "Participants respond without preparation." },
-      { duration: "1 min each", activity: "4 impromptu evaluations", roles: ["iThink on My Feet Evaluator 1", "iThink on My Feet Evaluator 2", "iThink on My Feet Evaluator 3", "iThink on My Feet Evaluator 4"], notes: "Evaluators give concise feedback." }
-    ]
+    title: "iThink on My Feet",
+    items: [],
+    pairedRoles: {
+      introductionLabel: "iThink on My Feet Master",
+      introductionDuration: "2 min",
+      introductionRole: "iThink on My Feet Master",
+      speakerDuration: "2 min",
+      speakers: ["iThink on My Feet Participant 1", "iThink on My Feet Participant 2", "iThink on My Feet Participant 3", "iThink on My Feet Participant 4"],
+      evaluators: ["iThink on My Feet Evaluator 1", "iThink on My Feet Evaluator 2", "iThink on My Feet Evaluator 3", "iThink on My Feet Evaluator 4"]
+    }
   },
   {
     offset: "+92 min",
@@ -182,11 +267,15 @@ const regularMeetingSections: AgendaSection[] = [
   {
     offset: "+97 min",
     title: "Story & Joke",
-    items: [
-      { duration: "2 min", activity: "Story and joke setup", roles: ["iStory and Joke Master"], notes: "Introduce the segment and order." },
-      { duration: "3 min each", activity: "2 story or joke roles", roles: ["iStory and Joke Speaker 1", "iStory and Joke Speaker 2"], notes: "Members deliver prepared or semi-prepared stories/jokes." },
-      { duration: "1 min each", activity: "2 story or joke evaluations", roles: ["iStory and Joke Evaluator 1", "iStory and Joke Evaluator 2"], notes: "Evaluators give concise feedback." }
-    ]
+    items: [],
+    pairedRoles: {
+      introductionLabel: "iStory and Joke Master",
+      introductionDuration: "2 min",
+      introductionRole: "iStory and Joke Master",
+      speakerDuration: "3 min",
+      speakers: ["iStory and Joke Speaker 1", "iStory and Joke Speaker 2"],
+      evaluators: ["iStory and Joke Evaluator 1", "iStory and Joke Evaluator 2"]
+    }
   },
   {
     offset: "+110 min",
@@ -203,7 +292,13 @@ const regularMeetingSections: AgendaSection[] = [
     offset: "+120 min",
     title: "Scoring and Remarks",
     items: [
-      { duration: "5 min", activity: "Evaluator scoring and facilitator remarks", roles: ["iChair", "Prepared Speech Evaluator 1", "Prepared Presentation Evaluator 1"], notes: "Record scores and final feedback." }
+      {
+        duration: "5 min",
+        activity: "Evaluator scoring and facilitator remarks",
+        roles: ["iChair", "Prepared Speech Evaluator 1", "Prepared Presentation Evaluator 1"],
+        roleDisplayLabels: ["iChair", "Speech evaluator", "Presentation evaluator"],
+        notes: "Record scores and final feedback."
+      }
     ]
   },
   {
