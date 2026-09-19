@@ -52,6 +52,31 @@ assertIncludes(
 );
 assertIncludes(agenda, pairedRow(2, "None", "Emery Evaluator"), "unassigned speaker remains in row two as None");
 assertIncludes(agenda, pairedRow(2, "None", "None"), "fully unassigned paired slots remain visible as None");
+assertIncludes(
+  agenda,
+  `${pairedRow(1, "Sam Speaker", "Evelyn Evaluator")}${pairedRow(2, "None", "Emery Evaluator")}`,
+  "numbered speaker and evaluator rows are adjacent without blank paragraphs"
+);
+for (const [title, nextTitle] of [
+  ["SPEECHES", "PRESENTATIONS"],
+  ["PRESENTATIONS", "CASE STUDY"],
+  ["ITHINK ON MY FEET", "QUIZ"],
+  ["STORY & JOKE", "REPORTS"]
+]) {
+  const block = sectionBlock(agenda, title, nextTitle);
+  assertNotMatches(block, /\\row\\par(?=[^a-z])/, `${title} rows do not insert blank paragraphs`);
+  assertNotIncludes(block, "\\row\\pard\\sa", `${title} rows do not inherit paragraph-after spacing`);
+}
+assertIncludes(
+  agenda,
+  "\\row\\pard\\sb160\\sa20\\b\\fs26 PRESENTATIONS",
+  "major sections retain a deliberate gap before their headings"
+);
+assertIncludes(
+  agenda,
+  "\\pard\\intbl\\sb0\\sa0\\sl240\\slmult1 1.\\cell",
+  "numbered rows explicitly use compact paragraph and line spacing"
+);
 
 assertIncludes(agenda, "iChair Introduction (2 min)", "speech and presentation introductions retain the iChair label");
 assertIncludes(agenda, "Avery Chair", "iChair assignment is retained");
@@ -74,11 +99,29 @@ function assignedRole(roleName: string, firstName: string, lastName: string, sor
 
 function pairedRow(number: number, speakerName: string, evaluatorName: string) {
   return [
-    `\\intbl ${number}.\\cell`,
-    `\\intbl ${speakerName}\\cell`,
-    "\\intbl __________________\\cell",
-    `\\intbl ${evaluatorName}\\cell`
+    "\\trowd\\trgaph40\\trleft0\\trkeep",
+    "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
+    compactCell(`${number}.`),
+    compactCell(speakerName),
+    compactCell("__________________"),
+    compactCell(evaluatorName),
+    "\\row"
   ].join("");
+}
+
+function compactCell(value: string) {
+  return `\\pard\\intbl\\sb0\\sa0\\sl240\\slmult1 ${value}\\cell`;
+}
+
+function sectionBlock(value: string, title: string, nextTitle: string) {
+  const start = value.indexOf(`\\fs26 ${title}`);
+  const end = value.indexOf(`\\fs26 ${nextTitle}`, start + 1);
+
+  if (start === -1 || end === -1) {
+    throw new Error(`unable to find agenda section boundaries for ${title}`);
+  }
+
+  return value.slice(start, end);
 }
 
 function assertIncludes(value: string, expected: string, label: string) {
@@ -90,5 +133,11 @@ function assertIncludes(value: string, expected: string, label: string) {
 function assertNotIncludes(value: string, unexpected: string, label: string) {
   if (value.includes(unexpected)) {
     throw new Error(`${label}: expected agenda not to include ${JSON.stringify(unexpected)}`);
+  }
+}
+
+function assertNotMatches(value: string, unexpected: RegExp, label: string) {
+  if (unexpected.test(value)) {
+    throw new Error(`${label}: expected agenda not to match ${unexpected}`);
   }
 }

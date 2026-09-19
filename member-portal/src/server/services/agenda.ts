@@ -72,13 +72,13 @@ function tableRow(values: string[], isHeader = false) {
   return [
     "\\trowd\\trgaph80\\trleft0",
     "\\cellx1200\\cellx3900\\cellx10440",
-    ...escapedValues.map((value) => `\\intbl ${boldStart}${value}${boldEnd}\\cell`),
+    ...escapedValues.map((value) => compactTableCell(`${boldStart}${value}${boldEnd}`)),
     "\\row"
   ].join("");
 }
 
 function sectionHeading(title: string) {
-  return `\\pard\\sb120\\sa40\\b\\fs26 ${escapeRtf(title.toUpperCase())}\\b0\\fs22\\par`;
+  return `\\pard\\sb160\\sa20\\b\\fs26 ${escapeRtf(title.toUpperCase())}\\b0\\fs22\\par`;
 }
 
 function renderSection(section: AgendaSection, roleSlots: AgendaRoleSlot[]) {
@@ -118,9 +118,9 @@ function compactAssignmentLine(label: string, duration: string, memberName: stri
   return [
     "\\trowd\\trgaph40\\trleft0",
     "\\cellx4300\\cellx6500\\cellx10440",
-    `\\intbl ${escapeRtf(`${label} (${duration})`)}\\cell`,
-    "\\intbl __________________\\cell",
-    `\\intbl ${escapeRtf(memberName)}\\cell`,
+    compactTableCell(escapeRtf(`${label} (${duration})`)),
+    compactTableCell("__________________"),
+    compactTableCell(escapeRtf(memberName)),
     "\\row"
   ].join("");
 }
@@ -129,10 +129,10 @@ function pairedRoleHeader(speakerDuration: string) {
   return [
     "\\trowd\\trgaph40\\trleft0\\trkeep",
     "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
-    "\\intbl \\cell",
-    `\\intbl \\b ${escapeRtf(`Speakers (${speakerDuration})`)}\\b0 \\cell`,
-    "\\intbl \\cell",
-    "\\intbl \\b Evaluators\\b0 \\cell",
+    compactTableCell(""),
+    compactTableCell(`\\b ${escapeRtf(`Speakers (${speakerDuration})`)}\\b0 `),
+    compactTableCell(""),
+    compactTableCell("\\b Evaluators\\b0 "),
     "\\row"
   ].join("");
 }
@@ -141,12 +141,16 @@ function pairedRoleRow(number: number, speakerName: string, evaluatorName: strin
   return [
     "\\trowd\\trgaph40\\trleft0\\trkeep",
     "\\cellx500\\cellx4800\\cellx6500\\cellx10440",
-    `\\intbl ${number}.\\cell`,
-    `\\intbl ${escapeRtf(speakerName)}\\cell`,
-    "\\intbl __________________\\cell",
-    `\\intbl ${escapeRtf(evaluatorName)}\\cell`,
+    compactTableCell(`${number}.`),
+    compactTableCell(escapeRtf(speakerName)),
+    compactTableCell("__________________"),
+    compactTableCell(escapeRtf(evaluatorName)),
     "\\row"
   ].join("");
+}
+
+function compactTableCell(value: string) {
+  return `\\pard\\intbl\\sb0\\sa0\\sl240\\slmult1 ${value}\\cell`;
 }
 
 function formatDate(value: Date) {
