@@ -2,6 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { mainRoleNameForReportRole } from "../../shared/portalConstants.js";
 import { publicUserSelect } from "./safeUser.js";
 
+const mainTableColumns = "\\cellx1200\\cellx3900\\cellx10440";
+const pairedTableColumns = "\\cellx500\\cellx4200\\cellx4800\\cellx10440";
+const pairedIntroductionColumns = "\\cellx4200\\cellx4800\\cellx10440";
+const pairedLeader = "........";
+
 type AgendaMeeting = Prisma.MeetingGetPayload<{
   include: {
     club: { include: { centre: true } };
@@ -70,8 +75,8 @@ function tableRow(values: string[], isHeader = false) {
   const boldEnd = isHeader ? "\\b0 " : "";
 
   return [
-    "\\trowd\\trgaph80\\trleft0",
-    "\\cellx1200\\cellx3900\\cellx10440",
+    "\\trowd\\trgaph80\\trleft0\\trautofit0",
+    mainTableColumns,
     ...escapedValues.map((value) => compactTableCell(`${boldStart}${value}${boldEnd}`)),
     "\\row"
   ].join("");
@@ -116,10 +121,10 @@ function renderPairedSection(title: string, layout: PairedRoleLayout, roleSlots:
 
 function compactAssignmentLine(label: string, duration: string, memberName: string) {
   return [
-    "\\trowd\\trgaph40\\trleft0",
-    "\\cellx4300\\cellx5300\\cellx10440",
+    "\\trowd\\trgaph40\\trleft0\\trautofit0",
+    pairedIntroductionColumns,
     compactTableCell(escapeRtf(`${label} (${duration})`)),
-    compactTableCell(".........."),
+    compactTableCell(pairedLeader),
     compactTableCell(escapeRtf(memberName)),
     "\\row"
   ].join("");
@@ -127,8 +132,8 @@ function compactAssignmentLine(label: string, duration: string, memberName: stri
 
 function pairedRoleHeader(speakerDuration: string) {
   return [
-    "\\trowd\\trgaph40\\trleft0\\trkeep",
-    "\\cellx500\\cellx4800\\cellx5700\\cellx10440",
+    "\\trowd\\trgaph40\\trleft0\\trautofit0\\trkeep",
+    pairedTableColumns,
     compactTableCell(""),
     compactTableCell(`\\b ${escapeRtf(`Speakers (${speakerDuration})`)}\\b0 `),
     compactTableCell(""),
@@ -139,11 +144,11 @@ function pairedRoleHeader(speakerDuration: string) {
 
 function pairedRoleRow(number: number, speakerName: string, evaluatorName: string) {
   return [
-    "\\trowd\\trgaph40\\trleft0\\trkeep",
-    "\\cellx500\\cellx4800\\cellx5700\\cellx10440",
+    "\\trowd\\trgaph40\\trleft0\\trautofit0\\trkeep",
+    pairedTableColumns,
     compactTableCell(`${number}.`),
     compactTableCell(escapeRtf(speakerName)),
-    compactTableCell(".........."),
+    compactTableCell(pairedLeader),
     compactTableCell(escapeRtf(evaluatorName)),
     "\\row"
   ].join("");
