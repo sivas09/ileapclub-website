@@ -119,11 +119,28 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
   const programLevel = stringQuery(request.query.programLevel);
   const currentBandLevel = stringQuery(request.query.currentBandLevel);
   const status = stringQuery(request.query.status);
+  const validActiveMembershipGroups = await prisma.studentClubMembership.groupBy({
+    by: ["studentId"],
+    where: {
+      status: "ACTIVE",
+      club: { isActive: true, centre: { isActive: true } },
+      student: { user: { role: Role.STUDENT, isActive: true } }
+    },
+    _count: { _all: true }
+  });
+  const activeStudentIds = validActiveMembershipGroups
+    .filter((group) => group._count._all === 1)
+    .map((group) => group.studentId);
+  const activeStudentIdSet = new Set(activeStudentIds);
   const statusFilters: Prisma.StudentClubMembershipWhereInput[] = status === "inactive"
-    ? [{ OR: [{ status: { not: "ACTIVE" } }, { student: { user: { isActive: false } } }] }]
+    ? [{ studentId: { notIn: activeStudentIds } }]
     : status === ""
       ? []
-      : [{ status: "ACTIVE" }, { student: { user: { isActive: true } } }];
+      : [
+          { studentId: { in: activeStudentIds } },
+          { status: "ACTIVE" },
+          { club: { isActive: true, centre: { isActive: true } } }
+        ];
   const clubFilter = requestedClubId
     ? requestedClubId
     : visibleClubIds === null
@@ -181,7 +198,6 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
             user: { select: memberUserSelect },
             clubMemberships: {
               where: {
-                status: { not: "ACTIVE" },
                 ...(visibleClubIds === null ? {} : { clubId: { in: visibleClubIds } }),
                 club: { isActive: true, centre: { isActive: true } }
               },
@@ -233,7 +249,7 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
       clubName: membership.club.name,
       centreId: membership.club.centreId,
       centreName: membership.club.centre.name,
-      isActive: membership.student.user.isActive && membership.status === "ACTIVE",
+      isActive: activeStudentIdSet.has(membership.student.id),
       reactivationClubIds: [...new Set(membership.student.clubMemberships.map((candidate) => candidate.clubId))]
     })),
     total,

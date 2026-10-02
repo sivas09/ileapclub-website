@@ -185,6 +185,10 @@ patchModel("centreFacilitator", {
   count: () => 0
 });
 patchModel("studentClubMembership", {
+  groupBy: () => [
+    { studentId: assignedStudentId, _count: { _all: 1 } },
+    { studentId: otherStudentId, _count: { _all: 1 } }
+  ],
   findMany: ({ where, select }: any = {}) => {
     if (where?.student?.userId === users.student.id) {
       return [{ clubId: assignedClubId, club: { centreId: "centre-1" } }];

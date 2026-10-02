@@ -766,7 +766,7 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
       throw new AdminActionError(400, "This account type cannot be reactivated here.");
     }
 
-    if (user.isActive) {
+    if (user.isActive && user.role !== Role.STUDENT) {
       throw new AdminActionError(400, "This account is already active.");
     }
 
@@ -777,16 +777,21 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
         throw new AdminActionError(409, "This member account has no student profile to reactivate.");
       }
 
+      const eligibleMemberships = await tx.studentClubMembership.findMany({
+        where: {
+          studentId: user.studentProfile.id,
+          club: { isActive: true, centre: { isActive: true } }
+        },
+        select: { clubId: true, status: true }
+      });
+      const validActiveMemberships = eligibleMemberships.filter((membership) => membership.status === "ACTIVE");
+
+      if (user.isActive && validActiveMemberships.length === 1) {
+        throw new AdminActionError(400, "This member account already has active club access.");
+      }
+
       if (!clubIds.length) {
-        const previousMemberships = await tx.studentClubMembership.findMany({
-          where: {
-            studentId: user.studentProfile.id,
-            status: { not: "ACTIVE" },
-            club: { isActive: true, centre: { isActive: true } }
-          },
-          select: { clubId: true }
-        });
-        const previousClubIds = [...new Set(previousMemberships.map((membership) => membership.clubId))];
+        const previousClubIds = [...new Set(eligibleMemberships.map((membership) => membership.clubId))];
 
         if (previousClubIds.length === 1) {
           clubIds = previousClubIds;
