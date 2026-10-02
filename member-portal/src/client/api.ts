@@ -284,6 +284,7 @@ export type MemberListEntry = {
   centreId?: string;
   centreName?: string;
   isActive?: boolean;
+  reactivationClubIds?: string[];
 };
 
 export type PaymentStatus = "PAID" | "NOT_PAID";

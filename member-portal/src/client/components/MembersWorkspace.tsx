@@ -43,6 +43,26 @@ import {
 
 export const paymentResetConfirmationMessage = "Are you sure you want to reset all active members to Not Paid for this month?";
 
+export function memberReactivationClubIds(
+  member: MemberListEntry,
+  members: MemberListEntry[],
+  clubs: MembersResponse["clubs"]
+) {
+  const activeClubIds = new Set(
+    clubs
+      .filter((club) => club.isActive && club.centre?.isActive !== false)
+      .map((club) => club.id)
+  );
+  const previousClubIds = member.reactivationClubIds?.length
+    ? member.reactivationClubIds
+    : members
+        .filter((candidate) => candidate.id === member.id)
+        .map((candidate) => candidate.clubId)
+        .filter((clubId): clubId is string => Boolean(clubId));
+
+  return [...new Set(previousClubIds.filter((clubId) => activeClubIds.has(clubId)))];
+}
+
 export function MembersWorkspace({ user }: { user: PortalUser }) {
   const loadRequestId = useRef(0);
   const [data, setData] = useState<MembersResponse | null>(null);
@@ -188,7 +208,40 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     }
   }
 
+  async function reactivateMember(member: MemberListEntry, clubIds: string[]) {
+    if (!member.userId) {
+      setError("This member account cannot be reactivated from the Members page.");
+      return;
+    }
+
+    setError("");
+    setStatus("");
+    setIsSubmitting(true);
+
+    try {
+      await setUserActive(member.userId, true, clubIds);
+      const activeFilters = { ...filters, status: "active", page: 1 };
+      setFilters(activeFilters);
+      await loadMembers(activeFilters);
+      setDetail(null);
+      setStatus("Member reactivated with active club access.");
+      setReactivationTarget(null);
+      setReactivationClubIds([]);
+    } catch (reactivationError) {
+      setError(reactivationError instanceof Error ? reactivationError.message : "Unable to reactivate member.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   function startMemberReactivation(member: MemberListEntry) {
+    const previousClubIds = memberReactivationClubIds(member, data?.members ?? [], data?.clubs ?? []);
+
+    if (previousClubIds.length === 1) {
+      void reactivateMember(member, previousClubIds);
+      return;
+    }
+
     setError("");
     setStatus("");
     setReactivationTarget(member);
@@ -206,24 +259,12 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
       return;
     }
 
-    setError("");
-    setStatus("");
-    setIsSubmitting(true);
-
-    try {
-      await setUserActive(reactivationTarget.userId, true, reactivationClubIds);
-      await loadMembers();
-      setDetail(null);
-      setStatus(reactivationClubIds.length
-        ? "Member reactivated with selected club access."
-        : "Member reactivated without active club access.");
-      setReactivationTarget(null);
-      setReactivationClubIds([]);
-    } catch (reactivationError) {
-      setError(reactivationError instanceof Error ? reactivationError.message : "Unable to reactivate member.");
-    } finally {
-      setIsSubmitting(false);
+    if (reactivationClubIds.length !== 1) {
+      setError("Select one active club before reactivating this member.");
+      return;
     }
+
+    await reactivateMember(reactivationTarget, reactivationClubIds);
   }
 
   async function startEditingMember(studentId: string) {
@@ -619,12 +660,11 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
               <label>
                 Member Clubs
                 <select
-                  multiple
-                  value={reactivationClubIds}
-                  onChange={(event) => setReactivationClubIds(
-                    Array.from(event.currentTarget.selectedOptions).map((option) => option.value)
-                  )}
+                  value={reactivationClubIds[0] ?? ""}
+                  onChange={(event) => setReactivationClubIds(event.currentTarget.value ? [event.currentTarget.value] : [])}
+                  required
                 >
+                  <option value="">Select one active club</option>
                   {(data.clubs ?? [])
                     .filter((club) => club.isActive && club.centre?.isActive !== false)
                     .map((club) => (
@@ -633,10 +673,10 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
                 </select>
               </label>
               {!reactivationClubIds.length ? (
-                <p className="field-note warning-text">This account will reactivate, but the member/facilitator will not have active club access.</p>
+                <p className="field-note warning-text">Choose one active club. Member accounts cannot be reactivated without club access.</p>
               ) : null}
               <div className="edit-user-actions">
-                <button type="submit" disabled={isSubmitting}>Reactivate Member</button>
+                <button type="submit" disabled={isSubmitting || reactivationClubIds.length !== 1}>Reactivate Member</button>
                 <button
                   type="button"
                   className="text-action"

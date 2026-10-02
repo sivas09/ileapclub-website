@@ -732,7 +732,7 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
     return;
   }
 
-  const clubIds = [...new Set(parsed.data.clubIds)];
+  const requestedClubIds = [...new Set(parsed.data.clubIds)];
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({
       where: { id: userId },
@@ -757,7 +757,7 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
     if (isCenterDirector(request.user!)) {
       const scope = await getOperationalScope(request.user!);
 
-      if (clubIds.some((clubId) => !scopeIncludesClub(scope, clubId))) {
+      if (requestedClubIds.some((clubId) => !scopeIncludesClub(scope, clubId))) {
         throw new AdminActionError(403, "You can restore access only within your centre scope.");
       }
     }
@@ -770,15 +770,50 @@ adminRouter.patch("/users/:userId/active", asyncRoute(async (request, response) 
       throw new AdminActionError(400, "This account is already active.");
     }
 
-    await requireActiveClubIds(tx, clubIds);
+    let clubIds = requestedClubIds;
 
     if (user.role === Role.STUDENT) {
       if (!user.studentProfile) {
         throw new AdminActionError(409, "This member account has no student profile to reactivate.");
       }
 
+      if (!clubIds.length) {
+        const previousMemberships = await tx.studentClubMembership.findMany({
+          where: {
+            studentId: user.studentProfile.id,
+            status: { not: "ACTIVE" },
+            club: { isActive: true, centre: { isActive: true } }
+          },
+          select: { clubId: true }
+        });
+        const previousClubIds = [...new Set(previousMemberships.map((membership) => membership.clubId))];
+
+        if (previousClubIds.length === 1) {
+          clubIds = previousClubIds;
+        } else if (previousClubIds.length > 1) {
+          throw new AdminActionError(400, "Select one previous active club before reactivating this member.");
+        } else {
+          throw new AdminActionError(400, "Select an active club before reactivating this member.");
+        }
+      }
+
+      if (clubIds.length !== 1) {
+        throw new AdminActionError(400, "Select exactly one active club before reactivating this member.");
+      }
+
+      if (isCenterDirector(request.user!)) {
+        const scope = await getOperationalScope(request.user!);
+
+        if (!scopeIncludesClub(scope, clubIds[0])) {
+          throw new AdminActionError(403, "You can restore access only within your centre scope.");
+        }
+      }
+
+      await requireActiveClubIds(tx, clubIds);
+
       await syncStudentClubAccess(tx, user.studentProfile.id, clubIds);
     } else if (user.role === Role.FACILITATOR) {
+      await requireActiveClubIds(tx, clubIds);
       await syncFacilitatorClubAccess(tx, user.id, clubIds);
     } else if (clubIds.length) {
       throw new AdminActionError(400, "Admin and Center Director accounts cannot be assigned to clubs.");

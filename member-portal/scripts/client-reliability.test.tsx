@@ -3,7 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseMeetingsOverviewResponse, parseStudentProgressResponse, type BandDocument, type BandRequirement, type LearningReflection, type Meeting, type MemberPointsProgress, type ResourceLink, type StudentProgress } from "../src/client/api";
 import { AttendanceRosterForm, BandProgressEmptyState, MeetingAttendancePanel, MeetingEditForm, MeetingSelectionPrompt, RoleAssignmentTable } from "../src/client/components/MeetingWorkspace";
-import { PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
+import { memberReactivationClubIds, PaymentStatusButton, paymentResetConfirmationMessage } from "../src/client/components/MembersWorkspace";
 import { AdminWorkspace } from "../src/client/components/AdminWorkspace";
 import { attendanceStatusLabel, guideResourceForRequirement, LearningReflectionHistory, LearningReflectionPanel, StudentClubMembersPanel, StudentHomeSummaryView, StudentPointsProgress, StudentProgressDashboard } from "../src/client/components/StudentProgressPanels";
 import { PortalRootErrorBoundary, WorkspaceErrorBoundary } from "../src/client/components/PortalErrorBoundary";
@@ -33,6 +33,36 @@ import {
 } from "../src/client/components/portalShared";
 
 const meeting = meetingFixture();
+
+const inactiveMember = {
+  id: "student-1",
+  userId: "user-1",
+  displayName: "Inactive Member",
+  currentBandLevel: "White",
+  clubId: "club-1",
+  clubName: "Club One",
+  isActive: false,
+  reactivationClubIds: ["club-1"]
+};
+const reactivationClubs = [
+  { id: "club-1", centreId: "centre-1", name: "Club One", program: "Junior", isActive: true, centre: { id: "centre-1", name: "Centre One", province: "ON", city: "Toronto", isActive: true } },
+  { id: "club-2", centreId: "centre-1", name: "Club Two", program: "Junior", isActive: true, centre: { id: "centre-1", name: "Centre One", province: "ON", city: "Toronto", isActive: true } },
+  { id: "archived-club", centreId: "centre-1", name: "Archived", program: "Junior", isActive: false, centre: { id: "centre-1", name: "Centre One", province: "ON", city: "Toronto", isActive: true } }
+];
+assert.deepEqual(
+  memberReactivationClubIds(inactiveMember, [inactiveMember], reactivationClubs),
+  ["club-1"],
+  "A member with one safe previous club can be reactivated immediately."
+);
+assert.deepEqual(
+  memberReactivationClubIds(
+    { ...inactiveMember, reactivationClubIds: ["club-1", "club-2", "archived-club"] },
+    [inactiveMember],
+    reactivationClubs
+  ),
+  ["club-1", "club-2"],
+  "Multiple safe previous clubs require an explicit selection and archived clubs are excluded."
+);
 
 const noticeEditorMarkup = renderToStaticMarkup(<NoticeFields clubs={[]} allowAllClubs />);
 assert.match(noticeEditorMarkup, /role="toolbar" aria-label="Message formatting"/, "Notice editor renders a formatting toolbar.");

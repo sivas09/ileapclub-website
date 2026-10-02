@@ -182,12 +182,21 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
   }
 
   function startReactivatingUser(portalUser: AdminUser) {
+    const activeClubIdSet = new Set(activeClubs.map((club) => club.id));
+    const previousClubIds = portalUser.role === "STUDENT"
+      ? [...new Set(
+          (portalUser.studentProfile?.clubMemberships ?? [])
+            .filter((membership) => membership.status !== "ACTIVE" && activeClubIdSet.has(membership.clubId))
+            .map((membership) => membership.clubId)
+        )]
+      : [];
+
     setError("");
     setStatus("");
     setEditingUser(null);
     setPasswordResetUser(null);
     setReactivatingUser(portalUser);
-    setReactivationClubIds([]);
+    setReactivationClubIds(previousClubIds.length === 1 ? previousClubIds : []);
     window.setTimeout(() => {
       document.getElementById(`reactivate-user-${portalUser.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 0);
@@ -197,6 +206,11 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
     event.preventDefault();
 
     if (!reactivatingUser) {
+      return;
+    }
+
+    if (reactivatingUser.role === "STUDENT" && reactivationClubIds.length !== 1) {
+      setError("Select one active club before reactivating this member.");
       return;
     }
 
@@ -522,12 +536,13 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
         {restoresClubAccess ? <label>
           {assignmentLabel}
           <select
-            multiple
-            value={reactivationClubIds}
-            onChange={(event) => setReactivationClubIds(
-              Array.from(event.currentTarget.selectedOptions).map((option) => option.value)
-            )}
+            multiple={portalUser.role === "FACILITATOR"}
+            value={portalUser.role === "FACILITATOR" ? reactivationClubIds : reactivationClubIds[0] ?? ""}
+            onChange={(event) => setReactivationClubIds(portalUser.role === "FACILITATOR"
+              ? Array.from(event.currentTarget.selectedOptions).map((option) => option.value)
+              : event.currentTarget.value ? [event.currentTarget.value] : [])}
           >
+            {portalUser.role === "STUDENT" ? <option value="">Select one active club</option> : null}
             {activeClubs.map((club) => (
               <option key={club.id} value={club.id}>{club.name}</option>
             ))}
@@ -536,10 +551,12 @@ export function AdminWorkspace({ currentUser }: { currentUser: PortalUser }) {
           <p className="field-note">This will restore access for the {formatRole(portalUser.role)} account. Previously issued sessions will remain invalid.</p>
         )}
         {restoresClubAccess && !reactivationClubIds.length ? (
-          <p className="field-note warning-text">This account will reactivate, but the member/facilitator will not have active club access.</p>
+          <p className="field-note warning-text">{portalUser.role === "STUDENT"
+            ? "Choose one active club. Member accounts cannot be reactivated without club access."
+            : "This facilitator will reactivate without active club access."}</p>
         ) : null}
         <div className="edit-user-actions">
-          <button type="submit" disabled={isSubmitting}>Reactivate User</button>
+          <button type="submit" disabled={isSubmitting || (portalUser.role === "STUDENT" && reactivationClubIds.length !== 1)}>Reactivate User</button>
           <button
             type="button"
             className="text-action"

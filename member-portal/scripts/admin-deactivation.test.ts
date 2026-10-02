@@ -8,6 +8,7 @@ import { prisma } from "../src/server/db.js";
 import { adminRouter } from "../src/server/routes/admin.js";
 import { authRouter } from "../src/server/routes/auth.js";
 import { meetingsRouter } from "../src/server/routes/meetings.js";
+import { membersRouter } from "../src/server/routes/members.js";
 import { resourcesRouter } from "../src/server/routes/resources.js";
 
 type TestUser = {
@@ -34,6 +35,7 @@ type Membership = {
 const selectedClubId = "selected-club";
 const historicalClubId = "historical-club";
 const facilitatorClubId = "facilitator-selected-club";
+const outsideClubId = "outside-club";
 const testPassword = "test-password-123";
 const testPasswordHash = bcrypt.hashSync(testPassword, 4);
 const users = new Map<string, TestUser>([
@@ -42,6 +44,8 @@ const users = new Map<string, TestUser>([
   ["student-user", { ...testUser("student-user", Role.STUDENT), studentProfile: { id: "student-profile" } }],
   ["student-no-club", { ...testUser("student-no-club", Role.STUDENT, false), studentProfile: { id: "student-no-club-profile" } }],
   ["student-new-club", { ...testUser("student-new-club", Role.STUDENT, false), studentProfile: { id: "student-new-club-profile" } }],
+  ["student-multiple-clubs", { ...testUser("student-multiple-clubs", Role.STUDENT, false), studentProfile: { id: "student-multiple-clubs-profile" } }],
+  ["student-outside-scope", { ...testUser("student-outside-scope", Role.STUDENT, false), studentProfile: { id: "student-outside-scope-profile" } }],
   ["facilitator-user", testUser("facilitator-user", Role.FACILITATOR)],
   ["facilitator-caller", testUser("facilitator-caller", Role.FACILITATOR)],
   ["director-caller", testUser("director-caller", Role.CENTER_DIRECTOR)],
@@ -50,7 +54,10 @@ const users = new Map<string, TestUser>([
 const memberships = new Map<string, Membership>([
   [membershipKey("student-profile", selectedClubId), membership("student-profile", selectedClubId, "ACTIVE")],
   [membershipKey("student-profile", historicalClubId), membership("student-profile", historicalClubId, "ACTIVE")],
-  [membershipKey("student-no-club-profile", historicalClubId), membership("student-no-club-profile", historicalClubId, "INACTIVE")]
+  [membershipKey("student-no-club-profile", historicalClubId), membership("student-no-club-profile", historicalClubId, "INACTIVE")],
+  [membershipKey("student-multiple-clubs-profile", selectedClubId), membership("student-multiple-clubs-profile", selectedClubId, "INACTIVE")],
+  [membershipKey("student-multiple-clubs-profile", historicalClubId), membership("student-multiple-clubs-profile", historicalClubId, "INACTIVE")],
+  [membershipKey("student-outside-scope-profile", outsideClubId), membership("student-outside-scope-profile", outsideClubId, "INACTIVE")]
 ]);
 const facilitatorAssignments = new Set([assignmentKey("facilitator-user", historicalClubId)]);
 const bandProgressRecords = [{ id: "historical-band-progress", studentId: "student-profile" }];
@@ -95,7 +102,10 @@ patchModel("user", {
 });
 patchModel("club", {
   count: ({ where }: any) => (where.id?.in ?? []).filter(isActiveClubId).length,
-  findMany: ({ where }: any = {}) => clubIdsFromFilter(where.id).filter(isActiveClubId).map(clubRecord)
+  findMany: ({ where }: any = {}) => clubIdsFromFilter(where.id)
+    .filter(isActiveClubId)
+    .map(clubRecord)
+    .filter((club) => !where.centreId?.in || where.centreId.in.includes(club.centreId))
 });
 patchModel("studentClubMembership", {
   updateMany: ({ where, data }: any) => {
@@ -119,12 +129,44 @@ patchModel("studentClubMembership", {
     memberships.set(key, created);
     return created;
   },
-  findMany: ({ where }: any = {}) => {
-    const studentId = where.student?.userId ? users.get(where.student.userId)?.studentProfile?.id : where.studentId;
-    return [...memberships.values()]
-      .filter((entry) => (!studentId || entry.studentId === studentId) && (!where.status || entry.status === where.status))
-      .map((entry) => ({ ...entry, club: clubRecord(entry.clubId) }));
-  }
+  findMany: ({ where, include, select }: any = {}) => filteredMemberships(where).map((entry) => {
+    if (select?.clubId) {
+      return {
+        clubId: entry.clubId,
+        ...(select.club ? { club: { centreId: clubRecord(entry.clubId).centreId } } : {})
+      };
+    }
+
+    const user = [...users.values()].find((candidate) => candidate.studentProfile?.id === entry.studentId)!;
+    return {
+      ...entry,
+      club: clubRecord(entry.clubId),
+      ...(include?.student ? {
+        student: {
+          id: entry.studentId,
+          userId: user.id,
+          programLevel: "JUNIOR",
+          bandLevel: "White",
+          user,
+          clubMemberships: filteredMemberships({
+            studentId: entry.studentId,
+            status: { not: "ACTIVE" },
+            club: { isActive: true, centre: { isActive: true } }
+          }).map((candidate) => ({ clubId: candidate.clubId }))
+        }
+      } : {})
+    };
+  }),
+  count: ({ where }: any = {}) => filteredMemberships(where).length
+});
+patchModel("centre", {
+  findMany: () => [
+    { id: "centre-1", name: "Test Centre", province: "ON", city: "Toronto", isActive: true },
+    { id: "centre-2", name: "Outside Centre", province: "ON", city: "Ottawa", isActive: true }
+  ]
+});
+patchModel("centerDirectorAssignment", {
+  findMany: ({ where }: any) => where.userId === "director-caller" ? [{ centreId: "centre-1" }] : []
 });
 patchModel("student", {
   findUnique: ({ where }: any) => {
@@ -183,7 +225,16 @@ patchModel("studentRequirementProgress", {
   update: historicalMutation,
   updateMany: historicalMutation
 });
-for (const modelName of ["meetingAttendance", "meetingRoleScore", "studentMeetingFeedback", "memberFeedback"] as const) {
+for (const modelName of [
+  "meetingAttendance",
+  "meetingRoleScore",
+  "studentMeetingFeedback",
+  "memberFeedback",
+  "monthlyMemberPayment",
+  "memberLearningReflection",
+  "memberPointTransaction",
+  "memberProgressNote"
+] as const) {
   patchModel(modelName, { delete: historicalMutation, deleteMany: historicalMutation, update: historicalMutation, updateMany: historicalMutation });
 }
 
@@ -197,6 +248,7 @@ app.use(express.json());
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/meetings", meetingsRouter);
+app.use("/api/members", membersRouter);
 app.use("/api/resources", resourcesRouter);
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   response.status(500).json({ message: error instanceof Error ? error.message : "Unexpected test error." });
@@ -252,6 +304,7 @@ try {
   assert.equal(memberships.get(membershipKey("student-profile", historicalClubId))?.status, "INACTIVE");
 
   const transactionsBeforeReactivation = state.transactionCalls;
+  const membershipsBeforeReactivation = memberships.size;
   const reactivatedStudentResponse = await assertReactivateStatus("admin restores selected member club access", "admin-user", "student-user", [selectedClubId], 200);
   const reactivatedStudentBody = await reactivatedStudentResponse.json() as { user: { isActive: boolean }; activeClubIds: string[] };
   assert.equal(state.transactionCalls, transactionsBeforeReactivation + 1, "member reactivation uses one transaction");
@@ -260,6 +313,23 @@ try {
   assert.equal(memberships.get(membershipKey("student-profile", selectedClubId))?.status, "ACTIVE", "selected inactive membership is restored");
   assert.equal(memberships.get(membershipKey("student-profile", selectedClubId))?.endDate, null, "restored membership is reopened");
   assert.equal(memberships.get(membershipKey("student-profile", historicalClubId))?.status, "INACTIVE", "unselected historical membership stays inactive");
+  assert.equal(memberships.size, membershipsBeforeReactivation, "reactivation updates the existing membership instead of duplicating it");
+
+  const reactivatedLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: requiredUser("student-user").email, password: testPassword })
+  });
+  assert.equal(reactivatedLoginResponse.status, 200, "the member can log in after reactivation");
+
+  const activeMembersResponse = await authenticatedRequest("GET", "/api/members?status=active", requiredUser("admin-user"));
+  assert.equal(activeMembersResponse.status, 200);
+  const activeMembersBody = await activeMembersResponse.json() as { members: Array<{ userId: string; clubId: string; isActive: boolean }> };
+  assert.equal(
+    activeMembersBody.members.some((member) => member.userId === "student-user" && member.clubId === selectedClubId && member.isActive),
+    true,
+    "the reactivated member appears in the active filter after refresh"
+  );
 
   const meetingsResponse = await authenticatedRequest("GET", "/api/meetings", requiredUser("student-user"));
   assert.equal(meetingsResponse.status, 200);
@@ -267,18 +337,32 @@ try {
   assert.deepEqual(meetingsBody.meetings.map((meeting) => meeting.clubId), [selectedClubId], "member sees meetings for the restored club only");
 
   const resourcesResponse = await authenticatedRequest("GET", "/api/resources", requiredUser("student-user"));
-  assert.equal(resourcesResponse.status, 200);
+  assert.equal(resourcesResponse.status, 200, resourcesResponse.status === 200 ? undefined : await resourcesResponse.clone().text());
   const resourcesBody = await resourcesResponse.json() as { resources: Array<{ id: string }> };
   assert.deepEqual(resourcesBody.resources.map((resource) => resource.id), ["junior-resource"], "member sees resources after selected club access is restored");
 
-  const noClubResponse = await assertReactivateStatus("member can reactivate without silently restoring historical access", "admin-user", "student-no-club", [], 200);
+  const noClubMembershipCount = memberships.size;
+  const noClubResponse = await assertReactivateStatus("one safe previous membership is restored automatically", "admin-user", "student-no-club", [], 200);
   const noClubBody = await noClubResponse.json() as { warning: string; activeClubIds: string[] };
-  assert.deepEqual(noClubBody.activeClubIds, []);
-  assert.equal(noClubBody.warning, "This account will reactivate, but the member/facilitator will not have active club access.");
-  assert.equal(memberships.get(membershipKey("student-no-club-profile", historicalClubId))?.status, "INACTIVE", "no club selection does not restore old access");
+  assert.deepEqual(noClubBody.activeClubIds, [historicalClubId]);
+  assert.equal(noClubBody.warning, null);
+  assert.equal(memberships.get(membershipKey("student-no-club-profile", historicalClubId))?.status, "ACTIVE", "the one safe previous membership is restored");
+  assert.equal(memberships.size, noClubMembershipCount, "automatic restoration does not duplicate the previous membership");
 
+  await assertReactivateStatus("member without a valid previous club requires a selection", "admin-user", "student-new-club", [], 400);
+  assert.equal(requiredUser("student-new-club").isActive, false, "a member is not activated without club access");
   await assertReactivateStatus("selected access creates a membership when none exists", "admin-user", "student-new-club", [selectedClubId], 200);
   assert.equal(memberships.get(membershipKey("student-new-club-profile", selectedClubId))?.status, "ACTIVE", "selected new membership is created active");
+
+  await assertReactivateStatus("multiple previous clubs require an explicit selection", "admin-user", "student-multiple-clubs", [], 400);
+  assert.equal(requiredUser("student-multiple-clubs").isActive, false, "an ambiguous member remains inactive");
+  await assertReactivateStatus("admin selects one of multiple previous clubs", "admin-user", "student-multiple-clubs", [selectedClubId], 200);
+  assert.equal(memberships.get(membershipKey("student-multiple-clubs-profile", selectedClubId))?.status, "ACTIVE");
+  assert.equal(memberships.get(membershipKey("student-multiple-clubs-profile", historicalClubId))?.status, "INACTIVE");
+
+  await assertReactivateStatus("out-of-scope Center Director cannot reactivate a member", "director-caller", "student-outside-scope", [outsideClubId], 403);
+  assert.equal(requiredUser("student-outside-scope").isActive, false, "an out-of-scope denial leaves the member inactive");
+  await assertReactivateStatus("member cannot reactivate another member", "student-caller", "student-outside-scope", [outsideClubId], 403);
 
   await assertDeactivateStatus("admin can safely deactivate a facilitator", "admin-user", "facilitator-user", 200);
   facilitatorAssignments.add(assignmentKey("facilitator-user", historicalClubId));
@@ -378,16 +462,49 @@ function assignmentKey(facilitatorId: string, clubId: string) { return `${facili
 
 function matchesMembershipWhere(entry: Membership, where: any) {
   if (where.studentId && entry.studentId !== where.studentId) return false;
-  if (where.status && entry.status !== where.status) return false;
+  if (typeof where.status === "string" && entry.status !== where.status) return false;
+  if (where.status?.not && entry.status === where.status.not) return false;
+  if (where.clubId && typeof where.clubId === "string" && entry.clubId !== where.clubId) return false;
+  if (where.clubId?.in && !where.clubId.in.includes(entry.clubId)) return false;
   if (where.clubId?.notIn?.includes(entry.clubId)) return false;
   return true;
 }
 
-function isActiveClubId(clubId: string) { return [selectedClubId, historicalClubId, facilitatorClubId].includes(clubId); }
-function clubIdsFromFilter(filter: any) { return filter?.in ?? [selectedClubId, historicalClubId, facilitatorClubId]; }
+function filteredMemberships(where: any = {}) {
+  const studentId = where.student?.userId ? users.get(where.student.userId)?.studentProfile?.id : where.studentId;
+
+  return [...memberships.values()].filter((entry) => {
+    const user = [...users.values()].find((candidate) => candidate.studentProfile?.id === entry.studentId);
+    if (studentId && entry.studentId !== studentId) return false;
+    if (!matchesMembershipWhere(entry, where)) return false;
+    if (where.student?.user?.role && user?.role !== where.student.user.role) return false;
+    if (where.student?.user?.isActive !== undefined && user?.isActive !== where.student.user.isActive) return false;
+    if (where.club?.isActive && !isActiveClubId(entry.clubId)) return false;
+    if (where.club?.centre?.isActive && clubRecord(entry.clubId).centre.isActive !== true) return false;
+
+    for (const condition of where.AND ?? []) {
+      if (condition.status && !matchesMembershipWhere(entry, condition)) return false;
+      const requiredActive = condition.student?.user?.isActive;
+      if (requiredActive !== undefined && user?.isActive !== requiredActive) return false;
+      if (condition.OR) {
+        const matchesAny = condition.OR.some((option: any) => (
+          (option.status && matchesMembershipWhere(entry, option))
+          || (option.student?.user?.isActive !== undefined && user?.isActive === option.student.user.isActive)
+        ));
+        if (!matchesAny) return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+function isActiveClubId(clubId: string) { return [selectedClubId, historicalClubId, facilitatorClubId, outsideClubId].includes(clubId); }
+function clubIdsFromFilter(filter: any) { return filter?.in ?? [selectedClubId, historicalClubId, facilitatorClubId, outsideClubId]; }
 
 function clubRecord(clubId: string) {
-  return { id: clubId, centreId: "centre-1", name: clubId, program: "Junior Regular Meeting", isActive: true, centre: { id: "centre-1", name: "Test Centre", isActive: true } };
+  const centreId = clubId === outsideClubId ? "centre-2" : "centre-1";
+  return { id: clubId, centreId, name: clubId, program: "Junior Regular Meeting", isActive: true, centre: { id: centreId, name: centreId === "centre-1" ? "Test Centre" : "Outside Centre", isActive: true } };
 }
 
 function meetingRecord(clubId: string) {

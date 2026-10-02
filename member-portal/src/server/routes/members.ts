@@ -178,7 +178,15 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
         club: { include: { centre: true } },
         student: {
           include: {
-            user: { select: memberUserSelect }
+            user: { select: memberUserSelect },
+            clubMemberships: {
+              where: {
+                status: { not: "ACTIVE" },
+                ...(visibleClubIds === null ? {} : { clubId: { in: visibleClubIds } }),
+                club: { isActive: true, centre: { isActive: true } }
+              },
+              select: { clubId: true }
+            }
           }
         }
       }
@@ -225,7 +233,8 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
       clubName: membership.club.name,
       centreId: membership.club.centreId,
       centreName: membership.club.centre.name,
-      isActive: membership.student.user.isActive && membership.status === "ACTIVE"
+      isActive: membership.student.user.isActive && membership.status === "ACTIVE",
+      reactivationClubIds: [...new Set(membership.student.clubMemberships.map((candidate) => candidate.clubId))]
     })),
     total,
     page,
