@@ -261,35 +261,34 @@ membersRouter.get("/", asyncRoute(async (request, response) => {
 }));
 
 membersRouter.get("/payments", requireRole(operationalManagerRoles), asyncRoute(async (request, response) => {
-  const requestedMonth = stringQuery(request.query.paymentMonth);
-  const parsedMonth = paymentMonthSchema.optional().safeParse(requestedMonth || undefined);
-
-  if (!parsedMonth.success) {
-    response.status(400).json({ message: "Payment month must use YYYY-MM format." });
-    return;
-  }
-
-  const paymentMonth = paymentMonthStart(parsedMonth.data);
   const scope = await getOperationalScope(request.user!);
   const payments = await prisma.monthlyMemberPayment.findMany({
     where: {
-      paymentMonth,
       ...(scope.clubIds === null ? {} : {
         student: { clubMemberships: { some: { clubId: { in: scope.clubIds } } } }
       })
     },
     select: {
       studentId: true,
+      paymentMonth: true,
       status: true,
       updatedByAdminId: true,
       updatedAt: true
     },
-    orderBy: { studentId: "asc" }
+    orderBy: [{ studentId: "asc" }, { paymentMonth: "desc" }, { updatedAt: "desc" }],
+    distinct: ["studentId"]
   });
+  const latestPaymentMonth = payments.reduce<Date | null>(
+    (latest, payment) => !latest || payment.paymentMonth > latest ? payment.paymentMonth : latest,
+    null
+  );
 
   response.json({
-    paymentMonth: formatPaymentMonth(paymentMonth),
-    payments
+    paymentMonth: latestPaymentMonth ? formatPaymentMonth(latestPaymentMonth) : null,
+    payments: payments.map((payment) => ({
+      ...payment,
+      paymentMonth: formatPaymentMonth(payment.paymentMonth)
+    }))
   });
 }));
 
@@ -297,7 +296,7 @@ membersRouter.put("/payments/:studentId", requireRole(operationalManagerRoles), 
   const parsed = memberPaymentUpdateSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Choose Paid or Not Paid for a valid payment month." });
+    response.status(400).json({ message: "Choose Paid or Not Paid." });
     return;
   }
 
@@ -321,26 +320,26 @@ membersRouter.put("/payments/:studentId", requireRole(operationalManagerRoles), 
     return;
   }
 
-  const paymentMonth = paymentMonthStart(parsed.data.paymentMonth);
-  const payment = await prisma.monthlyMemberPayment.upsert({
-    where: {
-      studentId_paymentMonth: {
-        studentId,
-        paymentMonth
-      }
-    },
-    create: {
-      studentId,
-      paymentMonth,
-      status: parsed.data.status,
-      updatedByAdminId: user.id
-    },
-    update: {
+  const latestPayment = await prisma.monthlyMemberPayment.findFirst({
+    where: { studentId },
+    orderBy: [{ paymentMonth: "desc" }, { updatedAt: "desc" }],
+    select: { id: true, paymentMonth: true }
+  });
+
+  if (!latestPayment) {
+    response.status(409).json({ message: "Start a new payment cycle before updating individual payment statuses." });
+    return;
+  }
+
+  const payment = await prisma.monthlyMemberPayment.update({
+    where: { id: latestPayment.id },
+    data: {
       status: parsed.data.status,
       updatedByAdminId: user.id
     },
     select: {
       studentId: true,
+      paymentMonth: true,
       status: true,
       updatedByAdminId: true,
       updatedAt: true
@@ -348,8 +347,11 @@ membersRouter.put("/payments/:studentId", requireRole(operationalManagerRoles), 
   });
 
   response.json({
-    paymentMonth: formatPaymentMonth(paymentMonth),
-    payment
+    paymentMonth: formatPaymentMonth(payment.paymentMonth),
+    payment: {
+      ...payment,
+      paymentMonth: formatPaymentMonth(payment.paymentMonth)
+    }
   });
 }));
 
@@ -357,7 +359,7 @@ membersRouter.post("/payments/reset", requireRole(operationalManagerRoles), asyn
   const parsed = memberPaymentResetSchema.safeParse(request.body);
 
   if (!parsed.success) {
-    response.status(400).json({ message: "Confirm the reset and provide a valid payment month." });
+    response.status(400).json({ message: "Confirm the payment reset." });
     return;
   }
 

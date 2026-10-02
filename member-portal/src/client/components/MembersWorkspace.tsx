@@ -41,7 +41,7 @@ import {
   SummaryTile
 } from "./portalShared";
 
-export const paymentResetConfirmationMessage = "Are you sure you want to reset all active members to Not Paid for this month?";
+export const paymentResetConfirmationMessage = "Start a new payment cycle and reset all active members to Not Paid?";
 
 export function memberReactivationClubIds(
   member: MemberListEntry,
@@ -87,7 +87,6 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentMonth] = useState(currentPaymentMonth);
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, PaymentStatus>>({});
 
   async function loadMembers(nextFilters = filters) {
@@ -98,7 +97,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     try {
       const [result, paymentResult] = await Promise.all([
         getMembers(nextFilters),
-        isOperationalManagerRole(user.role) ? getMemberPaymentStatuses(paymentMonth) : Promise.resolve(null)
+        isOperationalManagerRole(user.role) ? getMemberPaymentStatuses() : Promise.resolve(null)
       ]);
       if (requestId === loadRequestId.current) {
         setData(result);
@@ -151,7 +150,7 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     setIsSubmitting(true);
 
     try {
-      const result = await setMemberPaymentStatus(member.id, paymentMonth, nextStatus);
+      const result = await setMemberPaymentStatus(member.id, nextStatus);
       setPaymentStatuses((current) => ({ ...current, [member.id]: result.payment.status }));
       setStatus(`${member.displayName} marked ${paymentStatusLabel(result.payment.status)}.`);
     } catch (updateError) {
@@ -173,8 +172,8 @@ export function MembersWorkspace({ user }: { user: PortalUser }) {
     setIsSubmitting(true);
 
     try {
-      const result = await resetMemberPaymentStatuses(paymentMonth);
-      const refreshedPayments = await getMemberPaymentStatuses(paymentMonth);
+      const result = await resetMemberPaymentStatuses();
+      const refreshedPayments = await getMemberPaymentStatuses();
       setPaymentStatuses(Object.fromEntries(refreshedPayments.payments.map((payment) => [payment.studentId, payment.status])));
       setStatus(`${result.resetCount} active member${result.resetCount === 1 ? "" : "s"} reset to Not Paid.`);
     } catch (resetError) {
@@ -738,13 +737,6 @@ export function PaymentStatusButton({
       {paymentStatusLabel(status)}
     </button>
   );
-}
-
-function currentPaymentMonth() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
 }
 
 function paymentStatusLabel(status: PaymentStatus) {

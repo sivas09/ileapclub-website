@@ -244,19 +244,16 @@ studentRouter.get("/me/payment-status", requireRole([Role.STUDENT]), asyncRoute(
     return;
   }
 
-  const paymentMonth = currentPaymentMonthStart();
-  const payment = await prisma.monthlyMemberPayment.findUnique({
-    where: {
-      studentId_paymentMonth: {
-        studentId: student.id,
-        paymentMonth
-      }
-    },
+  const payment = await prisma.monthlyMemberPayment.findFirst({
+    where: { studentId: student.id },
+    orderBy: [{ paymentMonth: "desc" }, { updatedAt: "desc" }],
     select: {
+      paymentMonth: true,
       status: true,
       updatedAt: true
     }
   });
+  const paymentMonth = payment?.paymentMonth ?? currentPaymentMonthStart();
 
   response.json({
     paymentMonth: paymentMonth.toISOString().slice(0, 7),

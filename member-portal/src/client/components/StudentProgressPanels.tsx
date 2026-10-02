@@ -124,8 +124,8 @@ export function StudentHomeSummaryView({
           {paymentStatus ? (
             <small>
               {paymentStatus.status === "PAID"
-                ? "Payment received for this month. Thank you."
-                : "Payment not recorded for this month. Please contact iLEAP Club or complete your payment."}
+                ? "Payment received for the current payment cycle. Thank you."
+                : "Payment not recorded for the current payment cycle. Please contact iLEAP Club or complete your payment."}
             </small>
           ) : null}
         </article>

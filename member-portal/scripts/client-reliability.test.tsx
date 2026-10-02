@@ -317,8 +317,8 @@ const notPaidButtonMarkup = renderToStaticMarkup(
 assert.match(notPaidButtonMarkup, />Not Paid<\/button>/, "Admin payment control clearly displays Not Paid.");
 assert.equal(
   paymentResetConfirmationMessage,
-  "Are you sure you want to reset all active members to Not Paid for this month?",
-  "Monthly reset uses the required confirmation wording."
+  "Start a new payment cycle and reset all active members to Not Paid?",
+  "Starting a new payment cycle requires explicit confirmation."
 );
 
 const parsedProgress = parseStudentProgressResponse({
@@ -418,7 +418,7 @@ assert.match(studentOverviewMarkup, /Senior/, "Student Overview renders the prog
 assert.match(studentOverviewMarkup, /Deliver the first prepared speech/, "Student Overview renders the next requirement.");
 assert.match(studentOverviewMarkup, /Payment Status/, "Student Overview shows the member payment card.");
 assert.match(studentOverviewMarkup, />Paid</, "Student Overview shows a Paid status.");
-assert.match(studentOverviewMarkup, /Payment received for this month\. Thank you\./, "Student Overview shows the paid confirmation note.");
+assert.match(studentOverviewMarkup, /Payment received for the current payment cycle\. Thank you\./, "Student Overview shows the paid confirmation note.");
 
 const seniorWhiteRequirement = requirementFixture("senior-white-induction", "SENIOR", "White", 1, "Induction Speech", "Speech");
 const seniorWhitePresentationRequirement = requirementFixture("senior-white-presentation", "SENIOR", "White", 1, "Basic Presentation", "Presentation");
@@ -721,7 +721,7 @@ const unpaidStudentOverviewMarkup = renderToStaticMarkup(
 assert.match(unpaidStudentOverviewMarkup, />Not Paid</, "Student Overview shows a Not Paid status.");
 assert.match(
   unpaidStudentOverviewMarkup,
-  /Payment not recorded for this month\. Please contact iLEAP Club or complete your payment\./,
+  /Payment not recorded for the current payment cycle\. Please contact iLEAP Club or complete your payment\./,
   "Student Overview shows the required friendly Not Paid note."
 );
 
